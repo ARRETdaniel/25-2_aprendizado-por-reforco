@@ -1,0 +1,39 @@
+useful_links.txt
+Engine
+CarlaUE4
+0.9.15_carlaSimulator
+.vs
+YOLOv3-Object-Detection-with-OpenCV
+martisaju-CARLA-Speed-Traffic-Sign-Detection-Using-Yolo-7f0b1ec
+CarlaSimulator\PythonClient\carla_darknet_integration
+_out
+Introduction to Self-Driving Cars
+State Estimation and Localization for Self-Driving Cars
+Visual Perception for Self-Driving Cars
+Course1FinalProject
+yolov4.weights
+yolov3.weights
+CarlaSimulator/PythonClient/Course4FinalProject/yolov3-coco/yolov3.weights
+carla_darknet_integration
+CarlaSimulator/PythonClient/carla_darknet_integration
+*.weights
+tempCodeRunnerFile.python
+PythonAPI
+output_frames
+Motion Planning for Self-Driving
+TEXTO_BASE
+TCC
+CURSOS
+Motion Planning for Self-Driving Cars
+*.pt
+__pycache__
+*.mp4
+trash
+*.zip
+*.exe
+
+*.pdf
+related_works
+2023 Autonomous Driving with Deep Reinforcement Learning in CARLA Simulation
+ref
+*.png

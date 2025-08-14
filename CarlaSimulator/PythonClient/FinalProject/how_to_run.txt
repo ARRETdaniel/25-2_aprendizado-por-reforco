@@ -1,0 +1,27 @@
+Running the CARLA simulator
+============================
+
+In one terminal, start the CARLA simulator at a 30hz fixed time-step:
+
+Ubuntu:
+-------
+./CarlaUE4.sh /Game/Maps/Course4 -windowed -carla-server -benchmark -fps=30
+
+Windows:
+-------- CarlaSimulator
+CarlaUE4.exe /Game/Maps/Course4 -windowed -carla-server -benchmark -fps=30
+
+Running the Python client (and controller)
+==========================================
+
+In another terminal, change the directory to go into the "Course4FinalProject" folder, under the "PythonClient" folder.
+
+Run your controller, execute the following command while CARLA is open:
+
+Ubuntu (use alternative python commands if the command below does not work, as described in the CARLA install guide):
+------
+python3 module_7.py
+
+Windows (use alternative python commands if the command below does not work, as described in the CARLA install guide):
+-------- CarlaSimulator\PythonClient\FinalProject
+python module_7.py

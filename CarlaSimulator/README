@@ -1,0 +1,121 @@
+# Autonomous Vehicle Solution
+
+This repository contains our autonomous driving solution built on the CARLA simulator platform.
+
+## Project Structure
+
+The project is organized into the following key components:
+
+### 1. CARLA Simulator
+- **Location**: `CarlaSimulator\CarlaUE4\Binaries\Win64`
+- **Description**: Contains the executable files needed to run the CARLA simulation environment for testing our autonomous driving solution.
+- **Usage**: Launch the executable to start the simulation environment.
+
+### 2. Autonomous Driving System
+- **Location**: `CarlaSimulator\PythonClient\FinalProject`
+- **Description**: Contains our main autonomous vehicle implementation including:
+  - Trajectory planning
+  - Vehicle control algorithms
+  - Behavioral planning
+  - Simulation integration
+
+### 3. Computer Vision System
+- **Location**: `CarlaSimulator\PythonClient\FinalProject\detector_socket`
+- **Description**: Our computer vision solution using a client-server architecture via socket communication.
+- **Features**:
+  - YOLOv8 object detection
+  - GPU-accelerated processing
+  - Real-time detection of traffic elements
+  - High FPS processing for critical driving decisions
+
+## System Architecture
+
+```
+┌─────────────────────┐     ┌──────────────────────┐
+│ CARLA Client (3.6)  │     │ Detection Server (3.12)
+│                     │     │                      │
+│ - CARLA integration │ ──► │ - YOLOv8             │
+│ - Vehicle control   │     │ - GPU acceleration   │
+│ - Trajectory plan   │ ◄── │ - Driver assistance  │
+│ - Visualization     │     │ - High FPS proc.     │
+└─────────────────────┘     └──────────────────────┘
+                      Socket
+```
+
+ARRETdaniel: melhore o README abaixo:
+
+a nossa solucao de teste e carro autonomo:
+
+em CarlaSimulator\CarlaUE4\Binaries\Win64 encontra-se o executavel do simulador para execucao do teste da nossa solucao.
+
+em CarlaSimulator\PythonClient\FinalProject encontra-se nossa solucao de carro autonomo
+
+em CarlaSimulator\PythonClient\FinalProject\detector_socket encontra-se nossa solucao de visao computacioonal via socket.
+
+
+GitHub Copilot: # Autonomous Vehicle Solution
+
+This repository contains our autonomous driving solution built on the CARLA simulator platform.
+
+## Project Structure
+
+The project is organized into the following key components:
+
+### 1. CARLA Simulator
+- **Location**: `CarlaSimulator\CarlaUE4\Binaries\Win64`
+- **Description**: Contains the executable files needed to run the CARLA simulation environment for testing our autonomous driving solution.
+- **Usage**: Launch the executable to start the simulation environment.
+
+### 2. Autonomous Driving System
+- **Location**: `CarlaSimulator\PythonClient\FinalProject`
+- **Description**: Contains our main autonomous vehicle implementation including:
+  - Trajectory planning
+  - Vehicle control algorithms
+  - Behavioral planning
+  - Simulation integration
+
+### 3. Computer Vision System
+- **Location**: `CarlaSimulator\PythonClient\FinalProject\detector_socket`
+- **Description**: Our computer vision solution using a client-server architecture via socket communication.
+- **Features**:
+  - YOLOv8 object detection
+  - GPU-accelerated processing
+  - Real-time detection of traffic elements
+  - High FPS processing for critical driving decisions
+
+## System Architecture
+
+```
+┌─────────────────────┐     ┌──────────────────────┐
+│ CARLA Client (3.6)  │     │ Detection Server (3.12)
+│                     │     │                      │
+│ - CARLA integration │ ──► │ - YOLOv8             │
+│ - Vehicle control   │     │ - GPU acceleration   │
+│ - Trajectory plan   │ ◄── │ - Driver assistance  │
+│ - Visualization     │     │ - High FPS proc.     │
+└─────────────────────┘     └──────────────────────┘
+                      Socket
+```
+
+## Getting Started
+
+The easiest way to start the entire autonomous driving system is to use our automated batch script:
+
+1. Simply double-click the start_all.bat file located in `CarlaSimulator\PythonClient\FinalProject\`
+
+This batch file will automatically:
+- Launch the CARLA simulator
+- Wait for the simulator to initialize
+- Start the YOLOv8 detection server
+- Wait for the detection server to initialize
+- Launch the autonomous driving client
+
+### Manual Startup (Alternative)
+
+If you prefer to start each component individually:
+
+1. Launch the CARLA simulator from `CarlaSimulator\CarlaUE4\Binaries\Win64`
+2. Start the detection server (see readme.md for GPU requirements)
+3. Run the autonomous driving client
+
+For detailed setup instructions for the detection server, refer to the documentation in the detector_socket directory.
