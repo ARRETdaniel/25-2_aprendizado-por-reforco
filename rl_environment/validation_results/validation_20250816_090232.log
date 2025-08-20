@@ -1,0 +1,63 @@
+2025-08-16 09:02:32,410 - INFO - EnvValidator - Environment validator initialized. Results will be saved to ./validation_results
+2025-08-16 09:02:32,410 - INFO - EnvValidator - Running all environment validation tests...
+2025-08-16 09:02:32,410 - INFO - EnvValidator - Testing environment initialization...
+2025-08-16 09:05:08,136 - ERROR - EnvValidator - Failed to create environment: (localhost:2000) failed to connect: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente
+Traceback (most recent call last):
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\rl_environment\validation\environment_validator.py", line 123, in _create_environment
+    env = CarlaEnvWrapper(**params)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\rl_environment\environment.py", line 169, in __init__
+    self._connect_to_carla()
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\rl_environment\environment.py", line 219, in _connect_to_carla
+    raise last_exception
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\rl_environment\environment.py", line 203, in _connect_to_carla
+    self.client = self._client_cm.__enter__()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\users\danie\anaconda3\Lib\contextlib.py", line 137, in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\CarlaSimulator/PythonClient\carla\client.py", line 35, in make_carla_client
+    with util.make_connection(CarlaClient, host, world_port, timeout) as client:
+  File "C:\users\danie\anaconda3\Lib\contextlib.py", line 137, in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\CarlaSimulator/PythonClient\carla\util.py", line 19, in make_connection
+    client.connect()
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\CarlaSimulator/PythonClient\carla\client.py", line 54, in connect
+    self._world_client.connect(connection_attempts)
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\CarlaSimulator/PythonClient\carla\tcp.py", line 48, in connect
+    self._reraise_exception_as_tcp_error('failed to connect', error)
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\CarlaSimulator/PythonClient\carla\tcp.py", line 97, in _reraise_exception_as_tcp_error
+    raise TCPConnectionError('%s%s: %s' % (self._logprefix, message, exception))
+carla.tcp.TCPConnectionError: (localhost:2000) failed to connect: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente
+2025-08-16 09:05:08,177 - INFO - EnvValidator - Testing environment reset functionality...
+2025-08-16 09:07:43,888 - ERROR - EnvValidator - Failed to create environment: (localhost:2000) failed to connect: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente
+Traceback (most recent call last):
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\rl_environment\validation\environment_validator.py", line 123, in _create_environment
+    env = CarlaEnvWrapper(**params)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\rl_environment\environment.py", line 169, in __init__
+    self._connect_to_carla()
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\rl_environment\environment.py", line 219, in _connect_to_carla
+    raise last_exception
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\rl_environment\environment.py", line 203, in _connect_to_carla
+    self.client = self._client_cm.__enter__()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\users\danie\anaconda3\Lib\contextlib.py", line 137, in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\CarlaSimulator/PythonClient\carla\client.py", line 35, in make_carla_client
+    with util.make_connection(CarlaClient, host, world_port, timeout) as client:
+  File "C:\users\danie\anaconda3\Lib\contextlib.py", line 137, in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\CarlaSimulator/PythonClient\carla\util.py", line 19, in make_connection
+    client.connect()
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\CarlaSimulator/PythonClient\carla\client.py", line 54, in connect
+    self._world_client.connect(connection_attempts)
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\CarlaSimulator/PythonClient\carla\tcp.py", line 48, in connect
+    self._reraise_exception_as_tcp_error('failed to connect', error)
+  File "C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\CarlaSimulator/PythonClient\carla\tcp.py", line 97, in _reraise_exception_as_tcp_error
+    raise TCPConnectionError('%s%s: %s' % (self._logprefix, message, exception))
+carla.tcp.TCPConnectionError: (localhost:2000) failed to connect: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente
+2025-08-16 09:07:43,897 - INFO - EnvValidator - Testing action space handling...

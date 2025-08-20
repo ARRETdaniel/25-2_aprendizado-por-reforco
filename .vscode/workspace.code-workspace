@@ -1,0 +1,291 @@
+{
+  "folders": [
+    {
+      "name": "CARLA DRL Pipeline",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "./venv/Scripts/python.exe",
+    "python.terminal.activateEnvironment": true,
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "python.linting.flake8Enabled": true,
+    "python.formatting.provider": "black",
+    "python.formatting.blackArgs": ["--line-length", "88"],
+    "python.sortImports.args": ["--profile", "black"],
+    
+    "files.associations": {
+      "*.yaml": "yaml",
+      "*.yml": "yaml",
+      "*.launch": "xml"
+    },
+    
+    "yaml.schemas": {
+      "./configs/schema/*.yaml": ["./configs/*.yaml"]
+    },
+    
+    "ros.distro": "humble",
+    "ros.rosSetupScript": "C:/opt/ros/humble/setup.bat",
+    
+    "terminal.integrated.profiles.windows": {
+      "PowerShell": {
+        "source": "PowerShell",
+        "args": ["-NoExit", "-File", "${workspaceFolder}\\scripts\\setup_env.ps1"]
+      },
+      "ROS2 Environment": {
+        "source": "PowerShell",
+        "args": ["-NoExit", "-Command", "C:/opt/ros/humble/setup.bat && cd ${workspaceFolder}"]
+      },
+      "Python 3.6 (CARLA)": {
+        "source": "PowerShell", 
+        "args": ["-NoExit", "-Command", "C:/Python36/Scripts/activate.bat && cd ${workspaceFolder}/carla_client_py36"]
+      }
+    },
+    
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
+    
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": true,
+      "source.fixAll": true
+    },
+    
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/.pytest_cache": true,
+      "**/node_modules": true,
+      "**/build": true,
+      "**/install": true,
+      "**/log": true,
+      "**/.vscode": false
+    },
+    
+    "search.exclude": {
+      "**/build": true,
+      "**/install": true,
+      "**/log": true,
+      "**/__pycache__": true
+    },
+    
+    "git.ignoreLimitWarning": true,
+    
+    "cmake.configureOnOpen": true,
+    "cmake.buildDirectory": "${workspaceFolder}/ros2_gateway/build",
+    
+    "tensorBoard.logDirectory": "${workspaceFolder}/logs/tensorboard",
+    
+    "jupyter.notebookFileRoot": "${workspaceFolder}",
+    "jupyter.interactiveWindow.textEditor.executeSelection": true
+  },
+  
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Build ROS2 Gateway",
+        "type": "shell",
+        "command": "colcon",
+        "args": ["build", "--packages-select", "carla_gateway"],
+        "group": "build",
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        },
+        "options": {
+          "cwd": "${workspaceFolder}/ros2_gateway"
+        },
+        "problemMatcher": ["$gcc"]
+      },
+      {
+        "label": "Start CARLA Server",
+        "type": "shell",
+        "command": "powershell",
+        "args": [
+          "-Command",
+          "Start-Process -FilePath 'C:/carla/CarlaUE4.exe' -ArgumentList '-carla-server -quality-level=Low -ResX=800 -ResY=600' -WindowStyle Minimized"
+        ],
+        "group": "build",
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        },
+        "isBackground": true
+      },
+      {
+        "label": "Launch ROS2 Gateway",
+        "type": "shell",
+        "command": "ros2",
+        "args": ["launch", "carla_gateway", "gateway.launch.py"],
+        "group": "build",
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        },
+        "options": {
+          "cwd": "${workspaceFolder}/ros2_gateway"
+        },
+        "dependsOn": "Build ROS2 Gateway",
+        "isBackground": true
+      },
+      {
+        "label": "Start CARLA Client",
+        "type": "shell",
+        "command": "python",
+        "args": ["main.py"],
+        "group": "build",
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        },
+        "options": {
+          "cwd": "${workspaceFolder}/carla_client_py36",
+          "env": {
+            "PYTHONPATH": "C:/carla/PythonAPI/carla/dist/carla-0.8.4-py3.6-win-amd64.egg"
+          }
+        },
+        "dependsOn": "Start CARLA Server",
+        "isBackground": true
+      },
+      {
+        "label": "Train DRL Agent",
+        "type": "shell", 
+        "command": "python",
+        "args": ["train.py", "--config", "../configs/training_config.yaml"],
+        "group": "build",
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        },
+        "options": {
+          "cwd": "${workspaceFolder}/drl_agent"
+        },
+        "dependsOn": ["Launch ROS2 Gateway", "Start CARLA Client"]
+      },
+      {
+        "label": "Run Diagnostics",
+        "type": "shell",
+        "command": "python",
+        "args": ["diagnostics.py", "--mode", "all"],
+        "group": "test",
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        },
+        "options": {
+          "cwd": "${workspaceFolder}/tools"
+        }
+      },
+      {
+        "label": "Stop All Processes",
+        "type": "shell",
+        "command": "powershell",
+        "args": [
+          "-Command",
+          "Get-Process CarlaUE4 -ErrorAction SilentlyContinue | Stop-Process -Force; Get-Process python -ErrorAction SilentlyContinue | Where-Object {$_.CommandLine -like '*carla*' -or $_.CommandLine -like '*ros2*'} | Stop-Process -Force"
+        ],
+        "group": "build",
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        }
+      }
+    ]
+  },
+  
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Debug CARLA Client",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/carla_client_py36/main.py",
+        "console": "integratedTerminal",
+        "cwd": "${workspaceFolder}/carla_client_py36",
+        "env": {
+          "PYTHONPATH": "C:/carla/PythonAPI/carla/dist/carla-0.8.4-py3.6-win-amd64.egg"
+        },
+        "args": ["--config", "../configs/carla_config.yaml"]
+      },
+      {
+        "name": "Debug DRL Training",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/drl_agent/train.py",
+        "console": "integratedTerminal",
+        "cwd": "${workspaceFolder}/drl_agent",
+        "args": ["--config", "../configs/training_config.yaml", "--debug"]
+      },
+      {
+        "name": "Debug DRL Inference",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/drl_agent/infer.py",
+        "console": "integratedTerminal",
+        "cwd": "${workspaceFolder}/drl_agent",
+        "args": ["--model", "models/best_model.zip", "--episodes", "5"]
+      },
+      {
+        "name": "Run Diagnostics",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/tools/diagnostics.py",
+        "console": "integratedTerminal",
+        "cwd": "${workspaceFolder}/tools",
+        "args": ["--mode", "diagnostics", "--verbose"]
+      },
+      {
+        "name": "Attach to ROS2 Node",
+        "type": "python",
+        "request": "attach",
+        "port": 5678,
+        "host": "localhost",
+        "pathMappings": [
+          {
+            "localRoot": "${workspaceFolder}",
+            "remoteRoot": "${workspaceFolder}"
+          }
+        ]
+      }
+    ]
+  },
+  
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.debugpy",
+      "ms-python.black-formatter",
+      "ms-python.isort",
+      "ms-python.pylint",
+      "ms-vscode.cpptools",
+      "ms-vscode.cmake-tools",
+      "twxs.cmake",
+      "redhat.vscode-yaml",
+      "ms-vscode.vscode-json",
+      "ms-toolsai.jupyter",
+      "ms-toolsai.tensorboard",
+      "ms-vscode.powershell",
+      "eamodio.gitlens",
+      "donjayamanne.githistory",
+      "streetsidesoftware.code-spell-checker",
+      "gruntfuggly.todo-tree",
+      "ms-vscode-remote.remote-containers",
+      "ms-vscode-remote.remote-wsl"
+    ]
+  }
+}

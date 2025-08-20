@@ -1,0 +1,1370 @@
+Fakultät Verkehrswissenschaften „Friedrich List“
+ Institut für Wirtschaft und Verkehr  Professur für für Ökonometrie und Statistik
+ Diplomarbeit
+ on the topic
+ Autonomous Navigation with Deep
+ Reinforcement Learning in Carla Simulator
+ Student Name:
+ Student ID No.:
+ Major Field:
+ born on:
+ Supervisor:
+ Tutor:
+ Dresden,
+ Peilin Wang
+ 4971754
+ Maschinenbau für KST
+ 26.12.1996 in Shandong
+ Prof. Dr. Ostap Okhrin
+ Prof. Dr. Georg Hirte
+ M.Sc. Dianzhao Li
+
+TECHNISCHE
+ UNIVERSITÄT
+ DRESDEN
+ Fakultät Verkehrswissenschaften „Friedrich List"
+ Aufgabenstellung zur Diplomarbeit
+ im Studiengang [Maschinenbau]
+ Für Frau/Herrn Peilin Wang
+ Thema: Autonome Navigation mit Deep Reinforcement Learning im
+ Carla Simulator
+ Thema (engl.): Autonomous Navigation with Deep Reinforcement Learning in Carla
+ Simulator
+ 1. Prüfer/in: Prof. Dr. Ostap Okhrin
+ 2. Prüfer/in: Prof. Dr. Georg Hirte
+ Hochschulbetreuer/in: M.Sc. Dianzhao Li
+ S Zur Anfertigung der Arbeit wurde eine dreiseitige Vereinbarung (TUD,Student/in,Dritte/r)
+ abgeschlossen.
+ 1. Durchführung einer Literaturrecherche zur Einführung in das Thema des bestärkenden
+ Lernens
+ 2. Identifikation möglicher Konzepte für Algorithmen zur autonomen Navigation
+ 3. Implementierung verschiedener Algorithmen des bestärkenden Lernens im Carla Simu
+lator
+ 4. Bewertung und Analyse der trainierten Algorithmen anhand verschiedener Kriterien
+ 5. Zusammenfassung der Ergebnisse und Diskussion von möglichen zukünftigen Erweite
+rungen
+ 6. Dokumentation und Präsentation der Ergebnisse
+ 1^.2^1^ ^
+ Datum Unterschrift Prüfer/in
+ Bei der Bearbeitung ist die „Richtlinie für
+ Verkehrswissenschaften „Friedrich List" zu
+ Eintragungen des Prüfungsamts
+ Arbeitsbeginn am:
+ die Anfertigung
+ beachten.
+ erhalten:
+ ; der Masterarbeit" der Fakultät
+ Unterschrift Studierende/r
+ Einzureichen am:
+
+Zusammenfassung
+ Mit der raschen Entwicklung von autonomen Fahren und Künstlicher Intelligenz ist die
+ Technologie des end-to-end autonomen Fahrens zu einem Forschungsschwerpunkt
+ geworden. Diese Arbeit zielt darauf ab, die Anwendung von Deep Reinforcement
+ Learning-Method bei der Realisierung von end-to-end autonomem Fahren zu erforschen.
+ Wir haben eine Umgebung von Deep Reinforcement Learning im Carla-Simulator
+ aufgebaut und basierend darauf ein Policy-Modell trainiert, um ein Fahrzeug entlang einer
+ vorher geplanten Route zu steuern. Für die Auswahl der Algorithmen von Deep
+ Reinforcement Learning haben wir aufgrund seiner stabilen Leistung den Proximal Policy
+ Optimization Algorithmus verwendet. In Anbetracht der Komplexität des end-to-end
+ autonomen Fahrens haben wir auch eine umfassende Belohnungsfunktion sorgfältig
+ entworfen, um das Policy-Modell effizienter zu trainieren. Die Modellinputs für diese
+ Arbeit sind zweierlei: Erstens, Echtzeit-Straßeninformationen und Fahrzeugzustandsdaten,
+ die vom Carla-Simulator erhalten wurden, und zweitens, Echtzeitbilder, die von der
+ Frontkamera des Fahrzeugs aufgenommen wurden. Um den Einfluss verschiedener
+ Eingangsinformationen auf die Trainingseffekte und die Modellleistung zu verstehen,
+ haben wir eine detaillierte vergleichende Analyse durchgeführt. Die Testergebnisse zeigten,
+ dass die Genauigkeit und Bedeutsamkeit der Informationen einen signifikanten Einfluss
+ auf den Lerneffekt des Agenten hat, was wiederum direkte Auswirkungen auf die Leistung
+ des Modells hat. Durch diese Studie haben wir nicht nur das Potenzial von Deep
+ Reinforcement Learning im Bereich des end-to-end autonomen Fahrens bestätigt, sondern
+ auch eine wichtige Referenz für zukünftige Forschung und Entwicklung verwandter
+ Technologien bereitgestellt.
+
+Abstract
+ With the rapid development of autonomous driving and artificial intelligence technology,
+ end-to-end autonomous driving technology has become a research hotspot. This thesis
+ aims to explore the application of deep reinforcement learning in the realizing of end-to
+end autonomous driving. We built a deep reinforcement learning virtual environment in the
+ Carla simulator, and based on it, we trained a policy model to control a vehicle along a
+ preplanned route. For the selection of the deep reinforcement learning algorithms, we have
+ used the Proximal Policy Optimization algorithm due to its stable performance.
+ Considering the complexity of end-to-end autonomous driving, we have also carefully
+ designed a comprehensive reward function to train the policy model more efficiently. The
+ model inputs for this study are of two types: firstly, real-time road information and vehicle
+ state data obtained from the Carla simulator, and secondly, real-time images captured by
+ the vehicle's front camera. In order to understand the influence of different input
+ information on the training effect and model performance, we conducted a detailed
+ comparative analysis. The test results showed that the accuracy and significance of the
+ information has a significant impact on the learning effect of the agent, which in turn has a
+ direct impact on the performance of the model. Through this study, we have not only
+ confirmed the potential of deep reinforcement learning in the field of end-to-end
+ autonomous driving, but also provided an important reference for future research and
+ development of related technologies.
+
+AutonomousNavigationwithDeepReinforcementLearninginCarlaSimulator
+ I
+ TableofContents
+ KAPITEL1INTRODUCTION.........................................................................................1
+ 1.1MOTIVATION................................................................................................................1
+ 1.2PROBLEMDESCRIPTION................................................................................................4
+ 1.3STRUCTUREOFTHEWORK...........................................................................................5
+ KAPITEL2BACKGROUNDANDRELATEDWORK................................................6
+ 2.1MACHINELEARNING....................................................................................................6
+ 2.2DEEPLEARNING...........................................................................................................7
+ 2.2.1ArtificialNeuralNetworks....................................................................................7
+ 2.2.2ConvolutionalNeuralNetwork.............................................................................8
+ 2.2.3VariationalAutoencoder.......................................................................................9
+ 2.3REINFORCEMENTLEARNING........................................................................................9
+ 2.3.1MarkovDecisionProcess...................................................................................10
+ 2.3.2ValueFunction....................................................................................................11
+ 2.3.3BellmanEquation...............................................................................................12
+ 2.3.4Reward................................................................................................................12
+ 2.3.5OtherReinforcementLearningConcepts...........................................................13
+ 2.4DEEPREINFORCEMENTLEARNING.............................................................................16
+ 2.4.1Value-BasedDRL...............................................................................................16
+ 2.4.2Policy-BasedDRL...............................................................................................17
+ 2.5APPROACHESFORTHISSTUDY...................................................................................21
+ KAPITEL3EXPERIMENT............................................................................................24
+ 3.1EXPERIMENTENVIRONMENT......................................................................................24
+ 3.1.1CarlaSimulator..................................................................................................24
+ 3.1.2SemanticSegmentationCamera.........................................................................25
+ 3.1.3VehicleControlSystem.......................................................................................26
+ 3.1.4Waypoint.............................................................................................................26
+AutonomousNavigationwithDeepReinforcementLearninginCarlaSimulator
+ II
+ 3.1.5Maps....................................................................................................................27
+ 3.2DEEPREINFORCEMENTLEARNINGSETUP..................................................................29
+ 3.2.1ImageDimensionReduction...............................................................................29
+ 3.2.2StateSpace..........................................................................................................30
+ 3.2.3ActionSpace.......................................................................................................32
+ 3.2.4RewardFunction.................................................................................................33
+ 3.3MODELTRAINING......................................................................................................36
+ 3.4MODELTEST..............................................................................................................41
+ KAPITEL4CONCLUSION............................................................................................43
+ REFERENCES..................................................................................................................45
+AutonomousNavigationwithDeepReinforcementLearninginCarlaSimulator
+ III
+ ListofFigures
+ Fig.1:Athree-layeredartificialneuralnetworkwiththreeinputandtwooutputnodes
+ (Source:[12]).........................................................................................................................7
+ Fig.2:InteractionofagentwithenvironmentinMDP(Source:[14]).................................10
+ Fig.3:GradientPolicyUpdateProcess(Source:https://hrl.boyuai.com/chapter/2)............19
+ Fig.4:TRPOPrincipleDiagram(Source:https://hrl.boyuai.com/chapter/2/trpo)...............19
+ Fig.5:ClipFunctionwithpositiveadvantagesandnegativeadvantages(Source:[17]).....21
+ Fig.6:PPOalgorithmprocessinActor–Criticstructure(Source:[18])..............................22
+ Fig.7:ImagefromRGBcameraandimagefromsemanticsegmentationcamera
+ (Source:[19]).........................................................................................................................25
+ Fig.8:WaypointinCarla(Source:[14])...............................................................................26
+ Fig.9:Route1inTown02...................................................................................................27
+ Fig.10:Route2inTown02.................................................................................................28
+ Fig.11:TestRouteinTown07...........................................................................................29
+ Fig.12:DimensionReductionofImagethroughVAE(Source:[14])..................................29
+ Fig.13:Rewardachieved forRoute1inTown02overtime-step......................................37
+ Fig.14:PerformanceofthetrainedmodelinRoute1Town02..........................................38
+ Fig.15:Rewardachieved forRoute2inTown02overtime-step......................................39
+ Fig.16:PerformanceofthetrainedmodelinRoute2Town02..........................................40
+ Fig.17:PerformanceofthetrainedmodelinTown07........................................................41
+AutonomousNavigationwithDeepReinforcementLearninginCarlaSimulator
+ IV
+ Listoftables
+ Table1:Parametersoftwoinputstrategies..........................................................................30
+ Table2:Reward forterminationconditions........................................................................33
+ Table3: Reward functionR(t)............................................................................................36
+ ListofAbbreviations
+ DRL DeepReinforcementLearning
+ DL DeepLearning
+ PG PolicyGradient
+ PPO ProximalPolicyOptimization
+ TRPO TrustRegionPolicyOptimization
+ VAE VariationalAutoencoder
+ MDP MarkovDecisionProcess
+ CNNs ConvolutionalNeuralNetworks
+ MC MonteCarlo
+AutonomousNavigationwithDeepReinforcementLearninginCarlaSimulator
+ V
+ Symbols
+ Symbol Unit Description
+ a Actionsmadebyagent
+ s Thecurrentstateoftheagentinagivenenvironment
+ π(θ) Policynetwork
+ θ Parameterof Policynetwork
+ Q(s,a) Actionvaluefunction
+ V(s) Statevaluefunction
+ A(s,a) Advantagefunction
+ α Learningrat
+ P(s’|s,a) Statetransitionfunction
+ R(t) Rewardfunction
+ ε ° Headingerror
+ δ Throttlevalueofthevehiclecontrolsystem
+ φ Steervalueofthevehiclecontrolsystem
+ v km/h Speedofthevehicle
+ d m Distancebetweenvehicleanroadcenter
+ ϵ Clippingrate
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Kapitel 1 Introduction
+ 1.1 Motivation
+ With the enhancement of computillity and the rapid development of artificial intelligence
+ technology, key technologies for autonomous driving have increasingly matured, and its
+ application scenarios are gradually becoming clear, thereby becoming a focal point within
+ the automotive industry. It is foreseeable that the widespread application of autonomous
+ driving technology will achieve significant results in terms of improving road safety,
+ alleviating traffic congestion, enhancing transportation efficiency, reducing vehicular
+ energy consumption, and minimizing environmental pollution.
+ Conventional autonomous driving systems embrace a modular technological strategy
+ whereby every function, including perception, mapping, planning, and control, is
+ individually developed and later integrated into the automobile. The advantage of this
+ approach is that each module can be developed and optimized independently, while also
+ facilitating the detection and rectification of issues within specific modules. However, a
+ disadvantage is that the interaction and integration between modules generally necessitate
+ complex coordination mechanisms and interfaces[1]. Due to the fact that each module has
+ 1
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ its own optimization objectives and error propagation mechanisms of each module, the
+ entire system may not achieve a unified and consistent ultimate driving performance goal.
+ For example, the perception module is designed to detect and recognize objects, with the
+ common optimization objective of mean Average Precision (mAP), a metric for measuring
+ the accuracy of detection algorithms. Conversely, the planning module often optimizes for
+ driving safety and comfort. The optimization objectives of the two are not aligned, thereby
+ leaving the entire system without a unified, aligned objective [2]. In contrast, the end-to
+end approach eliminates the inter-steps in traditional modular approaches (such as object
+ detection, path planning, etc.), directly learning the mapping relationship from raw sensing
+ data to driving control signals. For example, Tesla FSD Beta V12 adopts an end-to-end
+ implementation approach, which replaces the traditional planning and control
+ implementation methods with a neural network-based approach. This means that the neural
+ networks for perception and decision-making are merged into a single large network,
+ greatly simplifying the complexity and volume of code.
+ In end-to-end autonomous driving research, researchers have studied two specific learning
+ strategies, imitation learning (IL) and reinforcement learning (RL), and explored how to
+ employ them. IL has emerged as a highly viable approach for advancing autonomous
+ vehicles due to its significant reliance on expert demonstration data. For example, Pan et al.
+ [3] used online and batch IL algorithms to train a control policy, and their autonomous
+ driving system showed impressive high-speed off-road capabilities. However, IL mainly
+ depends on driving data from experienced drivers or instructors. If the data used for
+ training does not include infrequent or dangerous driving situations, the system may not be
+ adequately prepared to handle them in real-life situations. As a result, it is hard to expand
+ and adapt this method for new situations. Conversely, RL learns policy through interaction
+ with the environment and a reward-based mechanism. This implies that RL methods have
+ the potential to surpass human driver performance in certain situations. Other advantages
+ of RL are: (a) Adaptability: Real-world road environments are complex and difficult to
+ predict accurately. When a vehicle encounters unseen road conditions or obstacles, RL
+ allows the vehicle to adjust its control policy based on received rewards or penalties. (b)
+ Long-term Decision-making: Unlike IL approaches, reinforcement learning is concerned
+ with cumulative long-term rewards, rather than just immediate feedback. This can aid the
+ vehicle in making more foresighted decisions during driving, balancing both safety and
+ 2
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ comfort. (c) Control Optimization: Through RL, the system can optimize for specific
+ objectives and constraints, enabling optimal decisions in particular situations[4].
+ The question now arises: Can reinforcement learning (RL) methods be employed to
+ achieve end-to-end autonomous driving? Alex et al. [5] elaborated on how autonomous
+ driving can be defined as a Markov Decision Process and attempted to implement simple
+ task scenarios using reinforcement learning, such as driving along a straight road.
+ Experiments indicate that reinforcement learning can achieve desired outcomes faster than
+ imitation learning, both in simulators and in the real world. Liang et al. [6] combined
+ controllable imitation learning with DDPG (Deep Deterministic Policy Gradient) strategy
+ learning, addressing the issue of sample inefficiency inherent in traditional reinforcement
+ learning. When tested in the CARLA simulator, the researchers achieved better driving
+ performance than both traditional modular approaches and imitation learning. In [7], the
+ authors proposed a solution for lane-keeping assistance function by using deep
+ reinforcement learning. For discrete action spaces, they employed the Deep Q-Network
+ (DQN) algorithm, and for continuous action spaces, they adopted the Deep Deterministic
+ Actor-Critic (DDAC) algorithm. Ultimately, they tested this approach in an open-source
+ simulator and found that both DQN and DDAC could achieve the vehicle's lane-keeping
+ functionality. Notably, the DDAC algorithm enabled the vehicle to drive in a smoother and
+ more fluid manner, suggesting that continuous action spaces might be more advantageous
+ for autonomous driving. Fayjie et al. [8] also implemented autonomous navigation in urban
+ environments within the simulator using the DQN with experience replay.
+ Up to now, there have been few successful cases of implementing autonomous driving in
+ the real world using deep reinforcement learning. However, an increasing number of
+ researchers are beginning to explore DRL-based autonomous driving techniques in
+ simulators. Common DRL algorithms and their modified versions(such as DQN, DDPG)
+ have all been tested. For example, Lee [20] proposed a new and improved method for
+ DDPG. This approach combines a real-world human driving data set with a DRL method
+ to create an intelligent following agent that integrates human driving experience. Through
+ this approach, the agent is able to learn efficient driving behaviour from real human
+ driving experience, which in turn optimizes its driving policy and effectively adapts to the
+ complex and changing real-world traffic environment. The authors test the approach in the
+ 3
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ CARLA simulator and find that it shows significant improvements in both safety and
+ driving efficiency over the traditional pure DDPG approach. While there is a significant
+ difference between simulator environments and the real world, ongoing research in
+ relevant transfer technologies is making it possible to apply models trained in simulators to
+ real-world applications.
+ 1.2 Problem Description
+ With the deepening research into end-to-end autonomous driving techniques based on
+ DRL, its significance in the field of autonomous driving is becoming increasingly
+ pronounced. However, realizing complete end-to-end autonomous driving still faces a
+ series of challenges, particularly in making rapid and safe decisions in complex traffic
+ environments. Researchers have identified the following challenges when implementing
+ autonomous driving using DRL [9]: (a) Input Modality: RGB images from cameras most
+ closely resemble human perception of the world, containing a wealth of implicit
+ information. LiDAR (Light Detection and Ranging) or stereo cameras can provide accurate
+ three-dimensional spatial coordinates. Sensors measuring velocity, acceleration, and
+ angular acceleration capture the current motion state of the vehicle. How to make the best
+ use of this information deserves attention. (b)Visual Abstraction: The information input
+ into neural networks is often high-dimensional (e.g., images). Hence, a method of
+ information abstraction is required to extract latent features and represent them in a
+ reduced-dimensional form. This significant information simplifies the training process of
+ policy networks while complying with constraints of computer memory and model size.
+ Furthermore, it can boost the training efficiency of DRL. (c) Robustness: During test, rare
+ events or traffic conditions might occur, which were not seen during training. Ensuring the
+ model can handle these situations requires a high level of robustness. If the model is overly
+ complex or the training data lacks diversity, over-fitting may occur. This could result in the
+ model performing poorly in new, unseen situations.
+ Thus, the primary objective of this study is to investigate the feasibility of implementing
+ end-to-end autonomous driving using deep reinforcement learning methods on the Carla
+ simulator. To gain a deeper understanding and enhance the end-to-end approach, we will
+ focus our research on the following areas:
+ 4
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Thus, the main aim of this study is to research the potential of implementing end-to-end
+ autonomous driving by using Deep Reinforcement Learning methods on the Carla
+ simulator. In order to understand and refine the end-to-end approach in more depth, we
+ will focus on the following areas:
+ (a) DRL Algorithms: We aim to study and optimize algorithms that can effectively support
+ autonomous driving functions.
+ (b) Input: We will explore the characteristics of different sensors, delve into pre-process
+ methods for input data, and determine ways to optimize model inputs to achieve more
+ accurate and stable decisions.
+ (c) Reward Function: In the context of the Carla simulator environment, we will seek to
+ identify a more representative and effective reward function to guide the model in iterative
+ moving towards safer and more efficient driving strategies.
+ (d) Robustness Testing: We will test the model's adaptability under various environments
+ and conditions.
+ 1.3 Structure of the work
+ The content of this study is divided into four main chapters, organized according to the
+ following structure:
+ First, we introduce the research objectives of the thesis, the background and the main
+ motivations that guided the research. Then, we discuss in depth the theoretical foundations
+ that are closely related to the research in this paper, such as machine learning, deep
+ learning and reinforcement learning, and introduce some of the key concepts and solution
+ strategies that have been proposed to solve the problem. Next, we used the Carla simulator
+ as an experimental platform and built a simulation environment for DRL and explored the
+ potential for end-to-end autonomous driving solutions by using DRL. Finally, we
+ summarize the study's main findings and conclusions.
+ 5
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Kapitel 2 Background and Related Work
+ 2.1 Machine Learning
+ The rapid advancement of big data technologies and computational capabilities has
+ allowed Machine Learning (ML) to transition from theoretical to practical applications,
+ bringing profound transformations to various industries and domains. As a central subfield
+ of Artificial Intelligence (AI), ML primarily explores how computer systems can
+ autonomously learn from data and improve their performance. In conventional
+ programming models, algorithms' behaviors are specified through explicit instructions,
+ whereas in ML models, behaviors are derived from data analysis. Mitchell [10] provides a
+ precise definition of ML: "A computer program is said to learn from experience E with
+ respect to some task T and some performance measure P, if its performance on T, as
+ measured by P, improves with experience E."
+ In the following chapters, we will explore in depth the essential concepts and theoretical
+ constructs related to our research topic. We will begin by reviewing the fundamental
+ principles and related ideas of deep learning. Afterwards, we will focus on a
+ comprehensive discourse of the core strategies, algorithms, and characteristics of
+ reinforcement learning. Next, we introduce deep reinforcement learning, which combines
+ deep learning and reinforcement learning, and discuss its potential to provide innovative
+ 6
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ and effective solutions to a variety of complex problems. Finally, we will describe the
+ particular deep reinforcement learning algorithms used in our study, end-to-end
+ autonomous driving.
+ 2.2 Deep Learning
+ Deep learning (DL) is a subset of machine learning that primarily focuses on using multi
+layered neural networks, especially deep neural networks, to learn complex patterns from
+ data. Compared to traditional shallow neural networks, deep learning models can
+ automatically learn multi-level feature representations from raw data [11]. This capability
+ allows them to excel in numerous tasks, such as image and speech recognition.
+ 2.2.1 Artificial Neural Networks
+ The human brain consists of billions of neuronal cells. The connections between these
+ neurons form a complex network and enable a variety of specific functions. Human
+ cognition and behaviour are based on the exchange and transmission of information
+ between neurons. For example, when we learn new knowledge, the brain stores and recalls
+ this knowledge by changing the connections and synaptic strength between neurons. When
+ we encounter new situations or tasks, the brain adapts and learns new skills and behaviour
+ by rearranging and adjusting the connections between neurons.
+ Fig. 1: A three-layered artificial neural network with three input and two output nodes
+ (Source: [12])
+ 7
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Fig. 1 shows an artificial neural network structure. Similar to the structure of the human
+ brain, an Artificial Neural Network (ANN) consists of multiple layers, usually including an
+ input layer, multiple hidden layers, and an output layer. Each layer contains a certain
+ number of neurons (perceptrons) that are connected to neurons in other layers by weights.
+ The input to each neuron is the sum of the product of the outputs of the neurons in its
+ previous layer and the weights, plus a value called the bias. This sum is passed through an
+ activation function in order to introduce a non-linearity. This non-linearity is the key to a
+ neural network's ability to represent and fit complex data structures.
+ The purpose of training a neural network is to adjust the weights and biases between the
+ connecting neurons so that, for a given input, the output of the network is as close as
+ possible to the desired output. This is done through an iterative process in which each
+ iteration calculates the difference between the network's predicted and actual outputs and
+ updates the weights and biases using various optimization algorithms such as gradient
+ descent.
+ 2.2.2 Convolutional Neural Network
+ Convolutional Neural Networks (CNNs) are a type of Feedforward Neural Networks that
+ provide practical applications in numerous fields, including computer vision, natural
+ language processing and reinforcement learning. Many practical machine learning
+ implementations in the real-world are built upon the foundations of CNNs. The two most
+ essential components in CNNs are the convolutional layer and the pooling layer.
+ Convolutional Layer: this layer is the core of CNNs. It consists of a series of filters, each
+ of which performs a convolution operation on the input data to detect specific features. For
+ example, in image processing, one filter might detect edges while another might detect
+ texture. When a filter is convolved with data within its receptive field, it generates a
+ feature map that represents the strength of the filter's response at each position of the input.
+ As the network is trained, these filters automatically learn to identify features that are
+ useful for the task.
+ Convolutional neural networks can extract more abstract and high-level features from raw
+ data. This allows CNNs to do well in image recognition, speech processing, and a variety
+ of other tasks. Convolutional neural networks are particularly popular in the field of
+ 8
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ computer vision due to their ability to automatically learn and extract meaningful features
+ from data without the need for human-designed features.
+ Pooling Layer: the pooling layer usually follows the convolutional layer and serves to
+ reduce the dimensionality of the data while maintaining important feature information. The
+ most commonly used pooling operation is maximum pooling, which selects the maximum
+ value from each small region of the input feature map. This operation reduces the size of
+ the feature map, making the model less computationally loaded, while also increasing the
+ model's invariance to small positional changes.
+ 2.2.3 Variational Autoencoder
+ The variational autoencoder (VAE) is a popular model in the field of deep learning,
+ especially in unsupervised learning, generative modelling and feature learning. Its main
+ advantage lies not only in data compression, but more importantly in its ability to generate
+ new samples with similar characteristics to the training data. The VAE basically consists of
+ an encoder and a decoder. The encoder is responsible for mapping the input data to a
+ probability distribution in latent space, usually a distribution parameterized by mean and
+ standard deviation. The decoder samples a point from this probability distribution and then
+ attempts to reconstruct the original data. Unlike traditional autoencoders, the key feature of
+ the VAE is its use of a probabilistic latent space representation, which allows it to capture
+ the randomness and inherent diversity of the data.
+ 2.3 Reinforcement Learning
+ Reinforcement learning stands as a pivotal subfield within machine learning, primarily
+ concerned with the optimization of decision-making processes through interaction with
+ environments [13]. In essence, an agent seeks to discover the best sequence of actions that
+ lead to the most favorable cumulative reward, often in situations where the most optimal
+ decisions are not immediately apparent. In RL, agents often learn from trial and error,
+ continuously refining their strategies to maximize long-term rewards. This intrinsic ability
+ to adapt and learn from dynamic environments renders RL particularly suitable for a wide
+ array of applications.
+ 9
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ 2.3.1 Markov Decision Process
+ In mathematics, a Markov decision process (MDP) is a discrete-time stochastic control
+ process. It provides a mathematical framework for modeling decision making in situations
+ where outcomes are partly random and partly under the control of a decision maker.
+ MDPis a tuple <S, A, P, R, γ>, where: S is a set of states called the state space, A is a set
+ of actions called the action space, P is the probability that action a in state s at time t will
+ lead to state s' at time t+1, P(s'|s,a) is state transition function defined in equation 1, R is
+ the immediate reward (or expected immediate reward), γ is the discount factor satisfying
+ 0 ≤γ<1.
+ P(s'|s, a) = P(st+1 = s' |st = s, at = a)
+ (1)
+ In MDP, there is typically an agent taking actions. Consider the analogy of a boat freely
+ drifting in the ocean, influenced by the currents. This process can be seen as a Markov
+ Reward Process, where the boat is luck, might reach a destination and receive a substantial
+ reward. Now, if there's a sailor steering this boat, they have the autonomy to choose their
+ path, potentially guiding the vessel towards a destination with a significant reward more
+ deliberately. The MDP represents a temporal and ongoing process, characterized by
+ constant interactions between the agent and the environment.
+ Fig.2: Interaction of agent with environment in MDP( Source: [14] )
+ 10
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Fig. 2 illustrates the workings of the MDP. The agent selects action �� based on the
+ current state ��. For the state �� and action ��, the MDP determines ��+1 and �� using
+ the reward function and state transition function, and then feeds this back to the agent. The
+ goal of the agent is to maximize the cumulative reward received. The function by which
+ the agent chooses an action from a set of actions based on the current state is referred to as
+ a policy π.
+ 2.3.2 Value Function
+ Action value function: In the realm of reinforcement learning, the Action-Value Function,
+ often denoted as Q(s,a), plays an instrumental role. This function estimates the expected
+ return or cumulative reward of taking action a in state s and subsequently following a
+ particular policy. Simply put, it provides a measure of the worth of an action in a given
+ state, enabling the agent to make informed decisions that can potentially maximize its
+ long-term reward. In MDP, when an agent follows policy π, the expected return obtained
+ from taking action a in the current state s is represented by ��(��,��):
+ ��(��,��) = �[��|�� = ��, �� = ��],
+ (2)
+ where �� is the mathematical expectation of the cumulative reward on the sequence of
+ actions after state s.
+ Typically, the ultimate goal of many reinforcement learning algorithms is to find the
+ optimal action-value function, denoted as �� ∗(�,�). This function indicates the maximum
+ expected return achievable by any policy after taking action a in state s. Once �� ∗(�,�) is
+ known, the agent can derive an optimal policy by selecting the action with the highest
+ value in each state. Understanding and accurately estimating the action-value function is
+ crucial as it forms the foundation for many reinforcement learning algorithms, including
+ the widely-used Q-learning and Deep Q-Networks.
+ State value function: the state-value ��, defined in equation 3, represents the expected
+ cumulative reward an agent can expect to accumulate starting from state s and following
+ policy π thereafter.
+ 11
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ ��(�) =
+ �(�|�) ∙ ��(�,�)
+ ���
+ (3)
+ The state-value function forms the foundation for various decision-making strategies in
+ reinforcement learning. By understanding the value of different states, an agent can
+ navigate the environment and make decisions that optimize its overall objective, which is
+ to maximize cumulative rewards over time.
+ 2.3.3 Bellman Equation
+ The main role of the Bellman Equation is to provide a recursive way to solve the value
+ function. It provides a structured framework for solving or estimating the value function by
+ relating the value of one state to the value of its successor. The Bellman equation serves as
+ the theoretical backbone for many reinforcement learning algorithms. By iteratively
+ applying this equation, we can converge to the true value functions, leading to the
+ derivation of optimal policies in various learning settings.
+ For the state-value function ��(�), the Bellman equation under a policy π is given by:
+ ��(�) = ���
+ �(�|�)∙ �',�
+ �(�',�|�,�) ∙ [� + ���(�')],
+ (4)
+ where �(�',�|�,�) is the transition probability of moving to state �' and receiving reward r
+ after taking action a in state s, and γ is the discount factor.
+ Similarly, for the action-value function ��(��,��), the Bellman equation can be written as:
+ ��(�,�) =
+ 2.3.4 Reward
+ �(�', �|�, �) ∙ [� + �
+ �',�
+ �(�'|�')��(�',�')]
+ �'
+ (5)
+ The design of the reward function is indeed crucial for self-driving using the RL approach,
+ as the reward function directly represents our desired action for the agent. The reward
+ function should be able to accurately and sensitively reflect, which action is good and
+ which one is bad. It is worth noting that designing a good reward function for different
+ traffic environments or simulator environments is quite difficult. In [15], The authors
+ present a methodology on how to design reward functions in a simulator so that the DL can
+ 12
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ converge quickly and efficiently to a good strategy. The reward function for this study will
+ be discussed in Section 3.2.4.
+ 2.3.5 Other Reinforcement Learning Concepts
+ Exploration vs. Exploitation
+ Exploration is a key aspect of reinforcement learning and other optimization approaches,
+ and refers to the agent trying new and unknown behaviour to gain more information. In
+ many real-world problems, the agent may know little or nothing about its environment, so
+ it is crucial to actively try different behaviour strategies to gain new experience.
+ Exploration strategies can help the system avoid prematurely converging on a local optimal
+ solution and ignoring possible better strategies or solutions.
+ Exploitation is when an agent chooses a behaviour strategy that it believes is currently
+ optimal, based on the experience and knowledge it already has. When an agent has gained
+ enough experience and has a deep understanding of its environment, using that experience
+ to make decisions can provide the greatest return. However, over-exploitation can result in
+ the system becoming locked into a local optimum and not having enough opportunities to
+ explore other possible better strategies.
+ In practical reinforcement learning tasks, the balance between exploration and exploitation
+ is very important. Too much exploration can lead to inefficiency, while too much
+ exploitation can cause the system to fall into sub-optimal solutions. Choosing appropriate
+ exploration and exploitation strategies is crucial for achieving efficient and robust learning.
+ Deterministic vs. Stochastic policy
+ A policy is represented by a probability distribution π(a|s), where the actions of an agent
+ are sampled from the distribution. A policy whose actions are sampled from a probability
+ distribution is called a Stochastic Policy Distribution and its action are:
+ � ~�(∙|�)
+ (6)
+ However, if we reduce the variance of the distribution of the stochastic policy and narrow
+ its range to the limit case, we will obtain a Dirac delta function ( δ-function) as its
+ 13
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ distribution. It’s a Deterministic Policy π(s). The deterministic policy π(s) also means that
+ given a state, a unique action will be obtained as follows:
+ � = �(�)
+ Monte-Carlo vs. Temporal difference
+ (7)
+ At the heart of DL are the mechanisms to estimate value functions. Two primary methods
+ for this purpose are the Monte Carlo (MC) methods and the Temporal Difference (TD)
+ learning algorithms.
+ Monte Carlo methods estimate value functions based on the principle of averaging over
+ multiple sample returns.The agent learns post-episode, meaning that it waits until the end
+ of the episode to compute and update value estimates based on the entire sequence of
+ observed rewards. Because it operates on actual returns, MC methods do not require a
+ model of the environment. A disadvantage of MC is that, it can suffer from high variance
+ due to the reliance on individual episode outcomes. However, it’s unbiased estimators of
+ the expected value.
+ Temporal Difference methods amalgamate the ideas of MC methods and dynamic
+ programming.In contrast with MC, TD methods update value estimates at each time step
+ and do not wait for the episode to conclude. This can lead to faster convergence compared
+ to MCmethods. TD has less variance than MC but introduces bias due to bootstrapping.
+ On-policy vs. Off-policy
+ In the on-policy approach, the agent learns about the policy it is currently following. Hence,
+ the policy used for exploration (behavior policy) is the same as the one being optimized
+ (target policy). Since it uses the same policy for both learning and decision-making,
+ exploration-exploitation trade-off becomes a central concern. If the agent becomes too
+ greedy based on current knowledge, it may miss out on valuable future opportunities.
+ In contrast, off-policy methods allow the agent to learn the value of one policy while
+ following another. The agent employs a behavior policy for exploration and use another
+ different control policy for learning.
+ 14
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Discrete vs. Continuous action spaces
+ Discrete action spaces encompass a finite set of actions an agent can select from at any
+ given state. The agent makes a choice among a predetermined, countable set of actions.
+ Examples include moving left or right, jumping, or selecting a particular move in a board
+ game. One advantage is that it is simple to implement and easier to handle computationally,
+ as each action has a unique value associated with it. However, as the size of the action set
+ increases, the computation can become more demanding and naive exploration becomes
+ inefficient.
+ Continuous action spaces consist of an infinite set of actions, often defined over continuous
+ intervals. Actions in such spaces are typically real-valued vectors. Examples include
+ steering angles in autonomous driving or joint torques in robotic manipulators. One
+ advantage is finer control and a richer set of behaviour. However, Direct approximation of
+ value functions can be difficult due to the continuous nature of the actions. Since
+ traditional epsilon greedy methods are not applicable, exploration strategies also need to be
+ modified.
+ Gradient Descent
+ Gradient descent is an iterative optimization algorithm for solving unconstrained
+ optimization problems, especially widely used in machine learning and deep learning to
+ minimize the loss function. The core idea of the algorithm is to iterative update the
+ parameters along the negative direction of the gradient of the objective function, thus
+ gradually reducing the value of the function. Consider a differentiable function f(θ), where
+ θ is a parameter vector. The goal of gradient descent is to find a value of θ such that f(θ)
+ reaches its minimum. At each iteration, we calculate the gradient of the function at the
+ current point and then update the parameter θ so that it moves in the negative direction of
+ the gradient. The updated formula is:
+ �𝑛� = �𝑜� −𝛼�(�𝑜�),
+ (8)
+ where α is the learning rate, a positive number that determines the step size of each
+ iteration. A large α implies a large step size, which may converge faster, but may also
+ cause the algorithm to oscillate or even diverge around the optimal point. Conversely, a
+ smaller α can cause the algorithm to converge slowly. In practice, many variants of
+ 15
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ gradient descent have also been developed, such as Stochastic Gradient Descent (SGD),
+ Small Batch Gradient Descent and Impulse Gradient Descent, to improve the efficiency
+ and stability of the algorithms according to specific data and problem characteristics.
+ 2.4 Deep Reinforcement Learning
+ Deep Reinforcement Learning combines the power of deep learning and reinforcement
+ learning, paving the way for many breakthrough advances in a wide range of domains. By
+ harnessing the representational power of deep neural networks, DRL aims to solve
+ complex decision-making tasks where both state and action spaces can be vast or even
+ continuous. DRL often focuses on end-to-end learning, where raw inputs such as images or
+ sensor data can be fed directly into the network, without the need for hand-crafted features.
+ As a result, DRL has the potential to enable end-to-end autonomous driving. Next, we will
+ introduce several common DRL algorithms based on both value-based and policy-based
+ approaches.
+ 2.4.1 Value-Based DRL
+ Value-based DRL algorithms are a subset of DRL methods that focus on estimating the
+ value of states or state-action pairs to control agent decision making. By using deep neural
+ networks, these algorithms can approximate value functions in high-dimensional or
+ continuous state spaces, providing a powerful tool for a variety of complex tasks.
+ Q-learning
+ Q-learning, a fundamental algorithm within the reinforcement learning paradigm, is a
+ model-free, off-policy method designed to find the optimal action selection policy for any
+ finite Markov decision process. It attempts to approximate the value of each state-action
+ pair, denoted as Q-values, without requiring a model of the environment. Q-functions
+ defined in equation 5.
+ The algorithm operates in discrete time steps, and at each step, an agent perceives its
+ current state, takes an action based on a policy derived from its current Q-value estimates,
+ receives a reward, and transitions to a new state. The Q-values are then updated using the
+ received reward and the highest Q-value of the new state. When a Q-learning agent adapts
+ 16
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ to the optimal Q-values for an MDP and subsequently chooses actions with a greedy
+ approach, the expected sum of discounted rewards is consistent with the calculation from
+ the value function under �∗, since the identical initial state is used for both.The update rule
+ for Q-learning is expressed as equation 9:
+ �(�, �) ← �(�,�)+ �[�� +�max
+ �'
+�(�',�') − �(�',�')]
+ Deep Q-Networks
+ (9)
+ Q-Learning has been shown to converge to the optimal solution when using a tabular
+ representation or when approximating the Q-function with a linear function. However,
+ when a non-linear function is used to approximate the Q-function, Q-Learning is unstable
+ and even divergent. With the continuous development of deep neural network technology,
+ DQN algorithm solves this problem[16]. DQN is an improvement of the Q-learning
+ algorithm by introducing Deep Neural Networks (DNNs) for representing nonlinear Q
+values on high-dimensional state spaces.
+ Suppose the parameter used by the neural network to fit the function is w, i.e. the action
+ value Q of all possible actions a in each state, which we can represent as Q(s,a;w). If the
+ actions are discrete (finite), we can only feed the state s into the neural network so that it
+ simultaneously outputs the action value Q(s,a;w) for each action. Typically, DQN can only
+ handle the case where the actions are discrete because of the greedy operation in updating
+ the function.
+ Furthermore, because DQN is an off-line policy algorithm, we can use a greedy strategy to
+ balance exploration and exploitation when collecting data, and store the collected data for
+ use in subsequent training. There are also two very important concepts in DQN,
+ experience replay and Target network, that can help DQN achieve stable and excellent
+ performance.
+ 2.4.2 Policy-Based DRL
+ In contrast to the value-based method described in the previous section, the policy-based
+ DRL learns the optimal policy network π(s;θ) directly. The obvious advantage of this
+ 17
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ approach is that it avoids the optimization problem of finding the maximum value in the
+ action space, and is therefore particularly well adapted to problems in high-dimensional or
+ continuous action spaces. Moreover, the policy-based approach can naturally model
+ stochastic control policy. More importantly, it uses gradient information to guide the
+ optimization process. Typically, such methods have more robust convergence guarantees.
+ Policy Gradient (PG)
+ Suppose the target policy is a stochastic policy π(s;θ), where θ is the corresponding
+ parameter, and is everywhere differentiable. We can use a linear model or a neural network
+ model to model such a policy. We input a state s into the model and the model outputs a
+ probability distribution of actions. Our target is to find an optimal policy π(s;θ) and
+ maximize the expected return of that policy in the environment. We define the objective
+ function of the policy gradient algorithm as equation 10:
+ �(�) = ��[��(�)]
+ (10)
+ Now that we have an objective function J(θ) and we can calculate its gradient by deriving
+ it from the policy. After obtaining the gradient, we can maximize this objective function
+ using gradient ascent to obtain the optimal policy. The Gradient of objective function J(θ)
+ is defined as equation 11:
+ ��(�) = ���
+ [���
+ (�,�) ∙ ��log��(�|�)]
+ (11)
+ This gradient can be used to update the policy π(s;θ). It should be noted that since the
+ desired subscript in the above equation is θ, the policy gradient algorithm is an on-policy
+ algorithm, i.e. the gradient must be calculated using the data obtained by the current policy.
+ Let us understand the policy gradient algorithm intuitively. As shown in Fig. 3, we can see
+ that at each state s, the gradient is modified so that the policy samples more actions that
+ bring higher Q-value and less actions that bring lower Q-value.
+ 18
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Fig. 3: Gradient Policy Update Process (Source: https://hrl.boyuai.com/chapter/2)
+ Trust Region Policy Optimization (TRPO)
+ Although the PG method is simple and intuitive, it encounters training instability in
+ practice. PG maximizes this objective function J(θ) by gradient ascent, making the policy
+ optimal. If the policy network is a deep neural network, updating the parameters along the
+ policy gradient is likely to result in a sudden and significant deterioration of the policy due
+ to a too big step, which in turn affects the training effect.
+ Fig. 4: TRPO Principle Diagram(Source:https://hrl.boyuai.com/chapter/2/trpo )
+ 19
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ To address the above problem, we consider finding a trust region for the update policy.
+ This trust region limits the update size of the policy network.As shown in Fig.4, when
+ updating policy in this region, it can ensure the safety of policy performance, which is the
+ main idea of the trust region policy optimization algorithm. It is theoretically able to
+ guarantee that policy performance will increase monotonically as it learns. In practice,
+ TRPOachieves better results than PG algorithm.
+ Proximal Policy Optimization (PPO)
+ The TRPO algorithm has been successfully used in many applications, but we also found
+ that its computation process is too complicated, and the amount of computation for each
+ update step is very large. Therefore, an improved version of the TRPO algorithm was
+ proposed in 2017. PPO algorithm is based on the idea of TRPO [16], but it is easier to
+ implement. A large number of experimental results show that PPO can learn just as well
+ (or even faster) than TRPO, which makes PPO a very popular deep reinforcement learning
+ algorithm. When we want to try a reinforcement learning algorithm in a new environment,
+ PPO is the first algorithm we try.
+ There are two variants of PPO, PPO-Penalty and PPO-Clip. The PPO-Penalty is put
+ directly into the objective function using the Lagrange multiplier method with the limit of
+ the KL dispersion. This becomes an unconstrained optimization problem. The coefficients
+ in front of the KL divergence are constantly updated during the iteration process. PPO-Clip
+ is more direct. It directly clips the update size of the policy network to ensure that, the
+ differences between the new policy network and the old one are not too large.
+ The objective function of PPO-Clip is defined in equation 12:
+ ���
+ 𝑜��(�) = E
+ �~��
+{ �=0
+ � [���(��(�) ∙ ��
+ ��, 𝑜��(��(�), 1 − �, 1 + �)∙ ��
+ ��)]},
+ where ϵ is the clipping parameter.
+ ��(�) is the ratio of new and old policy networks’ parameters, defined as follows:
+ ��(�) = ��(�|�)
+ ��_𝑜�(�|�)
+ (12)
+ (13)
+ 20
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ �� � is the advantage of the action a under the state s, defined as follows:
+ �� = ��(�,�)−��(�)
+ (14)
+ Fig. 5 shows the principle of clip. If the advantage A is greater than 0, it means that for the
+ current state s, this action a has a higher Q-value than the average value. The probability
+ ��_𝑛�(�|�) for this action under new policy ��_𝑛� should be maximized, but not greater
+ than (1 + ϵ)��_𝑜�(�|�). Conversely, if the advantage A is less than 0, it means that the
+ probability ��_𝑛�(�|�) should be minimized, but not less than (1 − ϵ)��_𝑜�(�|�).
+ Fig. 5: Clip Function, positive advantages (left) and negative advantages (right). The red
+ circle on each plot shows the starting point for the optimization, i.e., r = 1. (Source: [17])
+ 2.5 Approaches for this study
+ In this study, the PPO algorithm is used to realize end-to-end autonomous driving due to
+ the following advantages of PPO:
+ Stability: PPO improves the stability of training by introducing custom equations to ensure
+ that updates to the policy network are not excessively large. This is particularly crucial for
+ real-time and safety-critical tasks like autonomous driving.
+ Continuous action space: In autonomous driving tasks, it is often necessary to deal with
+ continuous action spaces, such as the rotation angle of the steering wheel or the force of
+ the accelerator pedal. PPO can directly output the corresponding values for these
+ 21
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ continuous actions, which contrasts with value-based approaches such as DQN, which are
+ often not ideal for continuous action spaces.
+ Sample efficiency: PPO, compared to traditional PG algorithms, incorporates importance
+ sample techniques, allowing the policy network to learn multiple times from the samples
+ taken under the old policy. As a result, training efficiency is significantly improved.
+ Fig. 6: PPO algorithm process in Actor–Critic structure (Source: [18])
+ The model training process is shown in Fig. 6. The PPO algorithm adopts the actor-critic
+ framework. The algorithm uses two neural networks with similar structure. One of them,
+ the actor network (also known as policy network) is responsible for learning and making
+ decisions on which action to take under specific environmental observations. While the
+ role of the critic network is to evaluate the quality of the action performed by the agent, i.e.,
+ to compute the advantage A, and to feed this value back to the actor network to assist in its
+ optimization.
+ In this study we will train the model in the CARLA simulator. For each step of the
+ simulation process, the simulator returns the corresponding experience data. These data are
+ collated into experience tuples < st, at, rt, st+1 > and stored in the trajectory memory,
+ which forms the basis for subsequent learning by the agent.In particular, it should be noted
+ that this study collects several trajectories of different lengths during each sample process.
+ Therefore, the number of learning experiences of the agent each time is not fixed. As
+ 22
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ training goes deeper, agent's performance will gradually increase, which leads to a gradual
+ increase in the amount of experience in each episode , resulting in a continuous increase in
+ the amount of data in the trajectory memory. In order to make the training process standard,
+ we set a strategy so that the model learns once every 10 episodes of experience have been
+ collected. During a learning period, the agent randomly selects the number of experiences
+ from memory that does not exceed the current total for learning. And the parameters of the
+ Actor and Critic networks are updated 7 times during this learning period. At the end of
+ each learning, all the data in the experience memory is deleted.
+ The Actor and Critic networks uses stochastic gradient descent (SGD) to update their
+ parameters. The appropriate choice of learning rate α is crucial in deep reinforcement
+ learning, as it not only affects the speed of convergence of the model, but is also directly
+ related to the final performance of the model. A learning rate that is too large can cause the
+ model to diverge during training, while a learning rate that is too small can lead to slow
+ training or local optima. With reference to previous studies and based on our experimental
+ comparisons, we choose 0.00005 as the learning rate α in this paper, aiming to ensure the
+ stability of the model during training and also to fully learn the policy information in the
+ environment.
+ 23
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Kapitel 3 Experiment
+ 3.1 Experiment Environment
+ 3.1.1 Carla Simulator
+ Carla is an urban traffic simulation environment for validating and testing algorithms in
+ more complex and realistic traffic scenarios, built on top of Unreal Engine 4 and available
+ as an open source tool for autonomous driving researchers [19]. The simulator is dedicated
+ to real-world driving environments and common urban driving conditions. Eight detailed
+ maps are integrated internally, while two additional maps can be purchased for a total of 10
+ maps. A server-client architecture is used, with the server rendering in real time based on
+ client input and physical simulations.
+ At the same time, with the help of a Python-API-based client, we are able to send detailed
+ commands to the server for controlling the vehicle, such as steering, throttle and braking,
+ and receive information obtained from various sensors in real time. More importantly,
+ Carla also provides researchers with a highly flexible API that can be used not only for
+ generating and controlling different vehicles, but also allows the user to freely install and
+ configure a variety of cameras and sensors according to their needs, thus fulfilling the
+ requirements of various experiments and studies.
+ 24
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ We developed a DRL environment similar to the OpenAI gym based on Carla's API and
+ encapsulated core functions such as reset(), step() and return(). In our environment, the
+ simulator runs in synchronous mode, meaning that it waits for the client's task to complete
+ before simulating the next time step. This design ensures that the sensor data is consistent
+ with the current state. On the contrast, if it is run in asynchronous mode, this may lead to
+ data inconsistency due to the potentially long training time of the PPO network, which may
+ adversely affect the simulation results.
+ 3.1.2 Semantic Segmentation Camera
+ Fig.7 : Image from RGB camera (left); image from semantic segmentation camera
+ (right).(Source:[19])
+ In Carla, the Semantic Segmentation Camera is considered a valuable research tool. As
+ shown in Fig.7, this unique sensor is able to assign a semantic label to each pixel in an
+ image, explicitly identifying the object or scene category represented by that pixel, e.g.
+ road, car, pedestrian, building, etc. These labels not only provide comprehensive coverage
+ of typical elements in urban driving scenarios, but can also be output in near real-time,
+ allowing researchers to test and validate autonomous driving algorithms at high resolution
+ in a simulated environment.
+ In Carla, the user has the flexibility to set the required parameters for the semantic
+ segmentation camera, including resolution, field of view, and the specific position and
+ orientation of the camera. In our study, we chose to mount the camera at the front of the
+ vehicle. During the simulation, the camera generates a completely new image for each time
+ step. And, thanks to Carla's high degree of flexibility, we can further post-process these
+ 25
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ images or fuse them with other data sources, bringing additional flexibility for more
+ complex research scenarios.
+ 3.1.3 Vehicle Control System
+ The Carla simulator has designed a control system for the researcher, in which steer and
+ throttle are two crucial parameters.
+ Steer: The steer is mainly responsible for the steering control of the car, and its value
+ ranges from [-1, 1]. If its value is 0, the car will go straight, while positive and negative
+ values correspond to steering to the right and left, respectively. And its absolute value also
+ determines the steering angle.
+ Throttle: The throttle parameter controls the acceleration of the car and its value range is
+ [0, 1]. A value of 0 means that the driver has not pressed the gas pedal, while a value of 1
+ means that the gas pedal has been fully depressed.
+ 3.1.4 Waypoint
+ Fig. 8: Waypoint in Carla(Source:[14] )
+ Waypoint, as shown in Fig.8, in the Carla simulator represents specific points in 3D space
+ located on the road that provide the vehicle with core information about its travelling path.
+ These points not only specify the exact location and orientation, but also carry a large
+ amount of detailed data about the road. Each waypoint carries road attributes associated
+ 26
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ with it, such as whether it is at an intersection, the type of lane it is in, and its relationship
+ to the surrounding lanes. This information provides a crucial basis for vehicle navigation
+ and behaviour decisions in the simulation environment.
+ 3.1.5 Maps
+ As the most advanced open-source autonomous driving simulator, Carla not only provides
+ users with colourful maps and interaction environments, but also its internal map design is
+ full of depth and detail, providing an ideal platform for all kinds of autonomous driving
+ research and validation.
+ Mapfor model training
+ In this study, we chose Town 02 as the training map for the model training. Town 02
+ simulates a typical small town environment with many T-junctions, a wide range of urban
+ buildings and landscapes, as well as coniferous forests, a park area, and a mix of residential
+ and commercial areas. For the geographical and traffic characteristics of Town 02, we plan
+ two well-designed routes to train the strategy model.
+ Fig. 9: Route 1 in Town 02.
+ The first 420 m long route is a high complex route, as shown in Fig. 9. It combines a
+ combination of long and short straight roads with several T-junctions. Through this route,
+ 27
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ we aim to train the model to drive on straight roads and to effectively acquire navigation
+ and decision making skills at T-junctions.
+ Fig. 10: Route 2 in Town 02.
+ The second route is much simpler in structure than the first. This route is a closed loop
+ around the periphery of the Town 02 with a total length of 770 meter. Unlike the first
+ complex route, it consists mainly of a series of long straight roads with a few left turns. It
+ has been designed to test and practice the stability and continuity of the autonomous
+ driving system under sustained straight-line driving and simple turning conditions. By
+ training on this circular route, we expect the model to become more adept at basic driving
+ tasks and ensure that its performance is optimized for simple roads.
+ Mapfor model test
+ Town 07 is another characteristic urban environment in Carla. This town incorporates a
+ variety of driving environments, including dense urban streets, open squares, and a number
+ of overpasses and tunnels. In particular, unmarked roads in the countryside provide a
+ challenging test environment for autonomous driving systems.
+ 28
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Fig. 11: Test Route in Town 07.
+ In order to fully test the performance of the self-driving model, a test route (shown in Fig.
+ 11) was planned in Town 07. The route is 1150 m long and starts at the eastern end of the
+ town, passes through lush forests and open farmland, and ends at a country house on the
+ western side of town. The route includes not only regular straights, bends and junctions,
+ but also special driving scenarios such as forest and farmland to test the model's
+ performance and robustness in different real-world road environments.
+ 3.2 Deep Reinforcement Learning setup
+ 3.2.1 Image Dimension Reduction
+ Fig. 12: Dimension Reduction of Image through VAE.(Source: [14])
+ 29
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ In our study, the images captured by the semantic segmentation camera are used as a form
+ of input. The resolution of the image is 800*600 pixels. As this high dimensional image is
+ not suitable to be used directly as input to the model. Therefore, we used VAE method to
+ reduce the dimension of the image. As shown in Figure 12, after fine processing by the
+ encoder, the original image is effectively compressed into a 95-dimensional feature vector
+ �95. This lower dimension vector is then used as the input to the PPO algorithm to support
+ and improve the training process of our model.
+ 3.2.2 State Space
+ In this study, we use two different inputs and plan to compare the difference in
+ performance of the models obtained by training on these two inputs. The first input is
+ without an image and the second input is with an image. As shown in Table 1, the details
+ of the two input parameters are listed.
+ Table 1: Parameters of two input strategies
+ Input without image
+ Vs.
+ Input with image
+ Current steer φ
+ Current throttle δ
+ Normalized speed vnorm
+ Normalized distance to road
+ center �����
+ Normalized heading error
+ �1, ����
+ Normalized predictive heading
+ error �2,����
+ A95dimension vector �95
+ converted from an image
+ 30
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Input without image
+ The first input is a 6-dimensional vector that contains key information about the current
+ state of the environment. The six dimensions are as follows:
+ (1) Current steer φ: This is the steering value of our vehicle. There is no need to normalize
+ it because its value is already in the range [-1.0, 1.0].
+ (2) Current throttle δ: This is the acceleration of our vehicle. There is no need to normalize
+ it because its value is already in the range [0, 1.0].
+ (3) Normalized speed vnorm: The current speed of the vehicle is given in km/h. However,
+ for the purpose of model training, we intend to normalize it to the interval range of [0,1]. In
+ this study, we set the target speed of the vehicle to be 20 km/h, the maximal speed is 25
+ km/h and the minimal speed is 15 km/h. The concrete normalization equation is shown
+ below:
+ vnorm = ���( �
+ 25 ��/ℎ
+ where v is the current speed of the vehicle.
+ , 1),
+ (15)
+ (4) Normalized distance to road center �����: The vertical distance between the vehicle
+ and the current waypoint describes how far the vehicle is from the centre of the road. In
+ this study, we set an upper limit that this deviation should not be over 3 m. If this limit is
+ exceeded, the vehicle is considered to have deviated from the road. For the model training,
+ we normalize this distance to the interval [0,1] using the following equation:
+ ����� = ���( �
+ 3�
+ , 1),
+ where d is the distance between vehicle and road center.
+ (16)
+ (5) Normalized heading error �1,����: This value is the angle between the direction of the
+ vehicle and the direction of the road, using radians as the unit. In this study, we assume
+ that if the size of angle exceeds 60 degrees (approximately 1 rad), the vehicle's attitude has
+ deviated significantly from the intended trajectory. For model training, we will normalize
+ this squeeze angle to the range [-1,1] using the following equation 17. Negative values
+ 31
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ mean the vehicle is towards the left side of the road, positive values mean it is towards the
+ right side of the road.
+ �1, ���� = ���( − 1,���(�,1)),
+ where ε is heading error between vehicle and road.
+ (17)
+ (6) Normalized predictive heading error �2,����: To give the vehicle information about the
+ road conditions in front of it, we have taken the average of the heading error angle between
+ vehicle and next the three waypoints as a key input parameter. This parameter helps the
+ vehicle to recognize whether it is going straight or whether there is a curve coming. we
+ will normalize this squeeze angle to the range [-1,1] using the following equation:
+ 3
+ �2, ���� = ���(− 1,���(1
+ 3
+ Input with image
+ ∙
+ �=1
+ �� , 1))
+ (18)
+ The second input parameter for this study is chosen as an image from the semantic
+ segmentation camera with a preset resolution of 800*600. Considering the too high
+ dimension of the image, we use the VAE method to reduce it to a 95-dimension vector �95,
+ which is used as the input to our policy network.
+ 3.2.3 Action Space
+ Action space actually refers to the output parameters that control the vehicle's actions. In
+ this study, it is a vector consisting of two elements representing steer � and throttle �,
+ which, as mentioned earlier, play a central role in Carla vehicle control system and are
+ mainly used to adjust the steering and throttle of the vehicle. It should be noted that the
+ output range of policy network is in [-1,1], but the value of throttle δ should range between
+ [0,1]. Therefore, we need to make appropriate adjustments to the throttle value output by
+ policy network. The relevant adjustment equation is given below:
+ δ = 0.5∗(1+�'),
+ where �' is the policy network output for throttle value.
+ (19)
+ 32
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ 3.2.4 Reward Function�(�)
+ As the design of the reward function R(t) is important, it will directly determine the
+ training effect of the model as well as the performance of the model. Therefore, a
+ meticulous reward function was carefully designed in this study. The reward function
+ consists of two main components: one for meeting the termination condition and the other
+ for meeting the non-termination condition.
+ In termination conditions
+ Termination conditions play a crucial role in the training of DRL models. In certain
+ situations, such as a collision, out of lane, overspeed, or simulation time-out, the model
+ will consider terminating the episode. If the agent is caught in one of these situations, the
+ current learning episode is terminated. In order for the agent to learn to avoid these
+ undesirable behaviour, it is usually given a large negative reward. This negative reward for
+ termination conditions is defined as follows:
+ Table 2: Reward for termination conditions
+ termination conditions
+ termination reward �𝑛����𝑜
+ if collision = True
+ if overspeed = True
+ if out_lane = True
+ if timeout = True- 30-10-10-10
+ Collision: A collision is undoubtedly the least desirable situation in an autonomous driving
+ simulation environment, so it is considered an explicit termination condition. To ensure
+ that the agent learns safe driving behaviour, when a collision occurs, the current episode is
+ immediately terminated with a negative reward of-30. In order to detect collisions in real
+ time, special collision sensors are used in this work.
+ 33
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Overspeed: Overspeed is a serious and potentially dangerous behaviour. To strongly
+ discourage this behaviour, a negative reward of-10 will be given when overspeed is
+ detected, in addition to the immediate termination of the current turn. In this study, we set
+ a safe maximum speed of 25 km/h.
+ Timeout: In some specific scenarios we expect the agent to complete the task within a
+ given time, e.g. to reach the endpoint within a given time. If the agent is unable to arrive
+ within the given time, it is considered a time-out for that episode and the current episode is
+ terminated. Specifically, if the vehicle speed is consistently below 10 km/h and the
+ simulation time is longer than 10 seconds, the situation is considered unsatisfactory and the
+ current episode will be terminated with a negative reward of-10.
+ Out_lane: Staying on the planned route is a basic requirement for autonomous driving. If
+ the vehicle deviates from the planned route, even if there is no collision, the current
+ episode must be terminated and get a negative reward,-10.
+ In non-termination conditions
+ In the non-terminating condition, the reward function consists of the following four
+ elements: 1) speed reward ��𝑛��, 2) heading error reward rheading , 3) distance reward
+ �������𝑛 and 4) traveled reward ����𝑛���.
+ Speed reward ��𝑛��: In this study, to motivate the vehicle to drive consistently at the target
+ speed, we set a speed reward to evaluate the speed of the vehicle. We set a target speed
+ ���𝑎�� of 20 km/h for the vehicle, with a minimum speed ���� of 15 km/h and an upper
+ limit ���� set at 25 km/h. The speed reward is designed so that if the vehicle happens to be
+ driving at the target speed, it will receive the maximum positive reward +1. If the vehicle's
+ speed is above or below this target, it will receive a lower reward. The exact definition is
+ given in the following equation 20:
+ ��𝑛�� = 1 − ��� 1, 𝑎�(�−���𝑎��)
+ 5
+ (20)
+ 34
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Heading error reward rheading: The heading error is an important indicator of the quality of
+ the current driving situation. Ideally, a vehicle should always follow the direction of the
+ planned route. Therefore, vehicles should be rewarded negatively if they deviate from their
+ planned route. The exact definition of heading error reward rheading is given in the
+ following equation 21:
+ rheading = − 𝑎�(� )
+ �
+ 3
+ where ε is the heading error.
+ ,
+ (21)
+ Distance reward �������𝑛: We expect vehicles to stay in the center of the road at all times.
+ Negative rewards will be given if a vehicle deviates from the centre line. The exact
+ definition of distance_reward is given in the following equation 22:
+ �������𝑛 = − �
+ ����
+ ,
+ (22)
+ where ���� is the acceptable max distance between vehicle and road center, in this study
+ ���� is 3 m.
+ Traveled reward ����𝑛��� : During the training of the model we observed that the agent
+ needs more time to learn how to turn. This is mainly due to the fact that the agent is
+ challenged to explore new actions in the curves. This exploration often brings negative
+ rewards, making it difficult for the agent to achieve performance improvements over time.
+ To motivate the agent to explore actively, we provide it with an additional reward
+ mechanism, traveled reward ����𝑛��� . Each step a vehicle successfully passes a new
+ waypoint, we give it a positive reward to encourage it to follow the intended route and
+ maintain the correct navigation path. The exact traveled reward ����𝑛��� is defined in
+ equation 23:
+ ����𝑛��� = 1, ������ �𝑛� ��������
+ 0,
+ ��𝑛
+ (23)
+ As mentioned above, we have designed a detailed and rigorous reward mechanism, as
+ shown in Table 3. The purpose of this reward function R(t) is to effectively guide the agent
+ to learn efficiently and ensure that it can make appropriate decisions in different driving
+ 35
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ situations. In this way, we expect the agent to achieve excellent performance in the
+ simulation environment.
+ Table 3: Reward function R(t)
+ if termination = True:
+ R(t) = �𝑛����𝑜
+ elseif termination = False:
+ R(t) = ��𝑛�� + rheading + �������𝑛 + ����𝑛���
+ 3.3 Model Training
+ In this study, we compare two different input strategies for an end-to-end autonomous
+ driving system. The first input feeds the policy network with current road conditions and
+ vehicle dynamic parameters. The second input uses only image data. We set the simulation
+ interval to 0.05 seconds, which means that the DRL agent makes a decision every 0.05
+ seconds. This decision frequency is equivalent to 20 Hz for real data observations. In
+ addition, to ensure that the agent can fully learn and optimize its policy, we trained each
+ model for up to 2 million steps.
+ The experiments were run in a Python 3.8 environment with the powerful PyTorch 2.1.0
+ framework, and cuda11.8 was added to take advantage of GPU acceleration. The model
+ training was run on a well-equipped PC with NVIDIA GeForce RTX 4070Ti GPU and
+ 32GB RAM.
+ Route 1 in Town 02
+ Route 1 passes through a number of city areas and it is a complex route. This route
+ includes not only several T-junctions, but also several straights and turns. In this
+ environment, the agent will learn how to drive steadily on straight roads, how to turn safely
+ 36
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ in all directions, and how to deal with the challenges of T-junctions. Such a design aims to
+ develop the agent's decision-making level in different driving situations.
+ Fig. 13: Reward achieved for Route 1 in Town 02 over time-step. The red line is the
+ training result of input without image. The blue line is input with image.
+ As can be seen in Fig. 13, for the input without image (represented by the red curve), the
+ complete simulation process took 4 hours and 20 minutes. The learning speed of this agent
+ is quite fast. Although its performance showed some oscillations during the early learning
+ phase, it is eventually stable at a high level of performance. This phenomenon reflects the
+ agent's balancing process between exploration and exploitation, eventually reaching a more
+ ideal state. For the agent using image input (represented by the blue curve), the whole
+ simulation process took about 7 hours. Compared to the input without image, this agent's
+ performance improvement process is smoother, but its learning speed is significantly
+ slower. From a reward perspective, the performance of this agent also lags significantly
+ behind the input without image.
+ 37
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Fig. 14: Performance of the trained model in Route 1 Town 02.(Left: Distance to road
+ center over distance traveled; Right: Speed over distance traveled.) The red line is input
+ without image. The blue line is input with image.
+ From the training results shown in Fig. 14, we can clearly see the difference in
+ performance between the two inputs. The agent without image input performed particularly
+ well, successfully completing the entire planned route and achieving a satisfactory 100%
+ task completion rate. In contrast, the agent using only image performed significantly worse.
+ It only travelled 142 m, corresponding to a task completion rate of only 33.8%. However,
+ it is worth noting that both agents were able to travel within the target speed range.
+ This result provides strong evidence that when an agent can directly obtain accurate road
+ and vehicle information, both its decision making and driving skills are significantly
+ improved. In particular, when faced with complex driving scenarios such as T-junctions, a
+ single image may not provide the agent with enough information to make decisions.
+ Route 2 in Town 02
+ Route 2 runs around the town, constructed as a clear and simple circular route. It consists
+ mainly of straight sections, equipped with curves only in some parts. In this environment,
+ 38
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ the agent will focus on learning basic driving skills, such as keeping a steady driving speed
+ and making smooth turns.
+ Fig. 15: Reward achieved for Route 2 in Town 02 over time-step. The red line is the
+ training result of input without image. The blue line is input with image.
+ For the input without image, the training process took about 4 hours. As shown in the Fig.
+ 15, at the beginning of the training the agent is in an active exploration phase, trying many
+ different actions, including some dangerous attempts and thus receiving some negative
+ rewards. However, as learning continued, the agent's performance improved rapidly. By
+ continuously learning and adjusting its strategy, it quickly converged to a high
+ performance model state. For input with image, the training took about 8 hours. The
+ performance of the agent using image input shows large fluctuations in performance and
+ consistently fails to converge to a stable result. This constant fluctuation in performance
+ may indicate that the image does not provide enough information to support high quality
+ and stable decisions.
+ 39
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Fig. 16: Performance of the trained model in Route 2 Town 02.(Left: Distance to road
+ center over distance traveled; Right: Speed over distance traveled) The red line is input
+ without image. The blue line is input with image.
+ Figure 16 shows the performance of the agents under the two input strategies. Based on the
+ simulation results, we can observe that although both agents have successfully achieved
+ 100% of the task goals, they still have some differences in performance. In particular, the
+ agent using only image as input does not perform well in controlling the speed of the
+ vehicle, in some cases almost over-speeding. An important reason for this is that extracting
+ vehicle speed information from image data is a challenging task. This makes it difficult for
+ the agent to keep the vehicle at the target speed.
+ Overall, the accuracy and simplicity of the input information is crucial for the DRL agent.
+ The more accurate and simple the input information, the more advantageous it is for the
+ agent to learn the desired driving strategies. On the other hand, while complex input
+ information may be useful for simple traffic scenarios, it is often difficult to fully
+ guarantee the stability and reliability of its performance.
+ 40
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ 3.4 Model Test
+ In order to assess the robustness of the trained model and to ensure that it could be used in
+ unfamiliar environments, we also checked the model for over-fitting. This required us to
+ test the model in a more complex and unknown driving environment. Compared to Town
+ 02, Town 07 has a more complex road network and variable traffic situations. This
+ difference provides us with an ideal platform to verify the adaptability and robustness of
+ the model in different environments. Therefore, we decided to further test and evaluate the
+ model in Town 07.
+ To ensure optimal performance during testing, we chose the model that showed the highest
+ completion rate and reward during training. Specifically, for input without image, we
+ chose to use the model obtained by training on Route 1 in Town 02. For input with image,
+ we chose to use the model trained on Route 2 in Town 02 for testing.
+ Fig. 17: Performance of the trained model in Town 07.(Left: Distance to road center over
+ distance traveled; Right: Speed over distance traveled) The red line is input without image.
+ The blue line is input with image.
+ In this test, the model trained with the no image input performed well, successfully
+ completing 100% of the tasks. However, the model trained only with the image input only
+ ran 226 m, so it failed in the test and its completion rate is 19.6%. We can observe that the
+ 41
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ model of input without image is not only able to effectively control the vehicle to drive at a
+ speed close to the target speed, but also to keep the vehicle around the centre of the road
+ most of the time, which further confirms the excellent performance and robustness of the
+ model. Such results also show that reasonable and sufficient input information is the key to
+ training autonomous driving models, which can greatly improve the performance and
+ stability of the model.
+ 42
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Kapitel 4 Conclusion
+ In this research, we explore the potential of DRL for end-to-end autonomous driving.
+ Through comparing different algorithms and focusing on the action space characteristics of
+ autonomous driving, we choose the PPO algorithm as the core implementation method.
+ The design principles and methods of the reward function are discussed in detail in the
+ paper to ensure that it can effectively guide the agent for efficient learning and achieve
+ excellent performance.
+ Using the Carla simulator, we carefully built a DRL environment for autonomous driving
+ simulation. Based on this, we planned two training routes with different levels of difficulty
+ to analyse the flexibility and adaptability of DRL in dealing with different traffic situations.
+ To further test the robustness and performance of the model, a more complex and
+ unfamiliar test environment was specifically designed for the model.
+ More importantly, we have also researched the influence of different inputs on the
+ performance of the policy model. Tests have shown that the accuracy and richness of the
+ information is very important for the quality of the decision-making. When the model is
+ fed with more accurate and enriched input information, its decision-making ability is
+ significantly improved, which in turn enables it to demonstrate excellent robustness and
+ stability in various driving situations. This provides a valuable reference for future
+ 43
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ autonomous driving research, highlighting the centrality of input data quality and
+ information completeness in deep reinforcement learning applications.
+ Finally, our results show that the design of the reward function and the choice of input
+ information have a significant impact on the model performance. Therefore, we
+ recommend researchers to pay attention to the choice of reward function and input
+ information when designing and training DRL autopilot agents. By using the PPO
+ algorithm, we have achieved end-to-end autonomous driving in simple traffic scenarios.
+ But if we want to achieve L3 and above autonomous driving in more complex traffic
+ environments, we still need further technological breakthroughs and research efforts.
+ 44
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ References
+ [1]
+ [2]
+ [3]
+ [4]
+ [5]
+ [6]
+ [7]
+ [8]
+ [9]
+ [10]
+ Brian P, Michal Č, Sze Z Y, et al.:A Survey of Motion Planning and Control
+ Techniques for Self-Driving Urban Vehicles. Transactions on Intelligent
+ Vehicles. IEEE, 2016, 1(1): 33-55.
+ Scout P, Hans A, Xin X D, et al. : Perception, Planning, Control, and
+ Coordination for Autonomous Vehicles. Machines. MDPI AG, 2017, 5(1):6-26.
+ Pan Y, Cheng C, Kamil S, et al.: Agile Autonomous Driving using End-to-End
+ Deep Imitation Learning. Robotics: Science and Systems. SAGE Publications,
+ 2018.
+ BRavi K, Ibrahim S, Victor T, et al.: Deep Reinforcement Learning for
+ Autonomous Driving: A Survey. IEEE Transactions on Intelligent Transportation
+ Systems. IEEE, 2021, 23(6): 4909-4926.
+ Alex K, Jeffrey H, David J, et al.: Learning to Drive in a Day. International
+ Conference on Robotics and Automation. IEEE, 2019.
+ Liang X, Wang T, Yang L, et al.: Controllable Imitative Reinforcement
+ Learning for Vision-Based Self-driving. Proceedings of the European
+ Conference on Computer Vision. ECCV, 2018: 584-599.
+ Ahmad E S, Mohammed A, Etienne P, et al.: Society for Imaging Science and
+ Technology: Deep Reinforcement Learning framework for Autonomous Driving.
+ Electronic Imaging. IS&T, 2017, 29(19): 70-76.
+ Abdur R. F, Sabir H, Doukhi O, et al.: Driverless Car: Autonomous Driving
+ Using Deep Reinforcement Learning in Urban Environment. 15th International
+ Conference on Ubiquitous Robots. IEEE, 2018: 26-30.
+ Chen L, Wu P, Kashyap C, et al.: End-to-end Autonomous Driving: Challenges
+ and Frontiers. arXiv:2306.16927, 2023.
+ Tom M.M:Machine Learning. McGraw-Hill, 1997.
+ 45
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ [11]
+ [12]
+ [13]
+ [14]
+ [15]
+ [16]
+ [17]
+ [18]
+ [19]
+ [20]
+ Ian G, Yoshua B, Aaron C: Deep Learning. The MIT Press, 2016.
+ Dong H, Ding Z, Zhang S: Deep Reinforcement Learning: Fundamentals,
+ Research and Applications. Springer, 2020.
+ Richard S. S, Andrew G. B: Reinforcement learning: An introduction. MIT
+ Press, 2018.
+ Idrees R: Implementing a Deep Reinforcement Learning Model for Autonomous
+ Driving. Budapest University of Technology and Economics, 2022.
+ Athanasia K, Dimitrios T, Georgios C, et al.: Deep Reinforcement Learning
+ Reward Function Design for Autonomous Driving in Lane-Free Traffic.
+ Systems. MDPI, 2023, 11(3): 134-152.
+ Volodymyr M, Koray K, David S, et al.: Human-level control through deep
+ reinforcement learning. Nature, 2015, 528: 529-533.
+ John S, Filip W, Prafulla D, et al.: Proximal Policy Optimization Algorithms.
+ eprint arXiv:1707.06347, 2017.
+ Hyun KL, JuBK, JooS H, et al.: Federated reinforcement learning for
+ training control policies on multiple IoT devices. Sensors. MDPI, 2020,
+ 20(5):1359-1374.
+ Alexey D, German R, Felipe C: CARLA: An Open Urban Driving Simulator.
+ Proceedings of the 1st Annual Conference on Robot Learning. PMLR, 2017,
+ 78:1-16.
+ Li D., Ostap O: Modified DDPG car-following model with a real-world human
+ driving experience with CARLA simulator. Transportation Research Part C
+ Emerging Technologies. ELSEVIER, 2023, 147.
+ 46
+
+Autonomous Navigation with Deep Reinforcement Learning in Carla Simulator
+ Erklärung zur Urheberschaft
+ Ehrenwörtliche Erklärung
+ Hiermit erkläre ich ehrenwörtlich, dass ich die vorliegende Arbeit selbst angefertigt habe.
+ Die aus fremden Quellen direkt oder indirekt übernommenen Gedanken sind als solche
+ kenntlich gemacht. Die Arbeit wurde bisher noch keiner anderen Prüfbehörde vorgelegt
+ und noch nicht veröffentlicht. Ich bin mir bewusst, dass eine unwahre Erklärung rechtliche
+ Folgen haben wir
+ Dresden, den
+ 47

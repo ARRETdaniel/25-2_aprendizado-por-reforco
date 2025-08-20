@@ -1,0 +1,348 @@
+# Advanced Pipeline Configuration
+# Production-ready configuration for CARLA DRL Pipeline with curriculum learning
+
+pipeline:
+  name: "carla_drl_advanced_pipeline"
+  version: "2.0.0"
+  description: "Advanced CARLA DRL Pipeline with Curriculum Learning and Monitoring"
+  random_seed: 42
+  deterministic: true
+  reproducible: true
+
+# Enhanced CARLA Configuration
+carla:
+  host: "localhost"
+  port: 2000
+  timeout: 10.0
+  
+  # Simulation settings
+  quality_level: "Medium"  # Low, Medium, High, Epic
+  no_rendering_mode: false
+  offscreen_rendering: false
+  
+  # Multi-scenario support
+  towns: ["Town01", "Town02", "Town03"]
+  current_town: "Town01"
+  auto_town_rotation: true
+  town_rotation_episodes: 100
+  
+  # Dynamic weather system
+  weather_presets:
+    - cloudiness: 0.0
+      precipitation: 0.0
+      sun_altitude: 70.0
+      fog_density: 0.0
+      name: "clear_day"
+    - cloudiness: 50.0
+      precipitation: 0.0
+      sun_altitude: 45.0
+      fog_density: 0.0
+      name: "cloudy_day"
+    - cloudiness: 80.0
+      precipitation: 30.0
+      sun_altitude: 30.0
+      fog_density: 5.0
+      name: "light_rain"
+    - cloudiness: 90.0
+      precipitation: 60.0
+      sun_altitude: 15.0
+      fog_density: 15.0
+      name: "heavy_rain"
+  
+  dynamic_weather: true
+  weather_change_episodes: 50
+  
+  # Advanced traffic configuration
+  traffic_config:
+    num_vehicles: 20
+    num_pedestrians: 10
+    vehicle_spawn_radius: 200.0
+    pedestrian_spawn_radius: 100.0
+    aggressive_driving_ratio: 0.1
+    traffic_light_compliance: 0.9
+    emergency_vehicle_frequency: 0.02
+    construction_zone_probability: 0.05
+  
+  # Comprehensive sensor suite
+  sensors:
+    rgb_camera:
+      enabled: true
+      image_size_x: 800
+      image_size_y: 600
+      fov: 90
+      location: [0.3, 0.0, 1.3]
+      rotation: [0.0, 0.0, 0.0]
+      sensor_tick: 0.05  # 20 Hz
+    
+    depth_camera:
+      enabled: true
+      image_size_x: 800
+      image_size_y: 600
+      fov: 90
+      location: [0.3, 0.0, 1.3]
+      rotation: [0.0, 0.0, 0.0]
+      sensor_tick: 0.05
+    
+    semantic_camera:
+      enabled: false
+      image_size_x: 800
+      image_size_y: 600
+      fov: 90
+      location: [0.3, 0.0, 1.3]
+      rotation: [0.0, 0.0, 0.0]
+      sensor_tick: 0.1  # 10 Hz
+    
+    lidar:
+      enabled: false
+      channels: 32
+      range: 50.0
+      points_per_second: 100000
+      rotation_frequency: 10
+      location: [0.0, 0.0, 2.5]
+      sensor_tick: 0.1
+    
+    imu:
+      enabled: true
+      location: [0.0, 0.0, 0.0]
+      sensor_tick: 0.01  # 100 Hz
+    
+    gnss:
+      enabled: true
+      location: [0.0, 0.0, 0.0]
+      sensor_tick: 0.1  # 10 Hz
+  
+  # Performance monitoring
+  monitoring:
+    enable_metrics: true
+    metrics_port: 8080
+    log_sensor_data: true
+    log_vehicle_state: true
+    frame_rate_target: 20.0
+    performance_warnings: true
+
+# Advanced Training Configuration
+training:
+  algorithm: "PPO"
+  total_timesteps: 2000000
+  learning_rate: 0.0003
+  batch_size: 64
+  
+  # PPO-specific hyperparameters (based on research analysis)
+  ppo:
+    n_steps: 2048
+    n_epochs: 10
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_range: 0.2
+    clip_range_vf: null
+    ent_coef: 0.01
+    vf_coef: 0.5
+    max_grad_norm: 0.5
+    target_kl: null
+    use_sde: false
+    sde_sample_freq: -1
+  
+  # Multi-agent training capabilities
+  multi_agent:
+    enabled: false
+    num_agents: 1
+    coordination_reward: 0.1
+    competition_reward: -0.05
+    shared_experience: true
+    central_critic: false
+  
+  # Enhanced experience replay
+  replay_buffer:
+    prioritized: true
+    alpha: 0.6
+    beta: 0.4
+    beta_annealing_steps: 100000
+    epsilon: 0.000001
+    n_step: 3
+    hindsight_experience_replay: false
+  
+  # Advanced network architecture
+  policy_network:
+    net_arch: [256, 256]
+    activation_fn: "relu"
+    ortho_init: true
+    use_expln: false
+    log_std_init: 0.0
+    full_std: true
+    use_sde: false
+    squash_output: false
+  
+  # Multi-modal feature extraction
+  features_extractor:
+    type: "multimodal_cnn"
+    cnn_features_dim: 512
+    normalize_images: true
+    attention_mechanism: true
+    temporal_context: 4
+    feature_fusion: "concatenate"  # concatenate, attention, gating
+  
+  # Regularization and stability
+  regularization:
+    weight_decay: 0.00001
+    dropout_rate: 0.1
+    batch_norm: false
+    layer_norm: true
+    spectral_norm: false
+    gradient_clipping: true
+    grad_clip_value: 0.5
+  
+  # Comprehensive logging
+  logging:
+    tensorboard: true
+    wandb: false
+    mlflow: false
+    log_interval: 10
+    eval_interval: 1000
+    save_interval: 5000
+    video_interval: 10000
+    detailed_logging: true
+  
+  # Model management
+  checkpointing:
+    save_best_model: true
+    save_last_model: true
+    save_replay_buffer: true
+    checkpoint_frequency: 10000
+    max_checkpoints: 5
+    model_versioning: true
+
+# Curriculum Learning Configuration
+curriculum:
+  enabled: true
+  
+  # Progressive training stages
+  stages:
+    - name: "basic_lane_following"
+      episodes: 500
+      town: "Town01"
+      weather_preset: 0
+      traffic_density: 0.1
+      max_speed: 30.0
+      success_threshold: 0.8
+      objectives: ["lane_keeping", "speed_control"]
+      
+    - name: "urban_navigation"
+      episodes: 1000
+      town: "Town02"
+      weather_preset: 1
+      traffic_density: 0.3
+      max_speed: 50.0
+      success_threshold: 0.7
+      objectives: ["intersection_navigation", "traffic_light_compliance"]
+      
+    - name: "complex_scenarios"
+      episodes: 1500
+      town: "Town03"
+      weather_preset: 2
+      traffic_density: 0.5
+      max_speed: 60.0
+      success_threshold: 0.6
+      objectives: ["obstacle_avoidance", "emergency_braking", "lane_changes"]
+      
+    - name: "adverse_conditions"
+      episodes: 2000
+      town: "random"
+      weather_preset: "random"
+      traffic_density: 0.7
+      max_speed: 70.0
+      success_threshold: 0.5
+      objectives: ["all_weather_driving", "high_traffic_navigation"]
+  
+  # Adaptation settings
+  auto_progression: true
+  progression_threshold: 0.8
+  regression_threshold: 0.3
+  stage_evaluation_episodes: 50
+  
+  # Dynamic difficulty adjustment
+  dynamic_difficulty: true
+  difficulty_window: 100
+  difficulty_adaptation_rate: 0.1
+
+# Production Monitoring Configuration
+monitoring:
+  # Prometheus metrics
+  prometheus:
+    enabled: true
+    port: 8080
+    metrics_prefix: "carla_drl"
+    scrape_interval: "5s"
+    custom_metrics:
+      - "episode_reward"
+      - "collision_rate"
+      - "lane_invasion_rate"
+      - "success_rate"
+      - "average_speed"
+      - "training_loss"
+      - "policy_entropy"
+      - "gpu_utilization"
+      - "memory_usage"
+  
+  # Grafana dashboards
+  grafana:
+    enabled: true
+    port: 3000
+    auto_dashboards: true
+    alert_channels: ["slack", "email"]
+    dashboard_refresh: "5s"
+  
+  # Health monitoring
+  health_checks:
+    enabled: true
+    check_interval: 10.0
+    timeout: 5.0
+    checks:
+      - "carla_server_connection"
+      - "ros2_node_status"
+      - "drl_training_progress"
+      - "system_resources"
+      - "gpu_utilization"
+  
+  # Alerting configuration
+  alerting:
+    enabled: true
+    channels:
+      slack:
+        webhook_url: ""
+        channel: "#carla-drl-alerts"
+      email:
+        smtp_server: ""
+        recipients: []
+    
+    alert_rules:
+      - name: "high_collision_rate"
+        condition: "collision_rate > 0.1"
+        severity: "warning"
+        description: "Collision rate is above 10%"
+        
+      - name: "training_stalled"
+        condition: "training_progress_stalled > 3600"
+        severity: "critical"
+        description: "Training has not progressed for 1 hour"
+        
+      - name: "low_gpu_utilization"
+        condition: "gpu_utilization < 0.3"
+        severity: "info"
+        description: "GPU utilization is below 30%"
+
+# Resource Management
+resources:
+  cpu_cores: 4
+  memory_gb: 8
+  gpu_memory_gb: 6
+  disk_space_gb: 50
+  network_bandwidth_mbps: 100
+
+# Environment Configuration
+environment:
+  python_version: "3.12"
+  carla_python_version: "3.6"
+  ros2_distro: "humble"
+  cuda_version: "11.8"
+  conda_env: "carla_drl"
+  virtual_env: "./venv"

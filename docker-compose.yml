@@ -1,0 +1,380 @@
+# Multi-Container CARLA DRL Pipeline
+# Production deployment with monitoring and scalability
+
+version: '3.8'
+
+services:
+  # CARLA Simulator Server
+  carla-server:
+    build:
+      context: .
+      dockerfile: deployment/docker/carla.Dockerfile
+    image: carla-drl/carla-server:latest
+    container_name: carla-server
+    restart: unless-stopped
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+    
+    # GPU access for hardware acceleration
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+    
+    # Port mappings
+    ports:
+      - "2000:2000"  # CARLA server port
+      - "2001:2001"  # CARLA streaming port
+      - "2002:2002"  # CARLA additional port
+    
+    # Volume mounts
+    volumes:
+      - carla_data:/opt/carla/data
+      - ./logs/carla:/opt/carla/logs
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+    
+    # Network
+    networks:
+      - carla-network
+
+  # ROS 2 Gateway Service
+  ros2-gateway:
+    build:
+      context: .
+      dockerfile: deployment/docker/ros2.Dockerfile
+    image: carla-drl/ros2-gateway:latest
+    container_name: ros2-gateway
+    restart: unless-stopped
+    
+    depends_on:
+      carla-server:
+        condition: service_healthy
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+    
+    # Environment variables
+    environment:
+      - ROS_DOMAIN_ID=42
+      - RMW_IMPLEMENTATION=rmw_cyclonedx_cpp
+      - CARLA_HOST=carla-server
+      - CARLA_PORT=2000
+    
+    # Port mappings
+    ports:
+      - "11311:11311"  # ROS Master (if needed)
+    
+    # Volume mounts
+    volumes:
+      - ./logs/ros2:/var/log/ros2
+      - ./configs:/opt/configs:ro
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "ros2", "node", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    # Network
+    networks:
+      - carla-network
+      - ros-network
+
+  # DRL Training Service
+  drl-trainer:
+    build:
+      context: .
+      dockerfile: deployment/docker/drl.Dockerfile
+    image: carla-drl/drl-trainer:latest
+    container_name: drl-trainer
+    restart: unless-stopped
+    
+    depends_on:
+      ros2-gateway:
+        condition: service_healthy
+      monitoring:
+        condition: service_started
+    
+    # GPU access for training
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - CUDA_VISIBLE_DEVICES=0
+    
+    # Resource limits (higher for training)
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '2.0'
+    
+    # Environment variables
+    environment:
+      - ROS_DOMAIN_ID=42
+      - PYTHONPATH=/opt/drl_agent
+      - TENSORBOARD_LOG_DIR=/opt/logs/tensorboard
+      - MODEL_SAVE_DIR=/opt/models
+    
+    # Volume mounts
+    volumes:
+      - ./models:/opt/models
+      - ./logs/tensorboard:/opt/logs/tensorboard
+      - ./logs/training:/opt/logs/training
+      - ./configs:/opt/configs:ro
+      - drl_checkpoints:/opt/checkpoints
+    
+    # Command override for training
+    command: ["python", "/opt/drl_agent/enhanced_ppo_trainer.py", "--config", "/opt/configs/advanced_pipeline_config.yaml"]
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import torch; print('OK')"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 120s
+    
+    # Network
+    networks:
+      - ros-network
+      - monitoring-network
+
+  # Monitoring Stack
+  monitoring:
+    build:
+      context: .
+      dockerfile: deployment/docker/monitoring.Dockerfile
+    image: carla-drl/monitoring:latest
+    container_name: monitoring
+    restart: unless-stopped
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+    
+    # Port mappings
+    ports:
+      - "8080:8080"   # Prometheus metrics
+      - "9090:9090"   # Prometheus UI
+      - "3000:3000"   # Grafana UI
+      - "6006:6006"   # TensorBoard
+    
+    # Environment variables
+    environment:
+      - PROMETHEUS_CONFIG=/opt/monitoring/prometheus.yml
+      - GRAFANA_CONFIG=/opt/monitoring/grafana
+    
+    # Volume mounts
+    volumes:
+      - ./monitoring:/opt/monitoring:ro
+      - ./logs/monitoring:/var/log/monitoring
+      - prometheus_data:/prometheus
+      - grafana_data:/var/lib/grafana
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    # Network
+    networks:
+      - monitoring-network
+
+  # Redis for distributed coordination (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: carla-redis
+    restart: unless-stopped
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.2'
+    
+    # Port mapping
+    ports:
+      - "6379:6379"
+    
+    # Volume for persistence
+    volumes:
+      - redis_data:/data
+    
+    # Configuration
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb"]
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    
+    # Network
+    networks:
+      - carla-network
+
+  # Database for experiment tracking (optional)
+  postgres:
+    image: postgres:15-alpine
+    container_name: carla-postgres
+    restart: unless-stopped
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+    
+    # Environment variables
+    environment:
+      - POSTGRES_DB=carla_drl
+      - POSTGRES_USER=carla_user
+      - POSTGRES_PASSWORD=carla_password
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8
+    
+    # Port mapping
+    ports:
+      - "5432:5432"
+    
+    # Volume for persistence
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deployment/sql:/docker-entrypoint-initdb.d:ro
+    
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U carla_user -d carla_drl"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    
+    # Network
+    networks:
+      - monitoring-network
+
+  # Jupyter Notebook for analysis (development)
+  jupyter:
+    build:
+      context: .
+      dockerfile: deployment/docker/jupyter.Dockerfile
+    image: carla-drl/jupyter:latest
+    container_name: carla-jupyter
+    restart: unless-stopped
+    profiles: ["development"]  # Only start in development profile
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+    
+    # Port mapping
+    ports:
+      - "8888:8888"
+    
+    # Environment variables
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=carla-drl-token
+    
+    # Volume mounts
+    volumes:
+      - ./notebooks:/home/jovyan/work
+      - ./models:/home/jovyan/work/models:ro
+      - ./logs:/home/jovyan/work/logs:ro
+      - ./data:/home/jovyan/work/data:ro
+    
+    # Command
+    command: ["start-notebook.sh", "--NotebookApp.token='carla-drl-token'"]
+    
+    # Network
+    networks:
+      - monitoring-network
+
+# Named volumes for persistence
+volumes:
+  carla_data:
+    driver: local
+  drl_checkpoints:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+
+# Custom networks
+networks:
+  carla-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+  
+  ros-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+  
+  monitoring-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16
+
+# Additional configuration
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "100m"
+    max-file: "3"
+    labels: "carla-drl"

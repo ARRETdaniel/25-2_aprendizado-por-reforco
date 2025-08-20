@@ -1,0 +1,395 @@
+# CARLA DRL Pipeline Configuration
+# Complete system configuration for CARLA + ROS 2 + Deep Reinforcement Learning
+
+# System Configuration
+system:
+  name: "CARLA DRL Pipeline"
+  version: "1.0.0"
+  platform: "Windows 11 + WSL2"
+  author: "GitHub Copilot"
+  created: "2025-01-26"
+
+# CARLA Simulation Settings
+carla:
+  # Server configuration
+  server:
+    host: "127.0.0.1"
+    port: 2000
+    timeout: 10.0
+    retries: 3
+    
+  # World settings  
+  world:
+    map: "Town01"  # Town01, Town02, Town03, Town04, Town05
+    weather: "ClearNoon"  # ClearNoon, CloudyNoon, WetNoon, WetCloudyNoon, MidRainyNoon, HardRainNoon, SoftRainNoon
+    synchronous_mode: true
+    fixed_delta_seconds: 0.033  # 30 FPS
+    no_rendering_mode: false
+    
+  # Vehicle settings
+  vehicle:
+    blueprint: "vehicle.tesla.model3"
+    spawn_point: "random"  # "random" or specific coordinates
+    autopilot: false
+    
+  # Sensor configuration
+  sensors:
+    camera_rgb:
+      enabled: true
+      width: 800
+      height: 600
+      fov: 90
+      position: [2.0, 0.0, 1.4]  # [x, y, z] relative to vehicle
+      rotation: [0.0, 0.0, 0.0]  # [pitch, yaw, roll] in degrees
+      
+    camera_depth:
+      enabled: true  
+      width: 800
+      height: 600
+      fov: 90
+      position: [2.0, 0.0, 1.4]
+      rotation: [0.0, 0.0, 0.0]
+      
+    camera_semantic:
+      enabled: false  # Optional for advanced training
+      width: 800
+      height: 600
+      fov: 90
+      position: [2.0, 0.0, 1.4]
+      rotation: [0.0, 0.0, 0.0]
+      
+    lidar:
+      enabled: false  # Resource intensive, enable for advanced scenarios
+      channels: 32
+      range: 100.0
+      points_per_second: 56000
+      position: [0.0, 0.0, 2.5]
+      rotation: [0.0, 0.0, 0.0]
+
+# ROS 2 Bridge Configuration  
+ros2:
+  # ROS 2 settings
+  domain_id: 42
+  use_sim_time: true
+  
+  # QoS settings for reliability
+  qos:
+    reliability: "RELIABLE"  # RELIABLE or BEST_EFFORT
+    durability: "VOLATILE"   # VOLATILE or TRANSIENT_LOCAL
+    history: "KEEP_LAST"     # KEEP_LAST or KEEP_ALL
+    depth: 10                # Queue depth
+    
+  # Topic configuration
+  topics:
+    camera_rgb: "/carla/ego_vehicle/camera/rgb/image_raw"
+    camera_depth: "/carla/ego_vehicle/camera/depth/image_raw"  
+    camera_semantic: "/carla/ego_vehicle/camera/semantic/image_raw"
+    vehicle_status: "/carla/ego_vehicle/vehicle_status"
+    vehicle_control: "/carla/ego_vehicle/vehicle_control_cmd"
+    yolo_detections: "/carla/ego_vehicle/yolo_detections"
+    reward: "/carla/training/reward"
+    episode_reset: "/carla/training/episode_reset"
+    episode_info: "/carla/training/episode_info"
+    
+  # Frame IDs
+  frames:
+    map: "map"
+    ego_vehicle: "ego_vehicle"
+    camera: "ego_vehicle/camera"
+    lidar: "ego_vehicle/lidar"
+
+# ZeroMQ Communication Bridge
+zmq:
+  # Port configuration for cross-Python version communication
+  ports:
+    camera_rgb: 5555
+    camera_depth: 5556  
+    vehicle_state: 5557
+    control_cmd: 5558
+    reward: 5559
+    episode_info: 5560
+    
+  # ZMQ settings
+  socket_type: "PUB_SUB"  # PUB_SUB or REQ_REP
+  high_water_mark: 1000   # Message queue limit
+  linger: 1000           # Socket close timeout (ms)
+  
+  # Serialization
+  serialization: "msgpack"  # msgpack, pickle, json
+  compression: true         # Enable message compression
+
+# Deep Reinforcement Learning Configuration
+drl:
+  # Algorithm selection
+  algorithm: "PPO"  # PPO, SAC, DDPG, TD3
+  
+  # Training parameters
+  training:
+    total_episodes: 1000
+    max_steps_per_episode: 1000
+    save_interval: 50
+    eval_interval: 100
+    log_interval: 10
+    
+  # PPO specific parameters
+  ppo:
+    learning_rate: 3.0e-4
+    batch_size: 64
+    n_epochs: 10
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_range: 0.2
+    entropy_coef: 0.01
+    value_loss_coef: 0.5
+    max_grad_norm: 0.5
+    
+  # Neural network architecture
+  network:
+    # CNN for image processing
+    cnn:
+      channels: [32, 64, 64]
+      kernel_sizes: [8, 4, 3]
+      strides: [4, 2, 1]
+      activation: "relu"
+      
+    # MLP for processed features + vehicle state
+    mlp:
+      hidden_sizes: [512, 256]
+      activation: "relu"
+      dropout: 0.1
+      
+    # Output layer
+    action_space: 3  # throttle, brake, steering
+    
+  # Experience replay (for off-policy algorithms)
+  replay_buffer:
+    capacity: 100000
+    batch_size: 256
+    
+  # Exploration
+  exploration:
+    initial_epsilon: 1.0
+    final_epsilon: 0.1
+    epsilon_decay: 0.995
+
+# Reward Function Configuration
+reward:
+  # Reward components and weights
+  components:
+    speed_reward:
+      weight: 1.0
+      target_speed: 30.0  # km/h
+      
+    lane_keeping:
+      weight: 2.0
+      lane_deviation_penalty: -1.0
+      
+    collision_penalty:
+      weight: -100.0
+      
+    distance_traveled:
+      weight: 0.1
+      
+    traffic_light_compliance:
+      weight: 10.0
+      red_light_penalty: -50.0
+      
+    smooth_driving:
+      weight: 0.5
+      acceleration_penalty: -0.1
+      steering_penalty: -0.1
+      
+  # Episode termination conditions
+  termination:
+    collision: true
+    off_road: true
+    max_steps: 1000
+    target_reached: true
+
+# Environment Configuration
+environment:
+  # Action space (continuous)
+  action_space:
+    type: "continuous"
+    low: [-1.0, -1.0, -1.0]   # [throttle, brake, steering]
+    high: [1.0, 1.0, 1.0]
+    
+  # Observation space
+  observation_space:
+    # Image observations
+    camera_rgb:
+      shape: [3, 84, 84]  # Resized from 800x600
+      dtype: "uint8"
+      normalize: true
+      
+    camera_depth:
+      shape: [1, 84, 84]
+      dtype: "float32"
+      normalize: true
+      max_depth: 100.0
+      
+    # Vehicle state
+    vehicle_state:
+      shape: [6]  # [x, y, yaw, speed, acceleration, angular_velocity]
+      dtype: "float32"
+      normalize: true
+      
+    # YOLO detections (optional)
+    yolo_detections:
+      enabled: true
+      max_detections: 10
+      shape: [10, 6]  # [x, y, w, h, confidence, class]
+      dtype: "float32"
+
+# Monitoring and Logging
+monitoring:
+  # TensorBoard logging
+  tensorboard:
+    enabled: true
+    log_dir: "monitoring/tensorboard_logs"
+    update_freq: 100  # Log every N steps
+    
+    # Metrics to log
+    scalars:
+      - "episode_reward"
+      - "episode_length" 
+      - "policy_loss"
+      - "value_loss"
+      - "entropy"
+      - "learning_rate"
+      - "fps"
+      
+    histograms:
+      - "actions"
+      - "observations"
+      - "gradients"
+      
+  # System monitoring
+  system:
+    enabled: true
+    log_interval: 10  # seconds
+    metrics:
+      - "cpu_usage"
+      - "memory_usage"
+      - "gpu_usage"
+      - "disk_io"
+      - "network_io"
+      
+  # Performance monitoring
+  performance:
+    enabled: true
+    target_fps: 30
+    latency_threshold: 50  # ms
+    
+# Visualization Settings
+visualization:
+  # Real-time plotting
+  plots:
+    enabled: true
+    update_interval: 1.0  # seconds
+    window_size: [1200, 800]
+    
+    # Plot types
+    reward_plot:
+      enabled: true
+      window_length: 100
+      
+    loss_plot:
+      enabled: true
+      window_length: 100
+      
+    action_plot:
+      enabled: true
+      window_length: 50
+      
+    system_metrics:
+      enabled: true
+      window_length: 200
+      
+  # Camera feeds
+  camera_display:
+    enabled: true
+    rgb_window: [400, 300]
+    depth_window: [400, 300]
+    update_rate: 30  # Hz
+    
+  # Episode recording
+  recording:
+    enabled: false  # Enable for creating training videos
+    output_dir: "monitoring/recordings"
+    format: "mp4"
+    fps: 30
+
+# Development and Debugging
+debug:
+  # Logging levels
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  
+  # Debug modes
+  modes:
+    carla_debug: false
+    ros2_debug: false
+    drl_debug: false
+    profiling: false
+    
+  # Testing
+  test_mode:
+    enabled: false
+    episodes: 5
+    deterministic: true
+    
+# Performance Optimization
+performance:
+  # Threading
+  multiprocessing: true
+  num_workers: 4
+  
+  # GPU settings
+  gpu:
+    enabled: true
+    device_id: 0
+    memory_fraction: 0.8
+    allow_growth: true
+    
+  # Data loading
+  data_loader:
+    num_workers: 2
+    pin_memory: true
+    prefetch_factor: 2
+    
+  # Model optimization
+  model:
+    mixed_precision: true
+    gradient_checkpointing: false
+    compile_model: false  # PyTorch 2.0+ feature
+
+# Deployment Configuration  
+deployment:
+  # Container settings
+  docker:
+    enabled: false
+    base_image: "nvidia/cuda:11.8-devel-ubuntu22.04"
+    
+  # Cloud deployment
+  cloud:
+    enabled: false
+    provider: "aws"  # aws, gcp, azure
+    instance_type: "g4dn.xlarge"
+    
+# Backup and Checkpointing
+checkpointing:
+  # Model checkpoints
+  model:
+    save_dir: "monitoring/checkpoints"
+    save_frequency: 50  # episodes
+    keep_last_n: 5
+    
+  # Training state
+  training_state:
+    save_dir: "monitoring/training_state"
+    save_frequency: 100
+    
+  # Configuration backup
+  config:
+    backup_dir: "configs/backups"
+    timestamp: true

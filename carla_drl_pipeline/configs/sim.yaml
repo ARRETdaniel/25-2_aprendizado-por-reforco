@@ -1,0 +1,118 @@
+# CARLA DRL Pipeline Configuration
+# Simulation Environment Configuration
+
+simulation:
+  # CARLA Server Settings
+  server:
+    host: "localhost"
+    port: 2000
+    timeout: 10.0
+    quality_level: "Low"  # Low, Epic
+    synchronous_mode: true
+    fixed_delta_seconds: 0.033  # 30 FPS
+
+  # Environment Settings
+  environment:
+    town: "Town01"  # Town01, Town02
+    weather_id: 1   # 1=Clear, 3=Cloudy, 7=Rain, 8=Storm, 14=Sunset
+    random_weather: false
+    seed_vehicles: 42
+    seed_pedestrians: 42
+    number_of_vehicles: 15
+    number_of_pedestrians: 10
+
+  # Vehicle Configuration
+  vehicle:
+    player_start_index: 0  # -1 for random
+    autopilot_enabled: false
+    vehicle_type: "vehicle.tesla.model3"
+
+  # Sensor Configuration
+  sensors:
+    camera_rgb:
+      enabled: true
+      width: 800
+      height: 600
+      fov: 90
+      position: [2.0, 0.0, 1.4]  # [x, y, z] relative to vehicle
+      rotation: [0.0, 0.0, 0.0]  # [pitch, yaw, roll] in degrees
+
+    camera_depth:
+      enabled: true
+      width: 800
+      height: 600
+      fov: 90
+      position: [2.0, 0.0, 1.4]
+      rotation: [0.0, 0.0, 0.0]
+
+    lidar:
+      enabled: false
+      channels: 32
+      range: 50.0
+      points_per_second: 56000
+      rotation_frequency: 10.0
+      upper_fov_limit: 10.0
+      lower_fov_limit: -30.0
+      position: [0.0, 0.0, 2.5]
+      rotation: [0.0, 0.0, 0.0]
+
+# ROS 2 Bridge Configuration
+ros2:
+  # Node Configuration
+  node_name: "carla_bridge"
+  namespace: "/carla"
+
+  # QoS Settings
+  qos:
+    reliability: "RELIABLE"  # RELIABLE, BEST_EFFORT
+    history: "KEEP_LAST"     # KEEP_LAST, KEEP_ALL
+    depth: 10
+    durability: "VOLATILE"   # VOLATILE, TRANSIENT_LOCAL
+
+  # Topic Configuration
+  topics:
+    camera_image: "/carla/camera/image"
+    camera_depth: "/carla/camera/depth"
+    vehicle_state: "/carla/vehicle/state"
+    vehicle_pose: "/carla/vehicle/pose"
+    environment_reward: "/carla/environment/reward"
+    environment_done: "/carla/environment/done"
+    environment_info: "/carla/environment/info"
+    vehicle_control: "/carla/vehicle/control"
+    environment_reset: "/carla/environment/reset"
+
+  # Communication Settings
+  communication:
+    use_compression: true
+    max_message_size: 10485760  # 10MB
+    publish_rate: 30.0  # Hz
+
+# Development and Debugging
+development:
+  # Logging
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_to_file: true
+  log_directory: "./logs"
+
+  # Visualization
+  display_camera: true
+  display_sensors: true
+  save_images: false
+  image_save_path: "./data/images"
+
+  # Performance Monitoring
+  profile_performance: false
+  monitor_memory: true
+  monitor_fps: true
+
+# Seeds for Reproducibility
+random_seeds:
+  carla: 42
+  numpy: 42
+  python: 42
+
+# Episode Configuration
+episode:
+  max_steps: 1000
+  timeout_seconds: 60.0
+  auto_reset: true

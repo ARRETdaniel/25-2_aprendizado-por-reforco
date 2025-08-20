@@ -1,0 +1,14 @@
+Environment Validation Summary
+============================
+Date: 2025-08-15 17:12:13
+Duration: 1281.84s
+Tests: 24
+Passed: 21
+Failed: 3
+Overall result: FAILED
+
+Failed Tests:
+------------
+- step_info_keys: Missing info keys: ['episode_step', 'total_reward']
+- reward_config_effect: Custom reward config had minimal impact on rewards
+- termination_max_steps: Environment terminated but not due to max steps: None
