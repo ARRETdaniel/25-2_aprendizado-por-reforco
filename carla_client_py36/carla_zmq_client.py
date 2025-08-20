@@ -183,7 +183,13 @@ class CarlaZMQClient:
                     'velocity': player.forward_speed,
                     'acceleration': [player.acceleration.x,
                                    player.acceleration.y,
-                                   player.acceleration.z]
+                                   player.acceleration.z],
+                    # CRITICAL FIX: Add collision detection
+                    'collision_vehicles': player.collision_vehicles,
+                    'collision_pedestrians': player.collision_pedestrians,
+                    'collision_other': player.collision_other,
+                    'intersection_otherlane': player.intersection_otherlane,
+                    'intersection_offroad': player.intersection_offroad
                 },
                 'sensors': {}
             }
@@ -259,6 +265,13 @@ class CarlaZMQClient:
             control.brake = float(action.get('brake', 0.0))
             control.hand_brake = False
             control.reverse = False
+
+            # Enhanced aggressive mode handling
+            if action.get('aggressive', False) or action.get('speed_boost', False):
+                # Boost throttle for aggressive driving
+                if control.throttle > 0:
+                    control.throttle = max(control.throttle, 0.5)  # Minimum aggressive throttle
+                    control.throttle = min(control.throttle * 1.2, 1.0)  # 20% boost
 
             # Clamp values
             control.steer = max(-1.0, min(1.0, control.steer))
