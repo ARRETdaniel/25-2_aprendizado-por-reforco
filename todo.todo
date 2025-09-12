@@ -381,3 +381,17 @@ Your current goal is to read the extracted_text folder txt files and save these 
 The DRL solution with ROS 2 will bbuild upon our previous project in CarlaSimulator\PythonClient\FinalProject (module_7.py). We already have some code stratch in rl_environment and some related work in related_works.
 
 Do a deep thinking and take your time for these task.
+
+(base) PS C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\CarlaSimulator> cd CarlaUE4\Binaries\Win64; .\CarlaUE4.exe /Game/Maps/Course4 -windowed -carla-server -benchmark -fps=30
+
+(base) PS C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco> cd carla_client_py36
+(base) PS C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco\carla_client_py36> py -3.6 carla_zmq_client.py
+
+
+(base) PS C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco> conda activate carla_drl_py312
+(carla_drl_py312) PS C:\Users\danie\Documents\Documents\MESTRADO\25-2_aprendizado-por-reforco> python drl_agent\real_carla_ppo_trainer.py
+
+Set a goal location on the CARLA Map Town01 that the car must be able to achieve.
+What reward signal are we traying to maximize for our DRL solution?
+What is the policy of our solution?
+Our solution must be able to simultaneously learn by trial and error, learn a model of the environment, and use the model for planning.
