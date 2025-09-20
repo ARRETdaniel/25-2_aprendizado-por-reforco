@@ -1,0 +1,984 @@
+%% abtex2-modelo-trabalho-academico.tex, v-1.9.5 laurocesar
+%% Copyright 2012-2015 by abnTeX2 group at http://www.abntex.net.br/
+%%
+%% This work may be distributed and/or modified under the
+%% conditions of the LaTeX Project Public License, either version 1.3
+%% of this license or (at your option) any later version.
+%% The latest version of this license is in
+%%   http://www.latex-project.org/lppl.txt
+%% and version 1.3 or later is part of all distributions of LaTeX
+%% version 2005/12/01 or later.
+%%
+%% This work has the LPPL maintenance status `maintained'.
+%%
+%% The Current Maintainer of this work is the abnTeX2 team, led
+%% by Lauro César Araujo. Further information are available on
+%% http://www.abntex.net.br/
+%%
+%% This work consists of the files abntex2-modelo-trabalho-academico.tex,
+%% abntex2-modelo-include-comandos and abntex2-modelo-references.bib
+%%
+
+% ------------------------------------------------------------------------
+% ------------------------------------------------------------------------
+% abnTeX2: Modelo de Trabalho Academico (tese de doutorado, dissertacao de
+% mestrado e trabalhos monograficos em geral) em conformidade com
+% ABNT NBR 14724:2011: Informacao e documentacao - Trabalhos academicos -
+% Apresentacao
+% ------------------------------------------------------------------------
+% ------------------------------------------------------------------------
+
+\documentclass[
+	% -- opções da classe memoir --
+	12pt,				% tamanho da fonte
+	%openright,			% capítulos começam em pág ímpar (insere página vazia caso preciso)
+	%openany, % a chapter can start on any page, then many classes support option openany, e.g.:
+	oneside, %% straight PAGE alignment
+ % With twoside layout (default for class book) chapters start at odd numbered pages and sometimes LaTeX needs to insert a page to ensure this.
+	%twoside,			% para impressão em verso e anverso. Oposto a oneside
+	a4paper,			% tamanho do papel.
+	% -- opções da classe abntex2 --
+	%chapter=TITLE,		% títulos de capítulos convertidos em letras maiúsculas
+	%section=TITLE,		% títulos de seções convertidos em letras maiúsculas
+	%subsection=TITLE,	% títulos de subseções convertidos em letras maiúsculas
+	%subsubsection=TITLE,% títulos de subsubseções convertidos em letras maiúsculas
+	% -- opções do pacote babel --
+	english,			% idioma adicional para hifenização
+	french,				% idioma adicional para hifenização
+	spanish,			% idioma adicional para hifenização
+	brazil				% o último idioma é o principal do documento
+	]{abntex2}
+
+% ---
+% Pacotes básicos
+% ---
+\usepackage{lmodern}			% Usa a fonte Latin Modern
+\usepackage[T1]{fontenc}		% Selecao de codigos de fonte.
+\usepackage[utf8]{inputenc}		% Codificacao do documento (conversão automática dos acentos)
+\usepackage{lastpage}			% Usado pela Ficha catalográfica
+\usepackage{indentfirst}		% Indenta o primeiro parágrafo de cada seção.
+\usepackage{color}				% Controle das cores
+\usepackage{graphicx}			% Inclusão de gráficos
+\usepackage{microtype} 			% para melhorias de justificação
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[table,xcdraw]{xcolor}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{ragged2e}
+\usepackage{tabto}
+
+\usepackage{subfig} % double image add to page % below
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{amsmath} % math matrix
+% --- https://www.overleaf.com/learn/latex/Code_listing
+\usepackage{amssymb} % \triangleq
+\usepackage{comment}
+%\usepackage{setspace}
+%\usepackage{empheq} %in case of error delete it
+
+% label to verbatim
+% https://tex.stackexchange.com/questions/345926/crossreferencing-verbatim
+%\BeforeBeginEnvironment{verbatim}{%
+%\refstepcounter{myverb}%
+%\noindent\textbf{Verbatim stuff \themyverb}%
+%}
+
+%\usepackage{caption}
+%\usepackage{subcaption}
+\usepackage{float}
+
+%CMD
+%CMD
+\usepackage{listings}
+\usepackage{xcolor}
+
+\lstdefinestyle{cmdstyle}{
+    backgroundcolor=\color{black!5},
+    basicstyle=\ttfamily\small,
+    frame=single,
+    breaklines=true,
+    postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
+}
+
+%CMD
+%CMD
+
+\usepackage{array,tabularx,calc}  %https://tex.stackexchange.com/questions/95838/how-to-write-a-perfect-equation-parameters-description
+
+
+\newlength{\conditionwd}
+\newenvironment{conditions}[1][Onde:]
+  {%
+   #1\tabularx{\textwidth-\widthof{#1}}[t]{
+     >{$}l<{$} @{${}={}$} X@{}
+   }%
+  }
+  {\endtabularx\\[\belowdisplayskip]}
+
+
+
+\usepackage{xcolor}
+\renewcommand\lstlistingname{Lista de código}
+\renewcommand\lstlistlistingname{Lista de trechos de código}
+
+% https://tex.stackexchange.com/questions/111580/removing-an-unwanted-page-between-two-chapters
+\let\cleardoublepage\clearpage % Unwanted one-page gap between two chapters can be eliminated using the syntax
+
+
+
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+%ref TROUBLESHOOTING = https://tex.stackexchange.com/questions/24528/having-problems-with-listings-and-utf-8-can-it-be-fixed
+%ref = https://www.overleaf.com/learn/latex/Code_listing
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    inputencoding = utf8,  % Input encoding
+    extendedchars = true,  % Extended ASCII
+    literate      =        % Support additional characters
+      {á}{{\'a}}1  {é}{{\'e}}1  {í}{{\'i}}1 {ó}{{\'o}}1  {ú}{{\'u}}1
+      {Á}{{\'A}}1  {É}{{\'E}}1  {Í}{{\'I}}1 {Ó}{{\'O}}1  {Ú}{{\'U}}1
+      {à}{{\`a}}1  {è}{{\`e}}1  {ì}{{\`i}}1 {ò}{{\`o}}1  {ù}{{\`u}}1
+      {À}{{\`A}}1  {È}{{\`E}}1  {Ì}{{\`I}}1 {Ò}{{\`O}}1  {Ù}{{\`U}}1
+      {ä}{{\"a}}1  {ë}{{\"e}}1  {ï}{{\"i}}1 {ö}{{\"o}}1  {ü}{{\"u}}1
+      {Ä}{{\"A}}1  {Ë}{{\"E}}1  {Ï}{{\"I}}1 {Ö}{{\"O}}1  {Ü}{{\"U}}1
+      {â}{{\^a}}1  {ê}{{\^e}}1  {î}{{\^i}}1 {ô}{{\^o}}1  {û}{{\^u}}1
+      {Â}{{\^A}}1  {Ê}{{\^E}}1  {Î}{{\^I}}1 {Ô}{{\^O}}1  {Û}{{\^U}}1
+      {œ}{{\oe}}1  {Œ}{{\OE}}1  {æ}{{\ae}}1 {Æ}{{\AE}}1  {ß}{{\ss}}1
+      {ẞ}{{\SS}}1  {ç}{{\c{c}}}1 {Ç}{{\c{C}}}1 {ø}{{\o}}1  {Ø}{{\O}}1
+      {å}{{\aa}}1  {Å}{{\AA}}1  {ã}{{\~a}}1  {õ}{{\~o}}1 {Ã}{{\~A}}1
+      {Õ}{{\~O}}1  {ñ}{{\~n}}1  {Ñ}{{\~N}}1  {¿}{{?`}}1  {¡}{{!`}}1
+      {°}{{\textdegree}}1 {º}{{\textordmasculine}}1 {ª}{{\textordfeminine}}1
+      {£}{{\pounds}}1  {©}{{\copyright}}1  {®}{{\textregistered}}1
+      {«}{{\guillemotleft}}1  {»}{{\guillemotright}}1  {Ð}{{\DH}}1  {ð}{{\dh}}1
+      {Ý}{{\'Y}}1    {ý}{{\'y}}1    {Þ}{{\TH}}1    {þ}{{\th}}1    {Ă}{{\u{A}}}1
+      {ă}{{\u{a}}}1  {Ą}{{\k{A}}}1  {ą}{{\k{a}}}1  {Ć}{{\'C}}1    {ć}{{\'c}}1
+      {Č}{{\v{C}}}1  {č}{{\v{c}}}1  {Ď}{{\v{D}}}1  {ď}{{\v{d}}}1  {Đ}{{\DJ}}1
+      {đ}{{\dj}}1    {Ė}{{\.{E}}}1  {ė}{{\.{e}}}1  {Ę}{{\k{E}}}1  {ę}{{\k{e}}}1
+      {Ě}{{\v{E}}}1  {ě}{{\v{e}}}1  {Ğ}{{\u{G}}}1  {ğ}{{\u{g}}}1  {Ĩ}{{\~I}}1
+      {ĩ}{{\~\i}}1   {Į}{{\k{I}}}1  {į}{{\k{i}}}1  {İ}{{\.{I}}}1  {ı}{{\i}}1
+      {Ĺ}{{\'L}}1    {ĺ}{{\'l}}1    {Ľ}{{\v{L}}}1  {ľ}{{\v{l}}}1  {Ł}{{\L{}}}1
+      {ł}{{\l{}}}1   {Ń}{{\'N}}1    {ń}{{\'n}}1    {Ň}{{\v{N}}}1  {ň}{{\v{n}}}1
+      {Ő}{{\H{O}}}1  {ő}{{\H{o}}}1  {Ŕ}{{\'{R}}}1  {ŕ}{{\'{r}}}1  {Ř}{{\v{R}}}1
+      {ř}{{\v{r}}}1  {Ś}{{\'S}}1    {ś}{{\'s}}1    {Ş}{{\c{S}}}1  {ş}{{\c{s}}}1
+      {Š}{{\v{S}}}1  {š}{{\v{s}}}1  {Ť}{{\v{T}}}1  {ť}{{\v{t}}}1  {Ũ}{{\~U}}1
+      {ũ}{{\~u}}1    {Ū}{{\={U}}}1  {ū}{{\={u}}}1  {Ů}{{\r{U}}}1  {ů}{{\r{u}}}1
+      {Ű}{{\H{U}}}1  {ű}{{\H{u}}}1  {Ų}{{\k{U}}}1  {ų}{{\k{u}}}1  {Ź}{{\'Z}}1
+      {ź}{{\'z}}1    {Ż}{{\.Z}}1    {ż}{{\.z}}1    {Ž}{{\v{Z}}}1
+      % ¿ and ¡ are not correctly displayed if inconsolata font is used
+      % together with the lstlisting environment. Consider typing code in
+      % external files and using \lstinputlisting to display them instead.
+}
+
+\lstset{style=mystyle}
+
+
+
+% ------------------------------------------------------------------------
+% ------------------------------------------------------------------------
+%The error indicates that the \uppercase command is being used in a context where it is not allowed, specifically within a PDF string. However, no direct usage of %\uppercase was found in the main.tex file. It might be used indirectly or through another command.
+%To resolve this, I will add the \pdfstringdefDisableCommands command in the %preamble to handle \uppercase properly.
+\pdfstringdefDisableCommands{\let\uppercase\relax}
+% ------------------------------------------------------------------------
+% ------------------------------------------------------------------------
+% Pacotes adicionais, usados apenas no âmbito do Modelo Canônico do abnteX2
+% ---
+\usepackage{lipsum}				% para geração de dummy text
+% ---
+\usepackage{pifont}
+
+
+% Pacotes para algoritmos
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{algorithmicx}
+
+% ---
+% Pacotes de citações
+% ---
+%\usepackage{hyperref}
+%\usepackage[unicode,brazilian,hyperpageref]{backref}
+%\usepackage[brazilian,hyperpageref]{backref}	 % Paginas com as citações na bibl
+
+%\usepackage[brazilian,hyperpageref]{backref}
+%\usepackage[alf]{abntex2cite}	% Citações padrão ABNT
+
+%\usepackage[unicode,brazilian,hyperpageref]{backref}
+\usepackage[brazilian,hyperpageref]{backref}
+
+
+%\usepackage[brazilian,hyperpageref]{backref}	 % Paginas com as citações na bibl
+
+%%%%%%--- test pacote USPSC ---%%%%%%%%%
+%%%%%%--- test pacote USPSC ---%%%%%%%%%
+%%%%%%--- test pacote USPSC ---%%%%%%%%%
+\usepackage[alf, abnt-emphasize=bf, abnt-thesis-year=both, abnt-repeated-author-omit=no, abnt-last-names=abnt, abnt-etal-cite=3, abnt-etal-list=3, abnt-etal-text=it, abnt-and-type=e, abnt-doi=doi, abnt-url-package=none, abnt-verbatim-entry=no]{abntex2cite}
+\bibliographystyle{USPSC-classe/abntex2-alf-USPSC}
+
+% ----
+% Compatibilização com a ABNT NBR 6023:2018 e 10520:2023
+% Para tirar <> da URL e tornar as expressões latinas em itálico
+\usepackage{USPSC-classe/ABNT6023-10520}
+% As demais compatibilizações estão nos arquivos abntex2-alf-USPSC.bst,abntex2-alfeng-USPSC.bst, abntex2-num-USPSC.bst e abntex2-numeng-USPSC.bst, dependendo do idioma do textos e se o sistemas de chamada for autor-data ou numérico, conforme explicitado acima.
+% ----
+
+%%%%%%--- test pacote USPSC ---%%%%%%%%%
+%%%%%%--- test pacote USPSC ---%%%%%%%%%
+%%%%%%--- test pacote USPSC ---%%%%%%%%%
+
+% --- checkmark
+\usepackage{tikz}
+\def\checkmark{\tikz\fill[scale=0.4](0,.35) -- (.25,0) -- (1,.7) -- (.25,.15) -- cycle;}
+
+
+\usepackage{multicol}  % Para múltiplas colunas
+
+
+%\usepackage{subcaption}
+
+
+\usepackage[utf8]{inputenc}
+
+\usepackage{rotating}  % Adicione no preâmbulo do documento
+\usepackage{booktabs}  % Para linhas de tabela mais elegantes
+
+% First pip install pygments
+
+% CONFIGURAÇÕES DE PACOTES
+% ---
+
+% ---https://mirrors.ibiblio.org/CTAN/macros/latex/contrib/abntex2/doc/abntex2cite-alf.pdf
+% Configurações do pacote backref
+% Usado sem a opção hyperpageref de backref
+%\begin{comment}
+
+\renewcommand{\backrefpagesname}{Citado na(s) página(s):~}
+% Texto padrão antes do número das páginas
+\renewcommand{\backref}{}
+% Define os textos da citação
+\renewcommand*{\backrefalt}[4]{
+	\ifcase #1 %
+		Nenhuma citação no texto.%
+	\or
+		Citado na página #2.%
+	\else
+		Citado #1 vezes nas páginas #2.%
+	\fi}%
+%\end{comment}
+% --- https://mirrors.ibiblio.org/CTAN/macros/latex/contrib/abntex2/doc/abntex2cite-alf.pdf
+
+\newcommand{\datadeaprovacao}{30 de junho de 2025}
+
+
+% ---
+% Informações de dados para CAPA e FOLHA DE ROSTO
+% ---
+
+%\titulo{Simulação de Detecção de Objetos em Tempo Real para Veículos Autônomos}
+\titulo{Trabalho Prático 1: Ferramentas e Transformações}
+\autor{Daniel Terra Gomes}
+\local{Belo Horizonte, MG}
+%\data{\today}
+\data{11 de setembro de 2025}  % <--  altera a data
+\orientador{Prof. Dr. Luiz Chaimowicz}
+%\coorientador{Equipe \abnTeX}
+\instituicao{%
+Universidade Federal de Minas Gerais
+  \par
+  Instituto de Ciências Exatas
+  \par
+  Departamento de Ciência da Computação
+  \par
+  PPGCC - Programa de Pós-Graduação em Ciência da Computação
+  }
+\tipotrabalho{Trabalho Prático}
+% O preambulo deve conter o tipo do trabalho, o objetivo,
+% o nome da instituição e a área de concentração
+\preambulo{Trabalho Prático apresentado à disciplina
+de Robótica Móvel do Programa de Pós-Graduação em Ciência da
+Computação da Universidade Federal de Minas Gerais
+como requisito parcial para avaliação na disciplina
+}
+% ---
+
+% ---
+% Configurações de aparência do PDF final
+
+% alterando o aspecto da cor azul
+\definecolor{blue}{RGB}{41,5,195}
+
+% informações do PDF
+\makeatletter
+\hypersetup{
+     	%pagebackref=true,
+		pdftitle={\@title},
+		pdfauthor={\@author},
+    	pdfsubject={\imprimirpreambulo},
+	    pdfcreator={LaTeX with abnTeX2},
+		pdfkeywords={abnt}{latex}{abntex}{abntex2}{trabalho acadêmico},
+		colorlinks=true,       		% false: boxed links; true: colored links
+    	linkcolor=blue,          	% color of internal links
+    	citecolor=blue,        		% color of links to bibliography
+    	filecolor=magenta,      		% color of file links
+		urlcolor=blue,
+		bookmarksdepth=4
+}
+\makeatother
+% ---
+% ---
+% Seguindo a NBR 6023 joao
+% Seguindo a NBR 6023 https://github.com/abntex/abntex2/issues/210#issuecomment-633050367
+\usepackage{url6023}
+%\ProvidesPackage{url6023}
+
+
+% Seguindo a NBR6023
+
+% ---
+% Espaçamentos entre linhas e parágrafos
+% ---
+
+% O tamanho do parágrafo é dado por:
+\setlength{\parindent}{1.3cm}
+
+% Controle do espaçamento entre um parágrafo e outro:
+\setlength{\parskip}{0.2cm}  % tente também \onelineskip
+
+% ---
+% compila o indice
+% ---
+\makeindex
+% ---
+
+% ----
+% Início do documento
+% ----
+\begin{document}
+
+
+
+
+% Seleciona o idioma do documento (conforme pacotes do babel)
+%\selectlanguage{english}
+\selectlanguage{brazil}
+
+% Retira espaço extra obsoleto entre as frases.
+\frenchspacing
+
+% ----------------------------------------------------------
+% ELEMENTOS PRÉ-TEXTUAIS
+% ----------------------------------------------------------
+\pretextual
+
+% ---
+% Capa
+% ---
+\begin{center}
+\large
+\textbf{UNIVERSIDADE FEDERAL DE MINAS GERAIS} \\
+\textit{Instituto de Ciências Exatas\\
+Departamento de Ciência da Computação\\}
+\end{center}
+\vspace{2.5cm}
+
+\imprimircapa
+% ---
+
+% ---
+% Folha de rosto
+% (o * indica que haverá a ficha bibliográfica)
+% ---
+%\imprimirfolhaderosto*
+% ---
+
+% ---
+% Inserir a ficha bibliografica
+% ---
+
+% Isto é um exemplo de Ficha Catalográfica, ou ``Dados internacionais de
+% catalogação-na-publicação''. Você pode utilizar este modelo como referência.
+% Porém, provavelmente a biblioteca da sua universidade lhe fornecerá um PDF
+% com a ficha catalográfica definitiva após a defesa do trabalho. Quando estiver
+% com o documento, salve-o como PDF no diretório do seu projeto e substitua todo
+% o conteúdo de implementação deste arquivo pelo comando abaixo:
+%
+%\begin{fichacatalografica}
+%     \includepdf{fig_ficha_catalografica.pdf}
+%\end{fichacatalografica}
+\begin{comment}
+
+\begin{fichacatalografica}
+	\sffamily
+	\vspace*{\fill}					% Posição vertical
+	\begin{center}					% Minipage Centralizado
+	\fbox{\begin{minipage}[c][8cm]{13.5cm}		% Largura
+	\small
+	\imprimirautor
+	%Sobrenome, Nome do autor
+
+	\hspace{0.5cm} \imprimirtitulo  / \imprimirautor. --
+	\imprimirlocal, \imprimirdata-
+
+	\hspace{0.5cm} \pageref{LastPage} p. : il. \\ % (algumas color.) ; 30 cm.\\
+
+	\hspace{0.5cm} \imprimirorientadorRotulo~\imprimirorientador\\
+
+	\hspace{0.5cm}
+	\parbox[t]{\textwidth}{\imprimirtipotrabalho~--~\imprimirinstituicao,
+	\imprimirdata.}\\
+
+	\hspace{0.5cm}
+		1. Veículos autônomos.
+		2. Inteligência Artificial.
+		3. Machine Learning.
+		4. Condução Autônoma.
+		I. Manuel Antonio Molina Palma.
+II. Universidade Estadual do Norte Fluminense Darcy Ribeiro.
+		III. Faculdade de Ciência da Computação.
+		IV. Veículos autônomos e inteligência artificial:
+ um estudo sobre a implementação no brasil.
+	\end{minipage}}
+	\end{center}
+\end{fichacatalografica}
+\end{comment}
+% ---
+\begin{comment}
+
+\begin{folhadeaprovacao}
+
+  \begin{center}
+    {\ABNTEXchapterfont\large\imprimirautor}
+
+    \vspace*{\fill}\vspace*{\fill}
+    \begin{center}
+      \ABNTEXchapterfont\bfseries\Large\imprimirtitulo
+    \end{center}
+    \vspace*{\fill}
+
+    \hspace{.45\textwidth}
+    \begin{minipage}{.5\textwidth}
+        \imprimirpreambulo
+    \end{minipage}%
+    \vspace*{\fill}
+   \end{center}
+     \begin{center}
+
+   Trabalho aprovado em \datadeaprovacao.  % <-- aqui você altera a data.
+   \end{center}
+\assinatura{\textbf{\imprimirorientador} \\ Orientadora}
+
+\assinatura{\textbf{Prof. Dr. João Luiz de Almeida Filho} \\ Membro da Banca - UENF}
+
+\assinatura{\textbf{Prof. Dr. Luis M. Del Val Cura} \\ Membro da Banca - UENF}
+
+%\assinatura{\textbf{Prof. Dr. Fermín A. Tang Montané} \\ Suplente - UENF}
+
+   \begin{center}
+    \vspace*{0.5cm}
+    {\large\imprimirlocal}
+    \par
+    {\large\imprimirdata}
+    \vspace*{1cm}
+  \end{center}
+
+\end{folhadeaprovacao}
+\end{comment}
+% ---
+% Inserir errata
+% ---
+% Inserir folha de aprovação
+% ---
+
+% Isto é um exemplo de Folha de aprovação, elemento obrigatório da NBR
+% 14724/2011 (seção 4.2.1.3). Você pode utilizar este modelo até a aprovação
+% do trabalho. Após isso, substitua todo o conteúdo deste arquivo por uma
+% imagem da página assinada pela banca com o comando abaixo:
+%
+%\includepdf{folhadeaprovacao_final.pdf}
+%
+%%%%%%%%%%\ %%%%%%%%%%\ folhadeaprovacao DELETED
+
+% ---
+
+% ---
+% Dedicatória
+% ---
+
+% ---
+% Agradecimentos
+% ---
+
+\begin{comment}
+\begin{agradecimentos}
+
+Expresso minha profunda gratidão a todos que contribuíram significativamente para a realização deste Trabalho de Conclusão de Curso e para minha formação acadêmica e pessoal ao longo desta trajetória.
+
+À Profa. Dra. Annabell Del Real Tamariz, minha orientadora, pela orientação científica rigorosa, dedicação contínua e apoio durante os três anos de iniciação científica, estágio supervisionado e desenvolvimento deste trabalho. Suas contribuições foram fundamentais para o aprofundamento dos conhecimentos em veículos autônomos, visão computacional e metodologia científica.
+
+À Universidade Estadual do Norte Fluminense Darcy Ribeiro e ao Laboratório de Ciências Matemáticas, pelo suporte acadêmico e pelos recursos disponibilizados para o desenvolvimento desta pesquisa. Em especial, ao Laboratório P5, cujos equipamentos foram essenciais para a execução dos experimentos computacionais.
+
+À minha família, em especial aos meus pais, Carlos e Delma, pelo apoio incondicional e incentivo permanente ao longo de toda a trajetória acadêmica. À Maria, minha noiva, pela compreensão, paciência e encorajamento nos momentos desafiadores desta jornada, sempre apoiando meu crescimento acadêmico e profissional.
+
+Aos colegas e amigos que compartilharam desta caminhada acadêmica, pelas discussões científicas enriquecedoras, colaborações intelectuais e apoio mútuo diante dos desafios da pesquisa. Suas contribuições, seja por questionamentos ou pelo suporte emocional, foram essenciais para o amadurecimento intelectual que culminou nesta pesquisa.
+
+Aos pesquisadores e autores cujos trabalhos fundamentaram teoricamente esta investigação, contribuindo para o avanço do conhecimento na área de veículos autônomos e sistemas de detecção de objetos em tempo real.
+
+Por fim, registro meu reconhecimento a todos que, direta ou indiretamente, contribuíram para a realização desta pesquisa, consolidando uma experiência acadêmica transformadora que certamente influenciará minha trajetória de vida.
+
+\end{agradecimentos}
+\end{comment}
+% ---
+
+% ---
+% Epígrafe
+% ---
+\begin{epigrafe}
+	\vspace*{\fill}
+	\begin{flushright}
+		\textit{``Behind me lies a farm. \\
+			I wonder if there is bread above the hearth \\
+			and if I will ever return.'' \\
+			(Pantheon, League of Legends)}
+	\end{flushright}
+\end{epigrafe}
+% ---
+
+% ---
+% RESUMOS
+% ---
+
+\begin{comment}
+
+% resumo em português
+%\begin{singlespacing}
+%\end{singlespacing}
+\setlength{\absparsep}{18pt}
+\begin{resumo}
+
+%Este trabalho apresenta o desenvolvimento e validação experimental de um sistema integrado de detecção de objetos em tempo real para veículos autônomos (VA), fundamentado na integração entre algoritmos de visão computacional e controle veicular autônomo em ambiente simulado. O objetivo geral consiste em desenvolver e validar um sistema de detecção e reconhecimento de placas de trânsito em tempo real utilizando algoritmos YOLO e ambiente de simulação CARLA, visando promover uma condução assistida mais segura e confiável. A metodologia empregada baseia-se em uma arquitetura modular de três camadas: percepção ambiental utilizando câmeras e algoritmo YOLOv8 para detecção de objetos, planejamento de movimento com capacidade de resposta a sinalizações de trânsito implementado por máquina de estados finitos, e controle veicular via controladores PID para controle longitudinal e controlador de perseguição pura para controle lateral. O sistema foi validado experimentalmente no simulador CARLA utilizando o mapa Town01, com coleta sistemática de métricas quantitativas de desempenho. Os resultados demonstram que o sistema alcançou desempenho superior aos critérios estabelecidos: processamento em tempo real com taxa média de 17,01 FPS, precisão de detecção de 100\% para todas as classes de objetos testadas (carros e placas de parada), tempo de resposta de 0,0588 segundos por \textit{frame}, conclusão bem-sucedida do trajeto sem colisões e efetividade de \textit{feedback} visual. A validação experimental confirmou integralmente a hipótese de que um sistema de assistência à condução baseado em detecção de objetos pode oferecer \textit{feedback} visual de placas de trânsito em tempo real, contribuindo para uma condução mais confiável. As principais contribuições científicas incluem a arquitetura de processamento distribuído via Sockets integrando Python 3.6 e Python 3.12, o \textit{framework} de métricas abrangente para avaliação quantitativa de sistemas de assistência à condução, e a demonstração da viabilidade de arquiteturas modulares para VA de níveis intermediários de automação SAE. Os resultados estabelecem fundamentos metodológicos sólidos para pesquisas futuras em sistemas de assistência à condução baseados em simulação, demonstrando que algoritmos YOLO podem ser efetivamente integrados com sistemas de controle veicular para aplicações de condução autônoma.
+
+Este trabalho apresenta o desenvolvimento e a validação experimental de um sistema integrado de detecção de objetos em tempo real para veículos autônomos (VA), fundamentado na integração entre algoritmos de visão computacional (YOLOv8) e controle veicular em ambiente simulado. O objetivo consistiu em implementar e validar um sistema capaz de detectar e reconhecer placas de trânsito em tempo real, fornecendo \textit{feedback} visual ao condutor, utilizando o simulador CARLA como plataforma de testes. A metodologia adotada baseou-se em uma arquitetura modular de três camadas: percepção ambiental por câmeras e YOLOv8, planejamento de movimento com máquina de estados finitos e controle veicular via controladores PID (longitudinal) e perseguição pura (lateral). O sistema foi avaliado em seis simulações independentes, abrangendo três condições climáticas distintas (céu limpo, chuva intensa ao pôr do sol e ao meio-dia), com coleta sistemática de métricas quantitativas. Os resultados demonstraram processamento em tempo real com média de 17,13 FPS, tempo médio de detecção de 0,0594 s por \textit{frame} e precisão de detecção de 100\% para placas de pare e veículos. A confiança média na detecção de placas de trânsito manteve-se acima de 0,73 em todas as condições, superando o limiar de 0,70 estabelecido, com coeficiente de variação de 0,58\%, evidenciando robustez mesmo sob condições adversas. A análise estatística (ANOVA) confirmou diferença significativa para o tempo de detecção (p = 0,025), sem impacto estatístico relevante na confiança das detecções de placas (p = 0,651). O sistema concluiu todos os trajetos simulados sem colisões e gerou \textit{feedback} visual consistente em 100\% dos casos. As principais limitações incluem o ambiente exclusivamente simulado, o número reduzido de execuções por condição climática e o foco restrito à detecção de placas de pare. Apesar dessas restrições, os resultados validam empiricamente a hipótese de que sistemas de assistência à condução baseados em detecção de objetos podem fornecer \textit{feedback} visual confiável de placas de trânsito em tempo real, contribuindo para maior segurança e confiabilidade na condução. O trabalho estabelece fundamentos metodológicos sólidos para pesquisas futuras em sistemas de assistência à condução, demonstrando a viabilidade de arquiteturas modulares e processamento distribuído para aplicações em VA.
+
+\textbf{Palavras-chave}: Carros autônomos. Detecção de Objetos. Controle Veicular. Simulação. CARLA. YOLO.
+
+
+\end{resumo}
+
+% resumo em inglês
+\begin{resumo}[Abstract]
+ \begin{otherlanguage*}{english}
+
+This work presents the development and experimental validation of an integrated real-time object detection system for autonomous vehicles (AV), based on the integration of computer vision algorithms (YOLOv8) and vehicle control in a simulated environment. The objective was to implement and validate a system capable of detecting and recognizing traffic signs in real-time, providing visual feedback to the driver, using the CARLA simulator as the testing platform. The adopted methodology was based on a modular three-layer architecture: environmental perception using cameras and YOLOv8, motion planning with a finite state machine, and vehicle control via PID controllers (longitudinal) and pure pursuit (lateral). The system was evaluated in six independent simulations, covering three distinct weather conditions (clear sky, heavy rain at sunset, and heavy rain at noon), with a systematic collection of quantitative metrics. The results demonstrated real-time processing with an average of 17.13 FPS, an average detection time of 0.0594 s per frame, and 100\% detection accuracy for stop signs and vehicles. The average confidence in stop sign detection remained above 0.73 in all conditions, surpassing the established threshold of 0.70, with a coefficient of variation of 0.58\%, evidencing robustness even under adverse conditions. Statistical analysis (ANOVA) revealed a significant difference in detection time (p = 0.025), with no statistically significant impact on stop sign detection confidence (p = 0.651). The system completed all simulated routes without collisions and generated consistent visual feedback in 100\% of cases. The main limitations include the exclusively simulated environment, the reduced number of runs per weather condition, and the restricted focus on stop sign detection. Despite these constraints, the results empirically validate the hypothesis that object detection-based driver assistance systems can provide reliable real-time visual feedback on traffic signs, contributing to greater safety and reliability in autonomous driving. The work establishes solid methodological foundations for future research in driver assistance systems, demonstrating the feasibility of modular architectures and distributed processing for AV applications.
+
+
+
+   \vspace{\onelineskip}
+
+   \noindent
+    \textbf{Keywords}: Self-driving car. Objects Detection. Vehicle Control. Simulation. CARLA. YOLO.
+ \end{otherlanguage*}
+\end{resumo}
+% resumo em inglês
+\end{comment}
+
+
+
+%%%%%%%%%%%
+% ---
+% inserir lista de ilustrações
+% ---
+\pdfbookmark[0]{\listfigurename}{lof}
+\listoffigures*
+\cleardoublepage
+% ---
+
+% ---
+% inserir lista de tabelas
+% ---
+%\pdfbookmark[0]{\listtablename}{lot}
+
+%\listoftables*
+%\cleardoublepage
+
+
+% codigos lista
+\pdfbookmark[0]{\lstlistingname}{lop}%
+\lstlistoflistings
+
+
+% ---
+
+% ---
+% inserir lista de abreviaturas e siglas
+% --
+
+\newpage % in order to the documentation structure be right, when clicking on siglas
+\begin{comment}
+\begin{siglas} \label{eq:1}
+    \item[VA] Veículo Autônomo / Veículos Autônomos
+    \item[IA] Inteligência Artificial
+    \item[SAE] Society of Automotive Engineers
+    \item[GPS] Global Positioning System
+    \item[LiDAR] Light Detection and Ranging
+    \item[ICR] Instantaneous Center of Rotation
+    \item[RPM] Rotação Por Minuto
+    \item[P] Proporcional
+    \item[PI] Proporcional Integral
+    \item[PD] Proporcional Derivativo
+    \item[PID] Proporcional Integral Derivativo
+    \item[Feedback] Realimentação
+    \item[Feedforward] Antecipação
+    \item[2D] Bidimensional
+    \item[3D] Tridimensional
+    \item[MPC] Model Predictive Controller
+    \item[ADAS] Advanced Driver-Assistance System
+    \item[ADS] Automated Driving System
+    \item[CNN] Convolutional Neural Networks
+    \item[RCNN] Region Convolution Neural Network
+    \item[RNN] Recurrent Neural Network
+    \item[TCC] Trabalho de Conclusão de Curso
+    \item[ms] Milissegundo
+    \item[YOLO] You Only Look Once
+    \item[YOLOv8] You Only Look Once version 8
+    \item[API] Application Programming Interface
+    \item[TCP/IP] Transmission Control Protocol/Internet Protocol
+    \item[UDP] User Datagram Protocol
+    \item[GPU] Graphics Processing Unit
+    \item[CPU] Central Processing Unit
+    \item[CUDA] Compute Unified Device Architecture
+    \item[RGB] Red Green Blue
+    \item[IMU] Inertial Measurement Unit
+    \item[ODD] Operational Design Domain
+    \item[DDT] Dynamic Driving Task
+    \item[FSM] Finite State Machine
+    \item[CARLA] Car Learning to Act
+    \item[V2X] Vehicle-to-Everything
+    \item[FOV] Field of View
+    \item[FPS] Frames Per Second
+    \item[IoU] Intersection over Union
+    \item[mAP] mean Average Precision
+    \item[CSV] Comma-Separated Values
+    \item[HTML] HyperText Markup Language
+    \item[PDF] Portable Document Format
+    \item[km/h] quilômetros por hora
+    \item[m/s] metros por segundo
+\end{siglas}
+% ---
+\end{comment}
+
+% ---
+% inserir lista de símbolos
+% ---
+
+
+% ---
+% inserir o sumario
+% ---
+\pdfbookmark[0]{\contentsname}{toc}
+\tableofcontents*
+\cleardoublepage
+% ---
+
+
+
+% ----------------------------------------------------------
+% ELEMENTOS TEXTUAIS
+% ----------------------------------------------------------
+\textual
+
+% ----------------------------------------------------------
+% Introdução (exemplo de capítulo sem numeração, mas presente no Sumário)
+% ----------------------------------------------------------
+\chapter[Introdução]{Introdução}
+%\addcontentsline{toc}{chapter}{Introdução}
+\label{introducao_cap}
+
+Esta documentação apresenta as soluções encontradas para o trabalho prático (TP1), de maneira sequencial. 
+
+Inicialmente, são detalhados os procedimentos para a criação da cena de simulação no CoppeliaSim \cite{coppeliasim}, a elaboração do diagrama de transformações entre os referenciais e a implementação das matrizes de transformação homogênea para análise de poses relativas para os Exercícios 1 a 4, vistos nas Seções \ref{sec:ex1}, \ref{sec:ex2}, \ref{sec:ex3} e \ref{sec:ex4}. Em seguida, a documentação aborda a integração de um sensor a laser no robô PioneerP3DX,a transformação de suas leituras para o referencial global e, por fim, a implementação de um sistema de navegação autônoma com mapeamento incremental do ambiente, vistos nas Seções \ref{sec:ex5} e \ref{sec:ex6}. 
+
+Dessa forma, este documento visa apresentar a linha de raciocínio para implementação e resultados obtidos em cada etapa do trabalho, destacando as abordagens matemáticas e computacionais utilizadas para solucionar os problemas propostos.
+
+\section{Ambiente de Desenvolvimento} \label{subsec:ambiente}
+
+O desenvolvimento do trabalho foi realizado utilizando as seguintes ferramentas e tecnologias:
+
+\begin{itemize}
+    \item \textbf{CoppeliaSim V4.1.0 Edu, Ubuntu 20.04:} simulador de robótica utilizado para criar cenários virtuais e simular robôs e sensores \cite{coppeliasim};
+    \item \textbf{Draw.io:} ferramenta utilizada para a criação do diagrama de transformações \cite{diagrams_net};
+    \item \textbf{Python 3.13.7 via Miniconda:} utilizado para processamento de dados, visualização, uso de suas bibliotecas numéricas e plots \cite{anaconda_miniconda_doc}...
+    \item \textbf{Jupyter Notebooks via VScode:} ambiente interativo para execução de código, documentação e visualização de resultados \cite{microsoft_vscode};
+    \item \textbf{ZMQ Remote API:} interface de comunicação com o CoppeliaSim para controle dos objetos e robôs na simulação \cite{hintjens2013zeromq}.
+\end{itemize}
+
+\subsection{Estrutura do Código} \label{subsec:estrutura-codigo}
+
+Para facilitar a reutilização de código e organizar a implementação, foi criado um módulo de utilitários chamado \texttt{robotics\_utils.py}, contendo classes e funções para:
+
+\begin{itemize}
+    \item Conexão e comunicação com o CoppeliaSim;
+    \item Transformações matemáticas (matrizes homogêneas, rotações);
+    \item Análise e visualização de cenas;
+    \item Simulação de sensores laser;
+    \item Funções auxiliares para navegação e mapeamento...
+\end{itemize}
+
+Este módulo é importado nos notebooks \texttt{TP1\_ex1-4.ipynb} e \texttt{TP1\_ex5-6.ipynb} que implementam os exercícios propostos.
+
+\section{Execução da Simulação} \label{subsec:run}
+
+Para a correta execução das soluções, é necessário que o CoppeliaSim esteja em execução com a cena apropriada carregada, conforme descrito a seguir:
+\begin{itemize}
+    \item Para os exercícios 1 a 4, deve-se utilizar a cena \texttt{T1.ttt} e executar o notebook \texttt{TP1\_ex1-4.ipynb}. Note que, para o exercício 4, é necessário movimentar o robô manualmente na cena do CoppeliaSim antes dar "enter" para cada célula de análise de cenário.
+    \item Para os exercícios 5 e 6, a cena a ser utilizada é a \texttt{T1-ex5-6.ttt}, e o notebook correspondente é o \texttt{TP1\_ex5-6.ipynb}.
+\end{itemize}
+% ----------------------------------------------------------
+
+
+% PARTE
+% ----------------------------------------------------------
+% ----------------------------------------------------------
+
+% ---
+% Capitulo com exemplos de comandos inseridos de arquivo externo
+% ---
+%\include{abntex2-modelo-include-comandos}
+
+\include{projeto}
+% ---
+% ----------------------------------------------------------
+% PARTE
+% ----------------------------------------------------------
+%\part{Referenciais teóricos}
+% ----------------------------------------------------------
+% ---
+% Capitulo de revisão de literatura
+% ---
+% ----------------------------------------------------------
+% PARTE
+% ----------------------------------------------------------
+%\part{Resultados}
+% ----------------------------------------------------------
+% ---
+% primeiro capitulo de Resultados
+% ---
+% ---
+% ---
+% ---
+% segundo capitulo de Resultados
+% ---
+% ----------------------------------------------------------
+% Finaliza a parte no bookmark do PDF
+% para que se inicie o bookmark na raiz
+% e adiciona espaço de parte no Sumário
+% ----------------------------------------------------------
+\phantompart
+% ---
+% Conclusão
+% ---
+%\chapter{Conclusão}
+% ---
+% ----------------------------------------------------------
+% ELEMENTOS PÓS-TEXTUAIS
+% ----------------------------------------------------------
+\postextual
+% ----------------------------------------------------------
+% ----------------------------------------------------------
+% Referências bibliográficas
+% ----------------------------------------------------------
+\bibliography{bibli}
+
+
+
+% ----------------------------------------------------------
+% Glossário
+% ----------------------------------------------------------
+%
+% Consulte o manual da classe abntex2 para orientações sobre o glossário.
+%
+%\glossary
+
+% ----------------------------------------------------------
+% Apêndices
+% ----------------------------------------------------------
+
+% ---
+% Inicia os apêndices
+% ---
+
+\begin{comment}
+    
+\begin{apendicesenv}
+
+% Imprime uma página indicando o início dos apêndices
+\partapendices
+
+% ----------------------------------------------------------
+\chapter{Material Completo} \label{apendices}
+% ----------------------------------------------------------
+
+% THIS CHAPTER MUST BE MODIFIED FOR EVERY WORK / ARTICLE/ REPORT / ...
+Neste apêndice, disponibilizamos o link para o material completo desenvolvido ao longo do presente trabalho. O conteúdo abrange todos os códigos, dados, gráficos e informações detalhadas referentes ao tema em questão. O acesso ao material completo proporciona uma compreensão mais aprofundada do trabalho realizado, permitindo uma análise mais minuciosa dos resultados obtidos.
+
+Para acessar o repositório com toda a solução desenvolvida neste trabalho, clique no seguinte link: \url{https://github.com/ARRETdaniel/CARLA_simulator_YOLO-openCV_realTime_objectDetection_for_autonomousVehicles}
+
+Para acessar o material completo sobre a subseção \textbf{Configurando o Carla} \ref{configuracao_carla}, o link: \url{https://github.com/ARRETdaniel/CARLA_simulator_YOLO-openCV_realTime_objectDetection_for_autonomousVehicles}
+
+%Para acessar o material completo sobre a subseção \textbf{Implementação Controle de Veículos Autônomos} \ref{controladores_imple}, clique no seguinte link: \url{https://github.com/ARRETdaniel/Self-Driving_Cars_Specialization/tree/main/CarlaSimulator/PythonClient/Course1FinalProject}
+
+Recomendamos a exploração deste recurso para uma apreciação abrangente das etapas apresentadas ao longo do trabalho. O material está disponível online para facilitar o acesso e a referência contínua. Se houver problema ao tentar consultar qualquer um desses materiais, não hesite em nos contactar via e-mail: \href{mailto:danielterra@pq.uenf.br}{danielterra@pq.uenf.br}.
+
+Agradecemos a atenção e interesse na pesquisa apresentada, esperamos que o material disponibilizado enriqueça ainda mais a compreensão sobre o assunto abordado.
+
+% ----------------------------------------------------------
+% THIS CHAPTER MUST BE MODIFIED FOR EVERY WORK / ARTICLE/ REPORT / ...
+% ----------------------------------------------------------
+
+    
+\section{Trechos de Códigos}
+
+Nesta seção, são apresentados os trechos de códigos implementados e analisados no Capítulo \ref{Implementação}.
+
+% EXEMPLE ON HOW TO ADD PYTHON CODE:
+
+\begin{lstlisting}[language=Python, caption=Construtor da classe Controller2D., label=lst:controller-init]
+def __init__(self, waypoints):
+    # Inicializa o objeto de utilidades do controlador
+    self.vars = cutils.CUtils()
+
+    # Define a distância de antecipação para o algoritmo de perseguição pura (em metros)
+    self._lookahead_distance = 2.0
+
+    # Inicializa as variáveis de estado atual do veículo
+    self._current_x = 0            # Posição x atual do veículo (m)
+    self._current_y = 0            # Posição y atual do veículo (m)
+    self._current_yaw = 0          # Ângulo de guinada atual do veículo (rad)
+    self._current_speed = 0        # Velocidade atual do veículo (m/s)
+    self._desired_speed = 0        # Velocidade desejada do veículo (m/s)
+
+    # Variáveis de controle do ciclo de simulação
+    self._current_frame = 0        # Contador de quadros da simulação
+    self._current_timestamp = 0    # Timestamp atual da simulação (s)
+    self._start_control_loop = False  # Flag para iniciar o loop de controle
+
+    # Inicializa os comandos de controle veicular
+    self._set_throttle = 0         # Comando do acelerador [0, 1]
+    self._set_brake = 0            # Comando do freio [0, 1]
+    self._set_steer = 0            # Comando da direção [-1, 1]
+
+    # Armazena os pontos de referência da trajetória desejada
+    self._waypoints = waypoints
+
+    # Fator de conversão entre radianos e o formato normalizado esperado pelo simulador
+    # O valor 70.0 representa o ângulo máximo de esterçamento em graus
+    self._conv_rad_to_steer = 180.0 / 70.0 / np.pi
+
+    # Constantes matemáticas para cálculos de ângulos
+    self._pi = np.pi               # pi (3.14159...)
+    self._2pi = 2.0 * np.pi        # 2pi (6.28318...)
+\end{lstlisting}
+
+% EXEMPLE ON HOW TO ADD PROMPT COMMANDS CODE:
+
+\begin{lstlisting}[style=cmdstyle, caption={\textit{Script} de inicialização completa do sistema.}, label={lst:start_all}]
+@echo off
+echo Starting Self-Driving Car Simulation Environment...
+
+:: Start CARLA simulator in a new window
+start cmd /k call start_carla.bat
+
+:: Wait for CARLA to initialize
+echo Waiting for CARLA simulator to initialize...
+timeout /t 8 /nobreak
+
+:: Start the YOLO detection server in a new window
+start cmd /k call start_detector.bat
+
+:: Wait for detector to initialize
+echo Waiting for detector server to initialize...
+timeout /t 5 /nobreak
+
+:: Start the module_7 client
+start cmd /k call start_client.bat
+
+echo All components started successfully!
+\end{lstlisting}
+
+
+
+\end{apendicesenv}
+
+% ---
+
+
+% ----------------------------------------------------------
+% Anexos
+% ----------------------------------------------------------
+
+% ---
+% Inicia os anexos
+% ---
+
+
+\begin{anexosenv}
+
+% Imprime uma página indicando o início dos anexos
+\partanexos
+
+% ---
+\chapter{Material de Relevância}  \label{anexo}
+% --- TO DO
+Neste anexo, fornecemos uma descrição dos materiais relevantes para aprofundamento relacionados a este trabalho, e a sua contribuição.
+
+Iniciamos com o artigo \textit{Vehicle Dynamics COMPENDIUM} de 2020, publicado pela Chalmers University of Technology \cite{jacobson2020vehicle}. Este trabalho é essencial para compreender todos os aspectos relacionados à modelagem abordada nesta pesquisa.
+
+Adicionalmente, temos a dissertação de mestrado \textit{Sensing requirements for an automated vehicle for highway and rural environments}, de 2014, que aborda todos os sensores e métricas associados aos VA, bem como análises desses sensores em diferentes contextos de aplicação \cite{bussemaker2014sensing}.
+
+Além disso, mencionamos o documento SAE $\textit{International J3016}$ de 2021, elaborado para descrever sistemas autônomos \cite{SAE}. Ele engloba todas as discussões e definições relevantes para caracterizar e definir os níveis de condução autônoma. O artigo \textit{Automatic Steering Methods for Autonomous
+Automobile Path Tracking} de 2009 contribuiu de maneira significativa, auxiliando-nos na compreensão de algumas das equações presentes nos modelos apresentados neste trabalho \cite{snider2009automatic}.
+
+Por fim, destaca-se a relevância acadêmica e prática da especialização realizada em \textit{Self-Driving Cars}, oferecida pela \textit{University of Toronto} por meio da plataforma Coursera. A trilha é ministrada pelos professores Steven Waslander e Jonathan Kelly, especialistas reconhecidos na área de VA. Esta especialização fornece fundamentos robustos e aplicações práticas que foram diretamente relevantes para o desenvolvimento deste trabalho.
+
+Dois cursos dessa trilha merecem destaque:
+
+\begin{itemize}
+  \item O curso \textit{Introduction to Self-Driving Cars} \cite{University_of_Toronto2018-fe}, que apresenta os fundamentos essenciais dos VA, abordando percepção, controle e arquitetura de sistemas. O módulo inclui atividades práticas com o simulador CARLA, proporcionando experiência direta com as ferramentas utilizadas nesta monografia.
+
+  \item O curso \textit{Motion Planning for Self-Driving Cars} \cite{University_of_Toronto2018-mp}, que aprofunda os principais algoritmos de planejamento de movimento, como \textit{lattice planning}, \textit{graph search} e métodos baseados em otimização. Esses conteúdos fornecem o embasamento teórico para a etapa de planejamento desenvolvida neste trabalho.
+\end{itemize}
+
+Esses materiais complementares demonstram a interseção entre teoria e prática, fortalecendo a fundamentação científica e tecnológica do sistema proposto nesta monografia.
+
+\end{anexosenv}
+\end{comment}
+
+%-----------------
+% ---
+% Inicia os apêndices
+%---------------------------------------------------------------------
+% INDICE REMISSIVO
+%---------------------------------------------------------------------
+\phantompart
+\printindex
+%---------------------------------------------------------------------
+
+\end{document}

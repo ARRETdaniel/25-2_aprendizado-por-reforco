@@ -1,0 +1,578 @@
+\section{Exercício 1: Criação da Cena no CoppeliaSim} \label{sec:ex1}
+
+O primeiro exercício consistiu na criação de uma cena no CoppeliaSim contendo um robô móvel e cinco elementos distintos para compor o ambiente de simulação. Sabendo disso, escolhemos 6 objetos distintos e o Robô \textit{"RobotnikSummitXL"}, conforme podemos identificar na Figura \ref{fig:scene-t1}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=14cm]{Figures/scene-T1.png}
+\caption{Cena criada no CoppeliaSim contendo o robô RobotnikSummitXL e diversos objetos.}
+\label{fig:scene-t1}
+\end{figure}
+
+Desse forma, os seguintes elementos foram incluídos na cena. Dos quais, dois deles deram problema nos exercícios 5 e 6, conforme veremos no capítulo \ref{chp:conclusao}:
+\begin{itemize}
+    \item 1 Robô móvel: RobotnikSummitXL;
+    \item 2 Pessoas: Bill[0] e Bill[1];
+    \item 1 Caixa: Floor/ConcretBlock;
+    \item 2 Pilares: Floor/20cmHighPillar10cm[0] e [1];
+    \item 1 Mesa: diningTable;
+    \item 2 Laptops: diningTable/laptop[0] e [1];
+    \item 2 Cercas: Floor/20cmHighWall100cm[0] e [1].
+\end{itemize}
+
+Esses mesmo elementos foram usados na implementação do mapeamento de objetos, conforme podemos identificar no Trecho de Código \ref{lst:object_mapping}:
+
+\begin{lstlisting}[language=Python, caption=Mapeamento de objetos para o CoppeliaSim., label=lst:object_mapping]
+DEFAULT_OBJECT_MAPPING_EX1_4 = {
+    'Robot': 'RobotnikSummitXL',
+    'Bill_0': 'Bill[0]',
+    'Bill_1': 'Bill[1]',
+    'Crate': 'Floor/ConcretBlock',
+    'Pillar_0': 'Floor/20cmHighPillar10cm[0]',
+    'Pillar_1': 'Floor/20cmHighPillar10cm[1]',
+    'Table': 'diningTable',
+    'Laptop_0': 'diningTable/laptop[0]',
+    'Laptop_1': 'diningTable/laptop[1]',
+    'Fence_0': 'Floor/20cmHighWall100cm[0]',
+    'Fence_1': 'Floor/20cmHighWall100cm[1]'
+}
+\end{lstlisting}
+
+Este mapeamento permitiu a descoberta e manipulação dos objetos na cena através da interface ZMQ Remote API do CoppeliaSim de maneira mais eficiente, visto que uma cena carregada pode ter diferentes objetos de não interesse. Note, o mesmo é feito para os exercícios 5 e 6.
+
+\section{Exercício 2: Diagrama de Transformações} \label{sec:ex2}
+
+Neste exercício, foi desenvolvido um diagrama representando as relações entre os sistemas de coordenadas dos objetos na cena. O frame do Mundo \{W\} serve como referência global para todas as transformações.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=14cm]{Figures/ex2-diagram.drawio.png}
+\caption{Diagrama de transformações mostrando os sistemas de coordenadas e as relações entre os diferentes frames na cena. Para exemplificação, as setas verdes representam transformações conhecidas, enquanto a seta vermelha mostra uma transformação desejada.}
+\label{fig:ex2-diagram}
+\end{figure}
+
+Ainda, o diagrama ilustra:
+\begin{itemize}
+    \item Sistemas de coordenadas de cada objeto da nossa cena T1;
+    \item As transformações dos sistemas de coordenadas e um exemplo extra de transformação composta.
+\end{itemize}
+
+A representação matemática destas transformações é feita através de matrizes homogêneas da forma \cite[p.~6]{macharet2025transformacoes}:
+
+\begin{equation} \label{eq:homog_matrix}
+{^A_B}T = \begin{bmatrix} {^A_B}R & {^A_B}p \\ 0_{1 \times 3} & 1 \end{bmatrix}
+\end{equation}
+
+\begin{conditions}
+    {^A_B}T & Matriz de transformação homogênea do frame B para o frame A; \\
+    {^A_B}R & Matriz de rotação 3×3 do frame B para o frame A; \\
+    {^A_B}p & Vetor de translação 3×1 da origem do frame B p/ no frame A; \\
+    0_{1 \times 3} & Vetor linha de zeros; \\
+    1 & Elemento escalar para completar a matriz homogênea.
+\end{conditions}
+
+\section{Exercício 3: Matrizes de Transformação Homogêneas} \label{sec:ex3}
+
+O terceiro exercício consistiu na implementação das matrizes de transformação homogêneas que representam as posições de todos os elementos da cena no referencial local do robô. Para isso, foram desenvolvidas funções específicas para:
+
+\begin{enumerate}
+    \item Criar matrizes de rotação em torno dos eixos X, Y e Z;
+    \item Compor matrizes homogêneas a partir de posições e orientações;
+    \item Calcular transformações inversas;
+    \item Visualizar as relações espaciais entre objetos.
+\end{enumerate}
+
+Dessa forma, realizamos a implementação das Funções de Transformação. Onde as funções de rotação em torno dos eixos principais foram implementadas, conforme o Trecho de Código \ref{lst:rotation_matrices}.
+
+\begin{lstlisting}[language=Python, caption=Funções para matrizes de rotação, label=lst:rotation_matrices]
+def Rz(theta: float) -> np.ndarray:
+    """
+    Create a 3x3 rotation matrix around the Z-axis.
+    """
+    return np.array([[np.cos(theta), -np.sin(theta), 0],
+                     [np.sin(theta),  np.cos(theta), 0],
+                     [0,              0,             1]])
+
+def Ry(theta: float) -> np.ndarray:
+    """
+    Create a 3x3 rotation matrix around the Y-axis.
+    """
+    return np.array([[np.cos(theta),  0, np.sin(theta)],
+                     [0,              1, 0],
+                     [-np.sin(theta), 0, np.cos(theta)]])
+
+def Rx(theta: float) -> np.ndarray:
+    """
+    Create a 3x3 rotation matrix around the X-axis.
+    """
+    return np.array([[1, 0,              0],
+                     [0, np.cos(theta), -np.sin(theta)],
+                     [0, np.sin(theta),  np.cos(theta)]])
+\end{lstlisting}
+
+Enquanto, a função para criar matrizes homogêneas combina as rotações e translações,  conforme o Trecho de Código \ref{lst:homogeneous_matrix}.
+
+\begin{lstlisting}[language=Python, caption=Função para criar matriz homogênea, label=lst:homogeneous_matrix]
+def create_homogeneous_matrix(position: np.ndarray, euler_angles: np.ndarray) -> np.ndarray:
+    """
+    Cria uma matriz de transformação homogênea 4x4 a partir da posição e ângulos de Euler.
+    Assume a convenção ZYX (Yaw, Pitch, Roll).
+    """
+    # Atribui os ângulos de Euler (rx, ry, rz) aos seus respectivos nomes
+    roll = euler_angles[0]   # Rotação em torno de X
+    pitch = euler_angles[1]  # Rotação em torno de Y
+    yaw = euler_angles[2]    # Rotação em torno de Z
+
+    # Constrói a matriz de rotação usando a convenção ZYX (Yaw-Pitch-Roll)
+    R = Rz(yaw) @ Ry(pitch) @ Rx(roll)
+
+    # Monta a matriz de transformação homogênea 4x4
+    T = np.eye(4)
+    T[:3, :3] = R
+    T[:3, 3] = position
+
+    return T
+\end{lstlisting}
+
+Por fim, a inversão eficiente de uma matriz homogênea foi implementada utilizando a estrutura especial desse tipo de matriz, conforme o Trecho de Código \ref{lst:invert_matrix}.
+
+\begin{lstlisting}[language=Python, caption=Função para inverter matriz homogênea., label=lst:invert_matrix]
+def invert_homogeneous_matrix(T: np.ndarray) -> np.ndarray:
+    """
+    Efficiently invert a 4x4 homogeneous transformation matrix.
+    T^-1 = [[R^T, -R^T * p], [0, 1]]
+    """
+    R = T[:3, :3]
+    P = T[:3, 3]
+
+    R_inv = R.T
+    P_inv = -R_inv @ P
+
+    T_inv = np.eye(4)
+    T_inv[:3, :3] = R_inv
+    T_inv[:3, 3] = P_inv
+
+    return T_inv
+\end{lstlisting}
+
+Não adicionamos todos os trechos de códigos para esta solução, de modo a manter o documento mais legível. Aconselhamos a leitura diretamente no arquivo de \texttt{utils}.
+
+\subsection{Análise da Posição Inicial} \label{subsec:posicao-inicial}
+
+Utilizando as funções implementadas (\ref{lst:rotation_matrices}, \ref{lst:homogeneous_matrix}, \ref{lst:invert_matrix}...),  foi realizada a análise da pose inicial do robô na cena da Figura \ref{fig:scene-t1}.
+
+A pose do robô foi obtida e apresentada em termos de posição e orientação, conforme o Trecho de Código \ref{lst:robot_pose}.
+
+\begin{lstlisting}[language=Python, caption=Obtenção da pose do robô., label=lst:robot_pose]
+# Verificar pose inicial do robô
+robot_pose = connector.get_object_pose('Robot')
+
+if robot_pose:
+    position, orientation = robot_pose
+    print("Pose inicial do robô:")
+    print(f"Posição (x, y, z): [{position[0]:.3f}, {position[1]:.3f}, {position[2]:.3f}] metros")
+    print(f"Orientação (rx, ry, rz): [{orientation[0]:.3f}, {orientation[1]:.3f}, {orientation[2]:.3f}] radianos")
+
+    # Converter para graus para melhor visualização
+    orientation_deg = np.rad2deg(orientation)
+    print(f"Orientação (rx, ry, rz): [{orientation_deg[0]:.1f}°, {orientation_deg[1]:.1f}°, {orientation_deg[2]:.1f}°]")
+\end{lstlisting}
+
+Em seguida, foram calculadas e visualizadas as transformações entre o robô e todos os demais objetos na cena, conforme o Trecho de Código \ref{lst:analyze_transformations}.
+
+\begin{lstlisting}[language=Python, caption=Cálculo das transformações relativas., label=lst:analyze_transformations]
+def analyze_scene_transformations(connector, object_handles, scenario_name="Pose Inicial"):
+    """
+    Analisa e exibe as transformações entre objetos na cena.
+    """
+    print(f"\n=== Análise de Transformações - {scenario_name} ===")
+
+    # Criar analisador de cena
+    analyzer = SceneAnalyzer(connector)
+
+    # Obter lista de objetos (excluindo o robô)
+    object_names = [name for name in object_handles.keys() if name != 'Robot']
+
+    # Calcular poses relativas
+    relative_poses = analyzer.calculate_relative_poses('Robot', object_names)
+
+    print(f"\nTransformações calculadas para {len(relative_poses)} objetos:")
+
+    for obj_name, T_R_O in relative_poses.items():
+        # Extrair posição e orientação no frame do robô
+        pos_R = T_R_O[:3, 3]
+
+        print(f"\n{obj_name}:")
+        print(f"  Posição no frame do robô: [{pos_R[0]:.3f}, {pos_R[1]:.3f}, {pos_R[2]:.3f}] m")
+
+        # Validar matriz de transformação
+        is_valid = validate_transformation_matrix(T_R_O)
+        print(f"  Matriz válida: {'ok' if is_valid else 'nope'}")
+
+    # Gerar plot
+    analyzer.plot_scene_from_robot_perspective('Robot', object_names, scenario_name)
+
+    return relative_poses
+\end{lstlisting}
+
+Resultando no gráfico da Figura \ref{PoseInicial} apresentando essas transformações.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=12cm]{Figures/PoseInicial.png}
+\caption{Poses dos objetos da perspectiva do Robô.}
+\label{PoseInicial}
+\end{figure}
+
+\section{Exercício 4: Múltiplas Posições do Robô} \label{sec:ex4}
+
+No quarto exercício, o robô foi posicionado em três localizações diferentes na cena para verificar que a implementação funcionava corretamente em diferentes configurações. As posições testadas foram:
+
+\begin{enumerate}
+    \item Posição original (como mostrado na Figura \ref{fig:scene-t1});
+    \item Posição na coordenada (0, 0) (Cenário A, Figura \ref{fig:posicao-a});
+    \item Posição ao lado do objeto Bill\_1 (Cenário B, Figura \ref{fig:posicao-b});
+    \item Posição com a traseira voltada para o objeto Crate (Cenário C, Figura \ref{fig:posicao-c}).
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\begin{minipage}[b]{0.45\textwidth}
+    \includegraphics[width=\textwidth]{Figures/Screenshota.png}
+    \caption{Cenário A: Posição na coordenada (0, 0).}
+    \label{fig:posicao-a}
+\end{minipage}
+\hfill
+\begin{minipage}[b]{0.45\textwidth}
+    \includegraphics[width=\textwidth]{Figures/Screenshotb.png}
+    \caption{Cenário B: Posição ao lado do Bill\_1.}
+    \label{fig:posicao-b}
+\end{minipage}
+
+\vspace{0.5cm}
+\begin{minipage}[b]{0.45\textwidth}
+    \includegraphics[width=\textwidth]{Figures/Screenshotc.png}
+    \caption{Cenário C: Posição com traseira para o Crate.}
+    \label{fig:posicao-c}
+\end{minipage}
+\caption{Diferentes posições do robô utilizadas para validação das transformações.}
+\label{fig:multiplas-posicoes}
+\end{figure}
+
+Em cada uma dessas posições, foram calculadas as matrizes de transformação homogêneas entre o robô e todos os objetos, demonstrando a corretude da implementação independentemente da localização do robô na cena,  conforme o Trecho de Código \ref{lst:multiple_positions}:
+
+\begin{lstlisting}[language=Python, caption=Análise de transformações em diferentes cenários., label=lst:multiple_positions]
+# Cenário A
+wait_for_user_input("Pressione Enter após mover o robô para a x0 y0...")
+scenario_a_poses = analyze_scene_transformations(connector, object_handles, "Cenário A: 0 0")
+
+# Cenário B
+wait_for_user_input("Pressione Enter após mover o robô para a posição de lado para bill_1)...")
+scenario_b_poses = analyze_scene_transformations(connector, object_handles, "Cenário B: Posição de lado para bill_1")
+
+# Cenário C
+wait_for_user_input("Pressione Enter após mover o robô para a posição com a traseira para Crate)...")
+scenario_c_poses = analyze_scene_transformations(connector, object_handles, "Cenário C: Posição Traseira para Crate)")
+\end{lstlisting}
+
+Em cada cenário, foram gerados gráficos visualizando as posições relativas dos objetos a partir do referencial do robô, confirmando que o sistema de transformações funciona corretamente para qualquer configuração da cena. Por exemplo, o gráfico da Figura \ref{fig:00} representando o Cenário A: 0 0 e Figura \ref{fig:bill}. Os demais gráficos podem ser encontrados nos arquivos fontes disponibilizados juntamente com este documento.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}[b]{0.45\textwidth}
+    % --- FIX IS HERE ---
+    \includegraphics[width=\textwidth]{Figures/0 0.png} 
+    \caption{Poses dos objetos da perspectiva do Robô no Cenário A: 0 0.}
+    \label{fig:00}
+\end{minipage}
+\hfill
+\begin{minipage}[b]{0.45\textwidth}
+    \includegraphics[width=\textwidth]{Figures/Posição de lado para bill_1.png}
+    \caption{|| Cenário B: Posição de lado para bill\_1.}
+    \label{fig:bill}
+\end{minipage}
+\end{figure}
+
+\section{Exercício 5: Transformação de Dados do Laser para o Referencial Global} \label{sec:ex5}
+
+No quinto exercício, o foco foi a integração do sensor laser (Hokuyo) ao robô Pioneer P3DX e a transformação dos dados do sensor do referencial local para o referencial global do mundo.
+
+\subsection{Atualização do Cenário} \label{subsec:atualizacao-cenario}
+
+Para os exercícios 5 e 6, foi necessário modificar o cenário devido a problemas com os pilares originais, que causavam erros de \textit{Crashing} no simulador. Portanto, a cena para os próximos exercícios pode ser visto na Figura \ref{fig:cenario-ex5-6}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=12cm]{Figures/Screenshot-inicial_EX5_6.png}
+\caption{Cenário modificado para os exercícios 5-6, com o robô Pioneer P3DX e sensor laser Hokuyo.}
+\label{fig:cenario-ex5-6}
+\end{figure}
+
+As principais alterações incluíram:
+\begin{itemize}
+    \item Remoção dos pilares problemáticos;
+    \item Adição de novos elementos (cadeiras, plantas, paredes);
+    \item Aumento da altura das paredes para melhor detecção pelo laser;
+    \item Atualização do mapeamento de objetos.
+\end{itemize}
+
+O novo mapeamento de objetos foi definido, conforme o Trecho de Código \ref{lst:object_mapping_ex5_6}.
+
+\begin{lstlisting}[language=Python, caption=Mapeamento de objetos atualizado para exercícios 5-6., label=lst:object_mapping_ex5_6]
+DEFAULT_OBJECT_MAPPING_EX5_6 = {
+    'Robot': 'PioneerP3DX',
+...
+    'SwivelChair': 'swivelChair',
+    'Plant': 'indoorPlant',
+    'Hokuyo': 'PioneerP3DX/fastHokuyo',
+...
+}
+\end{lstlisting}
+
+\subsection{Transformações entre Referenciais} \label{subsec:transformacoes-referenciais}
+
+Para transformar os dados do laser do seu referencial local para o referencial global, foram definidas as seguintes transformações:
+
+\begin{enumerate}
+    \item ${^R_L}T$ (laser → robô): Transformação do referencial do laser para o referencial do robô;
+    \item ${^W_R}T$ (robô → mundo): Transformação do referencial do robô para o referencial global;
+    \item ${^W_L}T = {^W_R}T \cdot {^R_L}T$: Transformação completa do referencial do laser para o referencial global.
+\end{enumerate}
+
+A implementação desta transformação foi realizada através da função do Trecho de Código \ref{lst:transform_laser_data}.
+
+\begin{lstlisting}[language=Python, caption=Função para transformar dados do laser para o referencial global., label=lst:transform_laser_data]
+def transform_laser_data_to_global_frame(sim, laser_data, robot_handle, hokuyo_handle):
+    """
+    Transforma os dados do laser do referencial local para o referencial global.
+    """
+    # Obter pose do laser em relação ao robô
+    laser_pos_robot = sim.getObjectPosition(hokuyo_handle, robot_handle)
+    laser_orient_robot = sim.getObjectOrientation(hokuyo_handle, robot_handle)
+
+    # Criar matriz de transformação do laser para o robô (R_T_L)
+    R_T_L = create_homogeneous_matrix(
+        np.array(laser_pos_robot),
+        np.array(laser_orient_robot)
+    )
+
+    # Obter pose do robô no referencial global
+    robot_pos_world = sim.getObjectPosition(robot_handle, sim.handle_world)
+    robot_orient_world = sim.getObjectOrientation(robot_handle, sim.handle_world)
+
+    # Criar matriz de transformação do robô para o mundo (W_T_R)
+    W_T_R = create_homogeneous_matrix(
+        np.array(robot_pos_world),
+        np.array(robot_orient_world)
+    )
+
+    # Transformação completa do laser para o mundo (W_T_L = W_T_R * R_T_L)
+    W_T_L = W_T_R @ R_T_L
+
+    # Converter dados do laser para pontos 3D no referencial do laser
+    points_in_laser_frame = []
+    for angle, distance in laser_data:
+        # Converter de coordenadas polares para cartesianas no plano xy do laser
+        x = distance * np.cos(angle)
+        y = distance * np.sin(angle)
+        z = 0  # O laser está no plano xy
+
+        # Ponto homogêneo no referencial do laser [x, y, z, 1]
+        point_laser = np.array([x, y, z, 1])
+
+        # Transformar para o referencial global
+        point_global = W_T_L @ point_laser
+
+        # Armazenar as coordenadas x, y, z
+        points_in_global_frame = point_global[:3]
+        points_in_laser_frame.append(points_in_global_frame)
+
+    return np.array(points_in_laser_frame)
+\end{lstlisting}
+
+\subsection{Visualização dos Dados Transformados} \label{subsec:visualizacao-dados}
+
+Para visualizar os resultados, foram implementadas funções para plotar os dados do laser tanto no referencial local quanto no referencial global, reutilizando as funções do notebook da aula03, conforme o Trecho de Código \ref{lst:plot_laser_global}.
+
+\begin{lstlisting}[language=Python, caption=Função para plotar dados do laser no referencial global., label=lst:plot_laser_global]
+def plot_laser_data_global(global_points, robot_pos_global, max_range=10):
+    """
+    Plota os dados do laser no referencial global.
+    """
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111, aspect='equal')
+    ax.set_title("Dados do Laser no Referencial Global")
+    ax.set_xlabel("X (metros)")
+    ax.set_ylabel("Y (metros)")
+
+    # Plotar os pontos do laser
+    ax.scatter(global_points[:, 0], global_points[:, 1], c='r', marker='.', label='Pontos do Laser')
+
+    # Plotar a posição do robô
+    ax.plot(robot_pos_global[0], robot_pos_global[1], 'bo', markersize=10, label='Robô')
+
+    ax.grid(True)
+    ax.legend()
+    ax.set_xlim([robot_pos_global[0] - max_range, robot_pos_global[0] + max_range])
+    ax.set_ylim([robot_pos_global[1] - max_range, robot_pos_global[1] + max_range])
+
+    plt.show()
+\end{lstlisting}
+
+Os gráficos resultantes para os Dados do Laser no Referencial Global podem ser vistos na Figura \ref{fig:global}. Enquanto os dados do laser após uma movimentação podem ser visualizados no gráfico da Figura \ref{fig:movi}. Por fim, os demais gráficos podem ser encontrados no arquivo fonte.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}[b]{0.45\textwidth}
+    \includegraphics[width=\textwidth]{Figures/outputVisualizando dados no referencial global.png}
+    \caption{Dados do Laser no Referencial Global.}
+    \label{fig:global}
+\end{minipage}
+\hfill
+\begin{minipage}[b]{0.45\textwidth}
+    \includegraphics[width=\textwidth]{Figures/outputPosição 2 (Após movimento).png}
+    \caption{Posição 2 (Após movimento).}
+    \label{fig:movi}
+\end{minipage}
+\end{figure}
+
+
+\section{Exercício 6: Navegação Autônoma e Mapeamento Incremental} \label{sec:ex6}
+
+O sexto e último exercício combinou os conceitos anteriores para implementar uma navegação autônoma básica do robô, enquanto realizava um mapeamento incremental do ambiente utilizando os dados do sensor laser. Sabendo disso, a função principal para realizar o mapeamento incremental pode ser vista no Trecho de Código \ref{lst:plot_incremental_map}.
+
+\begin{lstlisting}[language=Python, caption=Função para plotar mapa incremental., label=lst:plot_incremental_map]
+def plot_incremental_map(robot_trajectory, all_laser_points):
+    """
+    Cria um plot incremental mostrando a trajetória do robô e todos os pontos do laser.
+    """
+    fig = plt.figure(figsize=(12, 12))
+    ax = fig.add_subplot(111, aspect='equal')
+    ax.set_title("Mapeamento Incremental - Trajetória do Robô e Pontos do Laser")
+    ax.set_xlabel("X (metros)")
+    ax.set_ylabel("Y (metros)")
+
+    # Converter trajetória para arrays
+    traj_x = [pos[0] for pos in robot_trajectory]
+    traj_y = [pos[1] for pos in robot_trajectory]
+
+    # Plotar a trajetória do robô como uma linha tracejada
+    ax.plot(traj_x, traj_y, 'b--', linewidth=2, label='Trajetória do Robô')
+
+    # Plotar pontos iniciais e finais da trajetória
+    ax.plot(traj_x[0], traj_y[0], 'go', markersize=8, label='Posição Inicial')
+    ax.plot(traj_x[-1], traj_y[-1], 'ro', markersize=8, label='Posição Final')
+
+    # Plotar todos os pontos do laser (mapa combinado)
+    all_points = np.vstack(all_laser_points)
+    ax.scatter(all_points[:, 0], all_points[:, 1], c='r', marker='.', s=2, alpha=0.6, label='Leituras do Laser')
+
+    ax.grid(True)
+    ax.legend()
+
+    # Ajustar os limites para cobrir toda a área
+    min_x = min(np.min(all_points[:, 0]), np.min(traj_x)) - 1
+    max_x = max(np.max(all_points[:, 0]), np.max(traj_x)) + 1
+    min_y = min(np.min(all_points[:, 1]), np.min(traj_y)) - 1
+    max_y = max(np.max(all_points[:, 1]), np.max(traj_y)) + 1
+
+    ax.set_xlim([min_x, max_x])
+    ax.set_ylim([min_y, max_y])
+
+    plt.show()
+
+    return fig, ax
+\end{lstlisting}
+
+Por fim, foi implementado um algoritmo simplificado de navegação autônoma com desvio de obstáculos, seguindo o código base do notebook da aula03, conforme o Trecho de Código \ref{lst:navigation_algorithm}.
+
+\begin{lstlisting}[language=Python, caption=Algoritmo de navegação autônoma com desvio de obstáculos., label=lst:navigation_algorithm]
+# Identificar pontos de interesse no laser
+frente_idx = min(int(len(laser_data) / 2), len(laser_data) - 1)
+direita_idx = min(int(len(laser_data) * 1 / 4), len(laser_data) - 1)
+esquerda_idx = min(int(len(laser_data) * 3 / 4), len(laser_data) - 1)
+
+# Obter distâncias em direções específicas
+dist_frente = laser_data[frente_idx, 1] if frente_idx < len(laser_data) else 5.0
+dist_direita = laser_data[direita_idx, 1] if direita_idx < len(laser_data) else 5.0
+dist_esquerda = laser_data[esquerda_idx, 1] if esquerda_idx < len(laser_data) else 5.0
+
+# Lógica de navegação com desvio de obstáculos
+threshold_dist = 1.5  # distância limiar para detecção de obstáculo (m)
+
+if dist_frente > threshold_dist:
+    # Caminho livre à frente
+    v = 0.3
+    w = 0
+
+    # Ajuste fino de direção se há obstáculo próximo
+    if dist_direita < threshold_dist and dist_esquerda > threshold_dist:
+        # Obstáculo à direita, ajuste suave para a esquerda
+        w = 0.2
+    elif dist_esquerda < threshold_dist and dist_direita > threshold_dist:
+        # Obstáculo à esquerda, ajuste suave para a direita
+        w = -0.2
+elif dist_direita > dist_esquerda:
+    # Obstáculo à frente, mas espaço à direita
+    v = 0.1
+    w = -0.5  # girar à direita
+else:
+    # Obstáculo à frente, mas espaço à esquerda
+    v = 0.1
+    w = 0.5  # girar à esquerda
+
+# Converter para velocidades das rodas usando o modelo cinemático
+wl = v / r - (w * L) / (2 * r)
+wr = v / r + (w * L) / (2 * r)
+\end{lstlisting}
+
+Durante a navegação, o algoritmo realizou as seguintes etapas para o mapeamento incremental:
+
+\begin{enumerate}
+    \item Armazenamento da trajetória do robô (sequência de posições);
+    \item Captura de dados do sensor laser em cada passo;
+    \item Transformação dos pontos do laser para o referencial global;
+    \item Acumulação de todos os pontos em uma única representação;
+    \item Visualização da trajetória e do mapa resultante.
+\end{enumerate}
+
+Resultando, assim, no gráfico da Figura \ref{fig:incre}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=12cm]{Figures/outputNavegação Autônoma e Mapeamento Incremental.png}
+\caption{Mapa incremental com o caminho executado pelo robô.}
+\label{fig:incre}
+\end{figure}
+
+\chapter{Conclusão} \label{chp:conclusao}
+
+Este trabalho prático proporcionou uma compreensão aprofundada sobre sistemas de coordenadas, transformações homogêneas, integração de sensores e navegação básica de robôs móveis. 
+
+\section{Resultados Obtidos} \label{subsec:resultados}
+
+Através deste trabalho prático, foram implementados com sucesso todos os exercícios propostos, os quais possibilitaram:
+
+\begin{enumerate}
+    \item \textbf{Criação de Cena}: ambiente de simulação com robô e múltiplos objetos;
+    \item \textbf{Diagrama de Transformações}: representação visual das relações entre frames;
+    \item \textbf{Matrizes Homogêneas}: implementação e validação de transformações homogêneas;
+    \item \textbf{Múltiplas Posições}: verificação do funcionamento em diferentes configurações;
+    \item \textbf{Transformação de Dados de Laser}: conversão entre referenciais local e global;
+    \item \textbf{Navegação e Mapeamento}: algoritmo de navegação autônoma com mapeamento incremental.
+\end{enumerate}
+
+Os resultados demonstram a correta aplicação dos conceitos de transformações homogêneas e integração de sensores em um ambiente de simulação.
+
+\section{Dificuldades Enfrentadas} \label{subsec:dificuldades}
+
+Durante o desenvolvimento do trabalho, foram enfrentadas algumas dificuldades:
+
+\begin{enumerate}
+    \item \textbf{Problemas com a Cena do CoppeliaSim}: os pilares usados na primeira cena causavam erros para execução da simulação, exigindo a modificação do cenário para os exercícios 5-6;
+
+    \item \textbf{Acesso aos Sensores}: o acesso aos sensores de visão requer um conhecimento específico da API do CoppeliaSim, o que levou à reutilização de código fornecido pelo professor para interagir com o sensor laser Hokuyo;
+
+    \item \textbf{Integração entre Matrizes de Transformação}: garantir a consistência nas multiplicações de matrizes homogêneas entre os diferentes referenciais exigiu atenção especial à ordem das operações, às convenções de rotação adotadas e testes massivos.
+\end{enumerate}
+
