@@ -1,0 +1,51 @@
+# CARLA Server Configuration
+carla:
+  # Server connection settings
+  host: "localhost"
+  port: 2000
+  timeout: 10.0
+  
+  # World settings
+  map_name: "Town01"  # Default map for training
+  synchronous_mode: true
+  fixed_delta_seconds: 0.05  # 20 FPS for stable training
+  
+  # Rendering settings (optimized for RTX 2060)
+  quality_level: "Low"
+  no_rendering_mode: false  # Set to true for headless training
+  windowed: true
+  resolution:
+    width: 640
+    height: 480
+  
+  # Weather settings
+  weather:
+    cloudiness: 0.0
+    precipitation: 0.0
+    precipitation_deposits: 0.0
+    wind_intensity: 0.0
+    sun_azimuth_angle: 270.0
+    sun_altitude_angle: 70.0
+  
+  # Vehicle settings
+  vehicle:
+    blueprint: "vehicle.tesla.model3"
+    spawn_point_index: 0  # Use specific spawn point for consistency
+    
+  # Sensor settings
+  sensors:
+    camera:
+      blueprint: "sensor.camera.rgb"
+      width: 640
+      height: 480
+      fov: 90.0
+      sensor_tick: 0.0  # Capture every frame
+      location: [2.0, 0.0, 1.0]  # Forward-facing camera
+      rotation: [0.0, 0.0, 0.0]
+      
+    collision:
+      blueprint: "sensor.other.collision"
+      
+    imu:
+      blueprint: "sensor.other.imu"
+      sensor_tick: 0.05

@@ -1,0 +1,99 @@
+{
+  "timestamp": "2025-09-20T17:38:39.416090",
+  "system_info": {
+    "os": "Linux-5.15.0-139-generic-x86_64-with-glibc2.29",
+    "python_version": "3.8.10",
+    "architecture": "64bit",
+    "hostname": "danielterra"
+  },
+  "python_packages": {
+    "carla": {
+      "status": "installed",
+      "version": "Unknown"
+    },
+    "torch": {
+      "status": "missing",
+      "version": null
+    },
+    "stable_baselines3": {
+      "status": "missing",
+      "version": null
+    },
+    "gymnasium": {
+      "status": "missing",
+      "version": null
+    },
+    "cv2": {
+      "status": "installed",
+      "version": "4.2.0"
+    },
+    "numpy": {
+      "status": "installed",
+      "version": "1.24.4"
+    },
+    "rclpy": {
+      "status": "installed",
+      "version": "Unknown"
+    },
+    "matplotlib": {
+      "status": "installed",
+      "version": "3.1.2"
+    },
+    "tensorboard": {
+      "status": "missing",
+      "version": null
+    },
+    "scipy": {
+      "status": "installed",
+      "version": "1.10.1"
+    },
+    "pandas": {
+      "status": "installed",
+      "version": "2.0.3"
+    },
+    "yaml": {
+      "status": "installed",
+      "version": "6.0.2"
+    },
+    "zmq": {
+      "status": "installed",
+      "version": "27.0.2"
+    }
+  },
+  "ros2_packages": {
+    "distro": "foxy"
+  },
+  "carla_status": {
+    "python_api": true,
+    "server_running": false,
+    "executable_path": "/home/danielterra/CarlaUE4.sh"
+  },
+  "gpu_info": {},
+  "recommendations": [
+    "Consider using Ubuntu 20.04 for best ROS 2 Foxy compatibility"
+  ],
+  "critical_issues": [
+    "Missing critical package: PyTorch",
+    "Missing critical package: Stable-Baselines3",
+    "Missing critical package: Gymnasium",
+    "Missing critical package: TensorBoard",
+    "CARLA ROS 2 bridge packages not installed"
+  ],
+  "next_steps": [
+    {
+      "priority": "CRITICAL",
+      "action": "Install missing Python packages",
+      "command": "pip3 install torch stable_baselines3"
+    },
+    {
+      "priority": "HIGH",
+      "action": "Install CARLA ROS 2 bridge",
+      "command": "sudo apt install ros-foxy-carla-ros-bridge"
+    },
+    {
+      "priority": "MEDIUM",
+      "action": "Start CARLA server",
+      "command": "./CarlaUE4.sh -RenderOffScreen"
+    }
+  ]
+}

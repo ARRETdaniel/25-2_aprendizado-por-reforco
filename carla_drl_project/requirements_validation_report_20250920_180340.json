@@ -1,0 +1,115 @@
+{
+  "timestamp": "2025-09-20T18:03:34.899527",
+  "system_info": {
+    "os": "Linux-5.15.0-139-generic-x86_64-with-glibc2.29",
+    "python_version": "3.8.10",
+    "architecture": "64bit",
+    "hostname": "danielterra"
+  },
+  "python_packages": {
+    "carla": {
+      "status": "installed",
+      "version": "Unknown"
+    },
+    "torch": {
+      "status": "installed",
+      "version": "2.4.1+cu118"
+    },
+    "stable_baselines3": {
+      "status": "installed",
+      "version": "2.4.1"
+    },
+    "gymnasium": {
+      "status": "installed",
+      "version": "1.0.0"
+    },
+    "cv2": {
+      "status": "installed",
+      "version": "4.12.0"
+    },
+    "numpy": {
+      "status": "installed",
+      "version": "1.24.4"
+    },
+    "rclpy": {
+      "status": "installed",
+      "version": "Unknown"
+    },
+    "matplotlib": {
+      "status": "installed",
+      "version": "3.1.2"
+    },
+    "tensorboard": {
+      "status": "installed",
+      "version": "2.14.0"
+    },
+    "scipy": {
+      "status": "installed",
+      "version": "1.10.1"
+    },
+    "pandas": {
+      "status": "installed",
+      "version": "2.0.3"
+    },
+    "yaml": {
+      "status": "installed",
+      "version": "6.0.2"
+    },
+    "zmq": {
+      "status": "installed",
+      "version": "27.0.2"
+    }
+  },
+  "ros2_packages": {
+    "distro": "foxy",
+    "carla_packages": [
+      "carla_ackermann_control",
+      "carla_ackermann_msgs",
+      "carla_ad_agent",
+      "carla_ad_demo",
+      "carla_common",
+      "carla_manual_control",
+      "carla_msgs",
+      "carla_ros_bridge",
+      "carla_ros_scenario_runner",
+      "carla_ros_scenario_runner_types",
+      "carla_spawn_objects",
+      "carla_twist_to_control",
+      "carla_walker_agent",
+      "carla_waypoint_publisher",
+      "carla_waypoint_types",
+      "rqt_carla_control",
+      "rviz_carla_plugin"
+    ]
+  },
+  "carla_status": {
+    "python_api": true,
+    "server_running": false,
+    "executable_path": "/home/danielterra/CarlaUE4.sh"
+  },
+  "gpu_info": {
+    "cuda_available": true,
+    "device_count": 1,
+    "current_device": 0,
+    "device_name": "NVIDIA GeForce RTX 2060",
+    "cuda_version": "11.8",
+    "memory_total_gb": 5.605224609375,
+    "memory_allocated_gb": 0.0
+  },
+  "recommendations": [
+    "Consider using Ubuntu 20.04 for best ROS 2 Foxy compatibility"
+  ],
+  "critical_issues": [],
+  "next_steps": [
+    {
+      "priority": "MEDIUM",
+      "action": "Start CARLA server",
+      "command": "./CarlaUE4.sh -RenderOffScreen"
+    },
+    {
+      "priority": "OPTIMIZATION",
+      "action": "Configure memory optimization",
+      "details": "Use headless mode, low resolution, small batch sizes"
+    }
+  ]
+}
