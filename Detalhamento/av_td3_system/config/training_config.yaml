@@ -11,14 +11,14 @@ scenarios:
     num_pedestrians: 0
     weather: 'ClearNoon'
     max_episodes: 2000  # Paper requirement
-    
+
   - name: 'town01_medium_traffic'
     map: 'Town01'
     num_vehicles: 50  # Medium traffic
     num_pedestrians: 0
     weather: 'ClearNoon'
     max_episodes: 2000  # Paper requirement
-    
+
   - name: 'town01_heavy_traffic'
     map: 'Town01'
     num_vehicles: 100  # Heavy traffic
@@ -31,14 +31,14 @@ episode:
   max_steps: 1000  # Maximum timesteps per episode
   max_duration: 300.0  # Maximum duration in seconds (5 minutes)
   max_distance: 1000.0  # Maximum distance in meters
-  
+
   # Success criteria
   success:
     reach_goal: true  # Must reach destination
     no_collision: true  # Must not collide
     stay_on_road: true  # Must stay on drivable area
     min_distance_ratio: 0.8  # Must cover at least 80% of route
-    
+
   # Termination conditions
   termination:
     on_collision: true  # End episode on collision
@@ -50,7 +50,7 @@ episode:
 training:
   # Total training budget per scenario
   total_timesteps: 2000000  # ~2000 episodes × 1000 steps
-  
+
   # Curriculum learning (optional, start with easier scenarios)
   curriculum:
     enabled: false  # Disable for now (train on target scenario directly)
@@ -58,7 +58,7 @@ training:
     progression_criteria:
       success_rate_threshold: 0.7  # Move to next scenario at 70% success
       min_episodes: 500  # Minimum episodes before progression
-      
+
   # Training phases
   phases:
     # Phase 1: Warm-up with random exploration
@@ -66,13 +66,13 @@ training:
       timesteps: 25000  # Match algorithm learning_starts
       exploration: 'uniform_random'
       update_networks: false
-      
+
     # Phase 2: Active learning with exploration noise
     - name: 'active_learning'
       timesteps: 1975000  # Remaining timesteps
       exploration: 'gaussian_noise'
       update_networks: true
-      
+
   # Checkpoint management
   checkpointing:
     save_freq: 10000  # Save every 10k timesteps
@@ -81,7 +81,7 @@ training:
     save_final: true  # Save final checkpoint
     save_replay_buffer: true  # Save replay buffer (large files!)
     checkpoint_dir: './data/checkpoints/'
-    
+
   # Evaluation during training
   evaluation:
     enabled: true
@@ -90,28 +90,28 @@ training:
     deterministic: true  # No exploration noise during evaluation
     record_video: false  # Don't record during training eval (saves disk)
     log_metrics: true  # Log evaluation metrics to TensorBoard/WandB
-    
+
   # Early stopping (optional)
   early_stopping:
     enabled: false  # Disable for paper experiments (full training)
     patience: 10  # Stop if no improvement for N evaluations
     min_delta: 0.01  # Minimum improvement threshold
     metric: 'success_rate'  # Metric to monitor
-    
+
 # Logging configuration
 logging:
   # Console output
   console:
     verbose: 1  # 0: no output, 1: info, 2: debug
     log_freq: 100  # Print training stats every N episodes
-    
+
   # TensorBoard
   tensorboard:
     enabled: true
     log_dir: './data/logs/tensorboard/'
     log_graph: false  # Log network architecture (slow)
     log_interval: 100  # Log every N timesteps
-    
+
   # Weights & Biases
   wandb:
     enabled: true
@@ -123,13 +123,13 @@ logging:
     save_code: true  # Upload code to WandB
     monitor_gym: true  # Log videos and metrics from gym environment
     log_interval: 100  # Log every N timesteps
-    
+
   # File logging
   file:
     enabled: true
     log_dir: './data/logs/training/'
     log_level: 'INFO'  # DEBUG, INFO, WARNING, ERROR
-    
+
   # Metrics to track
   metrics:
     training:
@@ -140,7 +140,7 @@ logging:
       - 'q_value_mean'  # Mean Q-value
       - 'collision_rate'  # Collisions per episode
       - 'success_rate'  # Success rate (rolling average)
-      
+
     evaluation:
       - 'mean_reward'  # Mean evaluation reward
       - 'std_reward'  # Std dev of evaluation reward
@@ -160,21 +160,21 @@ evaluation:
       num_pedestrians: 0
       weather: 'ClearNoon'
       n_episodes: 20  # Paper requirement (minimum)
-      
+
     - name: 'test_medium_traffic'
       map: 'Town01'
       num_vehicles: 50
       num_pedestrians: 0
       weather: 'ClearNoon'
       n_episodes: 20
-      
+
     - name: 'test_heavy_traffic'
       map: 'Town01'
       num_vehicles: 100
       num_pedestrians: 0
       weather: 'ClearNoon'
       n_episodes: 20
-      
+
     # Robustness tests (optional, not in paper)
     - name: 'test_rain'
       map: 'Town01'
@@ -182,14 +182,14 @@ evaluation:
       num_pedestrians: 0
       weather: 'WetCloudyNoon'
       n_episodes: 10
-      
+
   # Evaluation settings
   deterministic: true  # Always use deterministic policy
   render: false  # Headless evaluation (faster)
   record_video: true  # Record episodes for analysis
   video_fps: 20  # Frames per second for video
   video_dir: './data/videos/evaluation/'
-  
+
   # Metrics to compute (paper requirements)
   metrics:
     # Safety metrics (PRIMARY)
@@ -200,32 +200,32 @@ evaluation:
       - 'offroad_count'  # Number of off-road events
       - 'min_ttc'  # Minimum time-to-collision (seconds)
       - 'ttc_violations'  # Number of times TTC < 2.0 seconds
-      
+
     # Efficiency metrics
     efficiency:
       - 'average_speed'  # Mean speed during episode (km/h)
       - 'completion_time'  # Time to complete route (seconds)
       - 'route_completion_ratio'  # Percentage of route completed
-      
+
     # Comfort metrics
     comfort:
       - 'avg_longitudinal_jerk'  # Mean abs longitudinal jerk (m/s³)
       - 'max_longitudinal_jerk'  # Max abs longitudinal jerk (m/s³)
       - 'avg_lateral_acceleration'  # Mean abs lateral acceleration (m/s²)
       - 'max_lateral_acceleration'  # Max abs lateral acceleration (m/s²)
-      
+
     # Navigation metrics
     navigation:
       - 'avg_lateral_error'  # Mean distance from lane center (m)
       - 'avg_heading_error'  # Mean heading error (degrees)
       - 'lane_departure_count'  # Number of lane departures
-      
+
   # Statistical analysis
   statistics:
     compute_confidence_intervals: true
     confidence_level: 0.95  # 95% confidence intervals
     min_episodes: 20  # Minimum episodes for statistical validity
-    
+
   # Results export
   export:
     csv: true  # Export results to CSV
@@ -239,22 +239,22 @@ comparison:
     - name: 'TD3'
       config: './config/td3_config.yaml'
       checkpoint: null  # Path to trained checkpoint (set at runtime)
-      
+
     - name: 'DDPG'
       config: './config/ddpg_config.yaml'
       checkpoint: null  # Path to trained checkpoint (set at runtime)
-      
+
     # Classical baseline (optional, implement separately)
     # - name: 'IDM_MOBIL'
     #   type: 'classical'
     #   config: './config/idm_mobil_config.yaml'
-      
+
   # Statistical comparison
   statistical_tests:
     - 'mann_whitney_u'  # Non-parametric test (does not assume normality)
     - 'wilcoxon_signed_rank'  # Paired test for matched scenarios
     - 'anova'  # Analysis of variance (if multiple agents)
-    
+
   # Visualization
   visualization:
     generate_plots: true
@@ -274,12 +274,12 @@ resources:
     device_id: 0  # CUDA device ID
     memory_fraction: 0.8  # Fraction of GPU memory to use
     allow_growth: true  # Allow dynamic memory growth
-    
+
   # CPU settings
   cpu:
     n_workers: 4  # Number of parallel environments (if vectorized)
     n_threads: 8  # Number of threads for PyTorch
-    
+
   # Memory management
   memory:
     replay_buffer_on_gpu: false  # Keep replay buffer on CPU (saves GPU RAM)
@@ -304,7 +304,7 @@ experiment:
   institution: 'Federal University of Minas Gerais (UFMG)'
   advisor: 'Luiz Chaimowicz'
   date: '2025-10-20'
-  
+
   # Experiment organization
   tags:
     - 'deep-reinforcement-learning'
@@ -315,7 +315,7 @@ experiment:
     - 'visual-navigation'
     - 'end-to-end'
     - 'ieee-paper'
-    
+
   # Output organization
   output_structure:
     base_dir: './data/'

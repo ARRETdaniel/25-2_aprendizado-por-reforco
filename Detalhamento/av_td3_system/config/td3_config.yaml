@@ -5,27 +5,27 @@
 
 algorithm:
   name: 'TD3'
-  
+
   # Core TD3 hyperparameters (from official implementation)
   learning_rate: 0.0003  # 3e-4, Adam optimizer for both actor and critics
   discount: 0.99  # Gamma (γ), discount factor for future rewards
   tau: 0.005  # Polyak averaging coefficient (ρ) for soft target network updates
-  
+
   # TD3-specific mechanisms
   policy_noise: 0.2  # Sigma (σ) for target policy smoothing (scaled by max_action)
   noise_clip: 0.5  # Clip value (c) for target policy noise (scaled by max_action)
   policy_freq: 2  # Delayed policy updates - update actor every 2 critic updates
-  
+
   # Training parameters
   batch_size: 256  # Mini-batch size sampled from replay buffer
   buffer_size: 1000000  # Replay buffer capacity (1M transitions)
   learning_starts: 25000  # Warm-up timesteps with uniform random exploration
   train_freq: 1  # Update networks every step
   gradient_steps: -1  # -1 means as many gradient steps as environment steps
-  
+
   # Exploration noise (added to actor output during training)
   exploration_noise: 0.1  # Std of Gaussian noise (scaled by max_action)
-  
+
 # Network architecture (matching official TD3 implementation)
 networks:
   # Actor network (deterministic policy μ_φ(s))
@@ -34,28 +34,28 @@ networks:
     activation: 'relu'  # ReLU activation for hidden layers
     output_activation: 'tanh'  # Tanh for bounded action output [-1, 1]
     learning_rate: 0.0003  # Can override algorithm learning_rate if needed
-    
+
   # Twin Critic networks (Q_θ1(s,a) and Q_θ2(s,a))
   critic:
     hidden_layers: [256, 256]  # Two hidden layers with 256 neurons each
     activation: 'relu'  # ReLU activation
     n_critics: 2  # Twin critics for clipped double Q-learning
     learning_rate: 0.0003  # Can override algorithm learning_rate if needed
-    
+
   # CNN Feature Extractor (for visual input processing)
   cnn_extractor:
     # Architecture type: 'nature' (NatureCNN), 'resnet18', 'mobilenet_v2'
     architecture: 'nature'  # NatureCNN from DQN paper (default in SB3)
-    
+
     # Input preprocessing
     input_channels: 4  # Stack of 4 consecutive grayscale frames
     input_height: 84  # Resized height (from 256→84 or 144→84)
     input_width: 84  # Resized width (from 256→84 or 144→84)
-    
+
     # Transfer learning options
     use_pretrained: false  # Use ImageNet pre-trained weights
     freeze_features: false  # Freeze feature extractor during training
-    
+
     # Feature dimension output (after CNN, before concatenation with vector obs)
     features_dim: 512  # Output dimension from CNN (NatureCNN outputs 512)
 
@@ -68,7 +68,7 @@ state:
     grayscale: true  # Convert RGB to grayscale
     normalize: true  # Normalize pixel values to [0, 1]
     resize: [84, 84]  # Resize to 84x84 (smaller for faster training)
-    
+
   # Kinematic features (vehicle state)
   kinematic:
     enabled: true
@@ -77,7 +77,7 @@ state:
       - 'lateral_deviation'  # Distance from lane center (m)
       - 'heading_error'  # Heading error w.r.t. lane direction (radians)
     normalize: true  # Normalize kinematic features
-    
+
   # Goal-oriented features (waypoints)
   waypoints:
     enabled: true
@@ -90,16 +90,16 @@ state:
 action:
   type: 'continuous'  # Continuous action space
   dim: 2  # [steering, throttle/brake]
-  
+
   # Action bounds
   steering:
     min: -1.0  # Full left
     max: 1.0   # Full right
-    
+
   throttle_brake:
     min: -1.0  # Full brake (negative values)
     max: 1.0   # Full throttle (positive values)
-    
+
   # Action scaling (if needed for CARLA compatibility)
   scale_steering: 1.0  # Multiply steering output by this factor
   scale_throttle_brake: 1.0  # Multiply throttle/brake output by this factor
@@ -112,22 +112,22 @@ reward:
     lane_keeping: 2.0  # Reward for staying centered in lane
     comfort: 0.5  # Penalty for high jerk (smooth driving)
     safety: -100.0  # Large penalty for collisions/violations
-    
+
   # Efficiency reward parameters
   efficiency:
     target_speed: 10.0  # Target speed in m/s (~36 km/h, urban speed)
     speed_tolerance: 2.0  # Tolerance around target speed (m/s)
     overspeed_penalty_scale: 2.0  # Amplify penalty for exceeding speed limit
-    
+
   # Lane keeping reward parameters
   lane_keeping:
     lateral_tolerance: 0.5  # Acceptable lateral deviation (meters)
     heading_tolerance: 0.1  # Acceptable heading error (radians, ~5.7 degrees)
-    
+
   # Comfort penalty parameters
   comfort:
     jerk_threshold: 3.0  # Jerk magnitude threshold for penalty (m/s³)
-    
+
   # Safety penalty parameters
   safety:
     collision_penalty: -1000.0  # Terminal penalty for collision
@@ -139,17 +139,17 @@ training:
   # Episode settings
   max_timesteps: 2000000  # Total training timesteps (~2000 episodes × 1000 steps)
   max_episode_steps: 1000  # Maximum steps per episode (CARLA default)
-  
+
   # Checkpointing
   save_freq: 10000  # Save model every N timesteps
   checkpoint_dir: './data/checkpoints/td3/'
   save_replay_buffer: true  # Save replay buffer with checkpoint
-  
+
   # Evaluation during training
   eval_freq: 5000  # Evaluate every N timesteps
   n_eval_episodes: 10  # Number of episodes for evaluation
   eval_deterministic: true  # Use deterministic policy (no exploration noise)
-  
+
   # Logging
   log_dir: './data/logs/td3/'
   tensorboard: true  # Enable TensorBoard logging
@@ -159,7 +159,7 @@ training:
     entity: null  # WandB username/team (set via env var or here)
     tags: ['TD3', 'CARLA', 'Town01', 'visual-navigation']
     notes: 'TD3 agent for end-to-end visual autonomous navigation'
-  
+
   # Verbosity
   verbose: 1  # 0: no output, 1: info, 2: debug
 
@@ -170,7 +170,7 @@ evaluation:
   render: false  # Render simulation (slow, use for visualization only)
   record_video: true  # Record video of evaluation episodes
   video_dir: './data/videos/td3/'
-  
+
   # Metrics to compute
   metrics:
     - 'success_rate'  # Percentage of collision-free episodes

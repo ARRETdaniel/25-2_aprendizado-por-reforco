@@ -25,7 +25,7 @@ import carla
 class CARLACameraManager:
     """
     Manages front-facing RGB camera sensor.
-    
+
     Responsibilities:
     - Capture RGB images from CARLA
     - Preprocess images (grayscale, resize, normalize)
@@ -98,7 +98,7 @@ class CARLACameraManager:
     def _on_camera_frame(self, image: carla.Image):
         """
         Callback when camera frame arrives.
-        
+
         Converts CARLA image to numpy, preprocesses, and queues.
         Runs in CARLA's callback thread, so must be thread-safe.
         """
@@ -127,15 +127,15 @@ class CARLACameraManager:
     def _preprocess(self, image: np.ndarray) -> np.ndarray:
         """
         Preprocess image for CNN.
-        
+
         Steps:
         1. Convert to grayscale
         2. Resize to 84×84 (standard for CNN in RL)
         3. Normalize to [0, 1]
-        
+
         Args:
             image: RGB image as numpy array (H×W×3) with values 0-255
-            
+
         Returns:
             Grayscale image (84×84) normalized to [0, 1]
         """
@@ -155,7 +155,7 @@ class CARLACameraManager:
     def get_latest_frame(self) -> Optional[np.ndarray]:
         """
         Get latest preprocessed frame.
-        
+
         Returns:
             84×84 grayscale image normalized [0,1], or None if no frame available
         """
@@ -172,10 +172,10 @@ class CARLACameraManager:
 class ImageStack:
     """
     Maintains stack of 4 most recent frames for temporal context.
-    
+
     This is critical for RL: individual frames are ambiguous (can't tell velocity
     from static image), but 4 stacked frames show motion and acceleration.
-    
+
     Uses FIFO queue: pushes new frame, pops oldest.
     """
 
@@ -404,7 +404,7 @@ class LaneInvasionDetector:
 class SensorSuite:
     """
     Aggregates all sensors and provides unified interface.
-    
+
     Manages camera, collision, lane invasion detectors.
     Provides synchronized access to all sensor data.
     """
@@ -445,7 +445,7 @@ class SensorSuite:
     def tick(self):
         """
         Process sensor data for current frame.
-        
+
         Called once per simulation step to:
         - Capture latest camera frame and add to stack
         - Update collision/lane status

@@ -1,8 +1,8 @@
 # TD3 Official Implementation Insights
 
-**Source:** Official TD3 repository (Fujimoto et al. 2018)  
-**Repository:** https://github.com/sfujim/TD3  
-**Paper:** [Addressing Function Approximation Error in Actor-Critic Methods](https://arxiv.org/abs/1802.09477)  
+**Source:** Official TD3 repository (Fujimoto et al. 2018)
+**Repository:** https://github.com/sfujim/TD3
+**Paper:** [Addressing Function Approximation Error in Actor-Critic Methods](https://arxiv.org/abs/1802.09477)
 **Date Analyzed:** October 20, 2025
 
 ---
@@ -45,7 +45,7 @@ with torch.no_grad():
     # Mechanism 3: Target Policy Smoothing
     noise = (torch.randn_like(action) * policy_noise).clamp(-noise_clip, noise_clip)
     next_action = (actor_target(next_state) + noise).clamp(-max_action, max_action)
-    
+
     # Mechanism 1: Clipped Double Q-Learning
     target_Q1, target_Q2 = critic_target(next_state, next_action)
     target_Q = torch.min(target_Q1, target_Q2)
@@ -63,7 +63,7 @@ critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q
 if total_it % policy_freq == 0:
     # Only update actor and targets every 'policy_freq' critic updates
     actor_loss = -critic.Q1(state, actor(state)).mean()
-    
+
     # Update target networks (Polyak averaging)
     for param, target_param in zip(critic.parameters(), critic_target.parameters()):
         target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
@@ -177,12 +177,12 @@ class ReplayBuffer:
         self.max_size = max_size
         self.ptr = 0  # Circular pointer
         self.size = 0  # Current buffer size
-        
+
         # Pre-allocate arrays
         self.state = np.zeros((max_size, state_dim))
         self.action = np.zeros((max_size, action_dim))
         # ... etc
-    
+
     def sample(self, batch_size):
         ind = np.random.randint(0, self.size, size=batch_size)
         return (
@@ -243,7 +243,7 @@ class ReplayBuffer:
 
 ### State Representation
 
-**Original TD3:** Low-dimensional vector state (e.g., joint angles, velocities)  
+**Original TD3:** Low-dimensional vector state (e.g., joint angles, velocities)
 **Our Adaptation:** High-dimensional visual + vector state
 
 **Changes Needed:**
@@ -253,7 +253,7 @@ class ReplayBuffer:
 
 **Architecture Flow:**
 ```
-Camera Images (4 × 256 × 144) 
+Camera Images (4 × 256 × 144)
     ↓ [Preprocess: resize, grayscale, normalize]
 (4 × 84 × 84)
     ↓ [CNN Feature Extractor: NatureCNN/ResNet]
@@ -266,7 +266,7 @@ Action (2-dim: steering, throttle/brake)
 
 ### Action Mapping
 
-**Original:** Actions directly compatible with gym environment  
+**Original:** Actions directly compatible with gym environment
 **Our Challenge:** Map [-1, 1] to CARLA's separate throttle/brake controls
 
 **Solution:**
@@ -274,20 +274,20 @@ Action (2-dim: steering, throttle/brake)
 def map_action_to_carla(action):
     steering = action[0]  # [-1, 1] → directly to CARLA
     throttle_brake = action[1]  # [-1, 1]
-    
+
     if throttle_brake >= 0:
         throttle = throttle_brake  # [0, 1]
         brake = 0.0
     else:
         throttle = 0.0
         brake = -throttle_brake  # [0, 1]
-    
+
     return steering, throttle, brake
 ```
 
 ### Reward Engineering
 
-**Original:** Task-specific rewards (e.g., forward velocity for HalfCheetah)  
+**Original:** Task-specific rewards (e.g., forward velocity for HalfCheetah)
 **Our Task:** Multi-component reward for safe, efficient, comfortable driving
 
 **Components (from our config):**
@@ -300,7 +300,7 @@ def map_action_to_carla(action):
 
 ### Episode Termination
 
-**Original:** Fixed episode length or task completion  
+**Original:** Fixed episode length or task completion
 **Our Task:** Multiple termination conditions
 
 **Conditions:**
@@ -456,7 +456,7 @@ model.learn(total_timesteps=2000000)
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** October 20, 2025  
-**Author:** Daniel Terra Gomes  
+**Document Version:** 1.0
+**Last Updated:** October 20, 2025
+**Author:** Daniel Terra Gomes
 **Project:** End-to-End Visual Autonomous Navigation with TD3

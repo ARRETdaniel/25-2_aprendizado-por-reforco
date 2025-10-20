@@ -19,7 +19,7 @@ import logging
 class RewardCalculator:
     """
     Computes multi-component reward for driving policy training.
-    
+
     Reward components (configurable weights):
     1. Efficiency: Reward for target speed tracking
     2. Lane Keeping: Reward for staying in lane

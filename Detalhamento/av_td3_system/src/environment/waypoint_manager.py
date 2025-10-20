@@ -17,7 +17,7 @@ import logging
 class WaypointManager:
     """
     Manages route waypoints in vehicle-local coordinates.
-    
+
     Responsibilities:
     1. Load waypoints from file (format: x, y, z)
     2. Transform to vehicle-local frame

@@ -22,11 +22,11 @@ from typing import Tuple
 class ReplayBuffer:
     """
     Experience replay buffer for off-policy RL algorithms.
-    
+
     Stores transitions as (state, action, next_state, reward, not_done) tuples
     and samples random mini-batches for network training. The 'not_done' flag
     is the inverse of 'done' for convenient use in Bellman updates.
-    
+
     Attributes:
         max_size: Maximum number of transitions to store
         ptr: Current write pointer in circular buffer
@@ -157,10 +157,10 @@ class ReplayBuffer:
 # Example usage and testing
 if __name__ == "__main__":
     print("Testing ReplayBuffer...")
-    
+
     # Initialize buffer
     buffer = ReplayBuffer(state_dim=535, action_dim=2, max_size=1000)
-    
+
     # Add some dummy transitions
     for i in range(100):
         state = np.random.randn(535)
@@ -168,16 +168,16 @@ if __name__ == "__main__":
         next_state = np.random.randn(535)
         reward = np.random.randn()
         done = (i % 10 == 0)  # Episode ends every 10 steps
-        
+
         buffer.add(state, action, next_state, reward, done)
-    
+
     print(f"Buffer size: {len(buffer)}")
     print(f"Buffer full: {buffer.is_full()}")
-    
+
     # Sample a batch
     batch = buffer.sample(batch_size=32)
     states, actions, next_states, rewards, not_dones = batch
-    
+
     print(f"\nSampled batch shapes:")
     print(f"  States: {states.shape}")
     print(f"  Actions: {actions.shape}")
@@ -185,5 +185,5 @@ if __name__ == "__main__":
     print(f"  Rewards: {rewards.shape}")
     print(f"  Not dones: {not_dones.shape}")
     print(f"  Device: {states.device}")
-    
+
     print("\n✓ ReplayBuffer tests passed!")
