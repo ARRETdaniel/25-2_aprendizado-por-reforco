@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # Main training container
+  td3-training:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: td3-av-system:latest
+    container_name: td3_training
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - DISPLAY=${DISPLAY}  # For visualization if needed
+      - AGENT_TYPE=TD3
+      - EPISODES=2000
+      - TRAFFIC_DENSITY=50
+    volumes:
+      - ./data:/workspace/data
+      - ./results:/workspace/results
+      - ./config:/workspace/av_td3_system/config
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro  # X11 socket (optional)
+    network_mode: host
+    stdin_open: true
+    tty: true
+    command: python3 /workspace/av_td3_system/scripts/train_td3.py --config /workspace/av_td3_system/config/td3_config.yaml
+
+  # DDPG baseline training (can run in parallel on different GPU)
+  ddpg-training:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: td3-av-system:latest
+    container_name: ddpg_training
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1  # Use second GPU if available
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - AGENT_TYPE=DDPG
+      - EPISODES=2000
+      - TRAFFIC_DENSITY=50
+    volumes:
+      - ./data:/workspace/data
+      - ./results:/workspace/results
+      - ./config:/workspace/av_td3_system/config
+    network_mode: host
+    command: python3 /workspace/av_td3_system/scripts/train_ddpg.py --config /workspace/av_td3_system/config/ddpg_config.yaml
+    profiles:
+      - multi-gpu  # Only start if explicitly requested
+
+  # Evaluation container
+  evaluation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: td3-av-system:latest
+    container_name: td3_evaluation
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - EPISODES=20
+    volumes:
+      - ./data:/workspace/data
+      - ./results:/workspace/results
+      - ./config:/workspace/av_td3_system/config
+    network_mode: host
+    command: python3 /workspace/av_td3_system/scripts/evaluate.py --checkpoint /workspace/data/checkpoints/td3_final.pth
+    profiles:
+      - evaluation  # Only start if explicitly requested
+
+  # TensorBoard for monitoring
+  tensorboard:
+    image: tensorflow/tensorflow:latest
+    container_name: td3_tensorboard
+    ports:
+      - "6006:6006"
+    volumes:
+      - ./data/logs:/logs
+    command: tensorboard --logdir /logs --host 0.0.0.0
+    profiles:
+      - monitoring
+
+volumes:
+  data:
+  results:

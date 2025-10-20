@@ -1,0 +1,612 @@
+"""
+CARLA Autonomous Vehicle Environment (Gym Interface)
+
+Implements OpenAI Gym interface for CARLA vehicle control with:
+- TD3-compatible observation and action spaces
+- Multi-component reward function
+- Full sensor integration (camera, collision, lane invasion)
+- Waypoint-based navigation
+- Episode management and termination logic
+
+Paper Reference: "End-to-End Visual Autonomous Navigation with Twin Delayed DDPG"
+Section III: System Architecture and Environment Setup
+"""
+
+import numpy as np
+import logging
+import time
+from typing import Dict, Tuple, Optional, Any
+from collections import deque
+import yaml
+
+import carla
+from gym import Env, spaces
+
+# Relative imports
+from .sensors import SensorSuite
+from .waypoint_manager import WaypointManager
+from .reward_functions import RewardCalculator
+
+
+class CARLANavigationEnv(Env):
+    """
+    CARLA autonomous vehicle navigation environment.
+
+    Gym interface for training DRL agents (TD3/DDPG) on autonomous driving in CARLA.
+
+    State Space:
+    - Visual: 4 stacked 84×84 grayscale frames (from front camera)
+    - Kinematic: velocity, lateral deviation, heading error
+    - Navigation: 10 future waypoints (local coordinates)
+    - Total: Dict with 'image' (4×84×84) + 'vector' (535-dim)
+
+    Action Space:
+    - Continuous 2D: [steering, throttle_brake]
+    - Ranges: [-1, 1] for both
+    - Maps to CARLA: steering ∈ [-1,1], throttle ∈ [0,1], brake ∈ [0,1]
+
+    Reward:
+    - Multi-component: efficiency, lane-keeping, comfort, safety
+    - Weighted sum of components
+    """
+
+    def __init__(
+        self,
+        carla_config_path: str,
+        td3_config_path: str,
+        training_config_path: str,
+        host: str = "localhost",
+        port: int = 2000,
+        headless: bool = True,
+    ):
+        """
+        Initialize CARLA environment.
+
+        Args:
+            carla_config_path: Path to carla_config.yaml
+            td3_config_path: Path to td3_config.yaml
+            training_config_path: Path to training_config.yaml
+            host: CARLA server host (default localhost)
+            port: CARLA server port (default 2000)
+            headless: Whether to run without rendering (default True)
+
+        Raises:
+            RuntimeError: If cannot connect to CARLA server or invalid config
+        """
+        self.logger = logging.getLogger(__name__)
+
+        # Load configurations
+        with open(carla_config_path, "r") as f:
+            self.carla_config = yaml.safe_load(f)
+        with open(td3_config_path, "r") as f:
+            self.td3_config = yaml.safe_load(f)
+        with open(training_config_path, "r") as f:
+            self.training_config = yaml.safe_load(f)
+
+        # Connection parameters
+        self.host = host
+        self.port = port
+        self.client = None
+        self.world = None
+        self.traffic_manager = None
+
+        # Initialize CARLA connection
+        self._connect_to_carla()
+
+        # Map and route setup
+        map_name = self.carla_config.get("simulation", {}).get("map", "Town01")
+        self.logger.info(f"Loading map: {map_name}")
+        self.world = self.client.load_world(map_name)
+
+        # Synchronous mode setup
+        settings = self.world.get_settings()
+        settings.synchronous_mode = True
+        settings.fixed_delta_seconds = (
+            1.0 / self.carla_config.get("simulation", {}).get("fps", 20)
+        )
+        self.world.apply_settings(settings)
+
+        # Disable rendering if headless
+        if headless:
+            self.world.unload_map_layer(carla.MapLayer.All)
+
+        # Get spawn points
+        self.spawn_points = self.world.get_map().get_spawn_points()
+        if not self.spawn_points:
+            raise RuntimeError("No spawn points available in map")
+
+        # Initialize vehicle and sensors
+        self.vehicle = None
+        self.sensors = None
+        self.npcs = []
+
+        # Waypoint manager
+        waypoints_file = self.carla_config.get("route", {}).get(
+            "waypoints_file", "waypoints.txt"
+        )
+        self.waypoint_manager = WaypointManager(
+            waypoints_file=waypoints_file,
+            lookahead_distance=self.carla_config.get("route", {}).get(
+                "lookahead_distance", 50.0
+            ),
+            num_waypoints_ahead=self.carla_config.get("route", {}).get(
+                "num_waypoints_ahead", 10
+            ),
+        )
+
+        # Reward calculator
+        reward_config = self.training_config.get("reward", {})
+        self.reward_calculator = RewardCalculator(reward_config)
+
+        # Episode state
+        self.current_step = 0
+        self.episode_start_time = None
+        self.max_episode_steps = (
+            self.carla_config.get("episode", {}).get("max_duration_seconds", 300) * 20
+        )  # Convert to steps @ 20 Hz
+
+        # Action/observation spaces
+        self._setup_spaces()
+
+        self.logger.info(
+            f"CARLA environment initialized: {map_name}, {self.max_episode_steps} steps/episode"
+        )
+
+    def _connect_to_carla(self, max_retries: int = 5):
+        """
+        Connect to CARLA server with retry logic.
+
+        Args:
+            max_retries: Maximum connection attempts
+
+        Raises:
+            RuntimeError: If cannot connect after max_retries
+        """
+        for attempt in range(max_retries):
+            try:
+                self.client = carla.Client(self.host, self.port)
+                self.client.set_timeout(10.0)
+                # Test connection
+                self.client.get_server_version()
+                self.logger.info(f"Connected to CARLA server at {self.host}:{self.port}")
+                return
+            except Exception as e:
+                self.logger.warning(
+                    f"Connection attempt {attempt + 1}/{max_retries} failed: {e}"
+                )
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+                else:
+                    raise RuntimeError(
+                        f"Failed to connect to CARLA server after {max_retries} attempts"
+                    )
+
+    def _setup_spaces(self):
+        """
+        Define observation and action spaces (Gym API).
+
+        Observation space:
+        - Dict with 'image' (4×84×84 float32 [0,1]) and 'vector' (23-dim kinematic+waypoint state)
+
+        Action space:
+        - Box: 2D continuous [-1, 1]
+        """
+        # Image observation: 4 stacked frames, 84×84
+        image_space = spaces.Box(
+            low=0.0,
+            high=1.0,
+            shape=(4, 84, 84),
+            dtype=np.float32,
+        )
+
+        # Vector observation: velocity (1) + lateral_dev (1) + heading_err (1) + waypoints (20)
+        vector_space = spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(23,),  # 1 + 1 + 1 + 20
+            dtype=np.float32,
+        )
+
+        # Dict space combining image and vector
+        self.observation_space = spaces.Dict(
+            {
+                "image": image_space,
+                "vector": vector_space,
+            }
+        )
+
+        # Action space: [steering, throttle/brake] in [-1, 1]
+        self.action_space = spaces.Box(
+            low=-1.0,
+            high=1.0,
+            shape=(2,),
+            dtype=np.float32,
+        )
+
+        self.logger.info(
+            f"Observation space: {self.observation_space}\n"
+            f"Action space: {self.action_space}"
+        )
+
+    def reset(self) -> Dict[str, np.ndarray]:
+        """
+        Reset environment for new episode.
+
+        Steps:
+        1. Clean up previous episode (vehicle, NPCs, sensors)
+        2. Spawn new ego vehicle
+        3. Attach sensors
+        4. Spawn NPC traffic
+        5. Initialize state
+        6. Return initial observation
+
+        Returns:
+            Initial observation dict with 'image' and 'vector'
+
+        Raises:
+            RuntimeError: If spawn/setup fails
+        """
+        self.logger.info("Resetting environment...")
+
+        # Clean up previous episode
+        self._cleanup_episode()
+
+        # Spawn ego vehicle (Tesla Model 3)
+        spawn_point = np.random.choice(self.spawn_points)
+        vehicle_bp = self.world.get_blueprint_library().find("vehicle.tesla.model3")
+
+        try:
+            self.vehicle = self.world.spawn_actor(vehicle_bp, spawn_point)
+            self.logger.info(f"Ego vehicle spawned at {spawn_point.location}")
+        except RuntimeError as e:
+            raise RuntimeError(f"Failed to spawn ego vehicle: {e}")
+
+        # Attach sensors
+        self.sensors = SensorSuite(self.vehicle, self.carla_config, self.world)
+
+        # Spawn NPC traffic
+        self._spawn_npc_traffic()
+
+        # Initialize state tracking
+        self.current_step = 0
+        self.episode_start_time = time.time()
+        self.waypoint_manager.reset()
+        self.reward_calculator.reset()
+
+        # Tick simulation to initialize sensors
+        self.world.tick()
+        self.sensors.tick()
+
+        # Get initial observation
+        observation = self._get_observation()
+
+        self.logger.info(f"Episode reset. Initial observation shapes: "
+                        f"image {observation['image'].shape}, "
+                        f"vector {observation['vector'].shape}")
+
+        return observation
+
+    def step(self, action: np.ndarray) -> Tuple[Dict, float, bool, Dict]:
+        """
+        Execute one step in the environment.
+
+        Args:
+            action: 2D array [steering, throttle/brake] in [-1, 1]
+
+        Returns:
+            Tuple of (observation, reward, done, info)
+            - observation: Dict with 'image' and 'vector'
+            - reward: Float reward for this step
+            - done: Boolean, True if episode ended
+            - info: Dict with additional metrics
+        """
+        # Apply action to vehicle
+        self._apply_action(action)
+
+        # Tick CARLA simulation
+        self.world.tick()
+        self.sensors.tick()
+
+        # Get new state
+        observation = self._get_observation()
+        vehicle_state = self._get_vehicle_state()
+
+        # Calculate reward
+        reward_dict = self.reward_calculator.calculate(
+            velocity=vehicle_state["velocity"],
+            lateral_deviation=vehicle_state["lateral_deviation"],
+            heading_error=vehicle_state["heading_error"],
+            acceleration=vehicle_state["acceleration"],
+            acceleration_lateral=vehicle_state["acceleration_lateral"],
+            collision_detected=self.sensors.is_collision_detected(),
+            offroad_detected=self.sensors.is_lane_invaded(),
+            wrong_way=vehicle_state["wrong_way"],
+        )
+
+        reward = reward_dict["total"]
+
+        # Check termination conditions
+        done, termination_reason = self._check_termination(vehicle_state)
+
+        # Update step counter
+        self.current_step += 1
+
+        # Prepare info dict
+        info = {
+            "step": self.current_step,
+            "reward_breakdown": reward_dict["breakdown"],
+            "termination_reason": termination_reason,
+            "vehicle_state": vehicle_state,
+            "collision_info": self.sensors.get_collision_info(),
+        }
+
+        if done:
+            self.logger.info(
+                f"Episode ended: {termination_reason} after {self.current_step} steps"
+            )
+
+        return observation, reward, done, info
+
+    def _apply_action(self, action: np.ndarray):
+        """
+        Apply action to vehicle.
+
+        Maps [-1,1] action to CARLA controls:
+        - action[0]: steering ∈ [-1,1] → direct CARLA steering
+        - action[1]: throttle/brake ∈ [-1,1]
+          - negative: brake (throttle=0, brake=-action[1])
+          - positive: throttle (throttle=action[1], brake=0)
+
+        Args:
+            action: 2D array [steering, throttle/brake]
+        """
+        steering = float(np.clip(action[0], -1.0, 1.0))
+        throttle_brake = float(np.clip(action[1], -1.0, 1.0))
+
+        # Separate throttle and brake
+        if throttle_brake > 0:
+            throttle = throttle_brake
+            brake = 0.0
+        else:
+            throttle = 0.0
+            brake = -throttle_brake
+
+        # Create control
+        control = carla.VehicleControl(
+            throttle=throttle,
+            brake=brake,
+            steer=steering,
+            hand_brake=False,
+            reverse=False,
+        )
+
+        self.vehicle.apply_control(control)
+
+    def _get_observation(self) -> Dict[str, np.ndarray]:
+        """
+        Construct observation from sensors and state.
+
+        Returns:
+            Dict with:
+            - 'image': (4, 84, 84) stacked frames, normalized [0,1]
+            - 'vector': (23,) kinematic + waypoint state
+        """
+        # Get camera data (4 stacked frames)
+        image_obs = self.sensors.get_camera_data()
+
+        # Get vehicle state for vector observation
+        vehicle_state = self._get_vehicle_state()
+
+        # Get next waypoints in vehicle frame
+        vehicle_location = self.vehicle.get_location()
+        vehicle_transform = self.vehicle.get_transform()
+        next_waypoints = self.waypoint_manager.get_next_waypoints(
+            vehicle_location, vehicle_transform.rotation.yaw
+        )
+
+        # Construct vector observation
+        vector_obs = np.concatenate(
+            [
+                [vehicle_state["velocity"]],
+                [vehicle_state["lateral_deviation"]],
+                [vehicle_state["heading_error"]],
+                next_waypoints.flatten(),  # 10 waypoints × 2 = 20 dims
+            ]
+        ).astype(np.float32)
+
+        return {
+            "image": image_obs,
+            "vector": vector_obs,
+        }
+
+    def _get_vehicle_state(self) -> Dict[str, float]:
+        """
+        Get current vehicle kinematics and navigation state.
+
+        Returns:
+            Dict with:
+            - velocity: m/s
+            - acceleration: m/s² (longitudinal)
+            - acceleration_lateral: m/s² (lateral)
+            - lateral_deviation: m from route
+            - heading_error: rad from route heading
+            - wrong_way: bool if driving backwards
+        """
+        # Get velocity
+        velocity_vec = self.vehicle.get_velocity()
+        velocity = np.sqrt(
+            velocity_vec.x**2 + velocity_vec.y**2 + velocity_vec.z**2
+        )
+
+        # Get acceleration
+        accel_vec = self.vehicle.get_acceleration()
+        acceleration = np.sqrt(
+            accel_vec.x**2 + accel_vec.y**2 + accel_vec.z**2
+        )
+
+        # Get angular velocity (for lateral acceleration)
+        angular_vel = self.vehicle.get_angular_velocity()
+        acceleration_lateral = abs(velocity * angular_vel.z) if velocity > 0.1 else 0.0
+
+        # Get location and heading
+        location = self.vehicle.get_location()
+        heading = self.vehicle.get_transform().rotation.yaw
+
+        # Route-relative state
+        lateral_deviation = self.waypoint_manager.get_lateral_deviation(location)
+        target_heading = self.waypoint_manager.get_target_heading(location)
+        heading_error = np.arctan2(
+            np.sin(np.radians(heading) - target_heading),
+            np.cos(np.radians(heading) - target_heading),
+        )
+
+        # Check if going backwards (wrong way)
+        forward_vec = self.vehicle.get_transform().get_forward_vector()
+        velocity_vec_normalized = velocity_vec
+        if velocity > 0.1:
+            velocity_vec_normalized = carla.Vector3D(
+                velocity_vec.x / velocity,
+                velocity_vec.y / velocity,
+                velocity_vec.z / velocity,
+            )
+            dot_product = (
+                forward_vec.x * velocity_vec_normalized.x
+                + forward_vec.y * velocity_vec_normalized.y
+            )
+            wrong_way = dot_product < -0.5  # Heading ~180° opposite
+        else:
+            wrong_way = False
+
+        return {
+            "velocity": velocity,
+            "acceleration": acceleration,
+            "acceleration_lateral": acceleration_lateral,
+            "lateral_deviation": lateral_deviation,
+            "heading_error": float(heading_error),
+            "wrong_way": wrong_way,
+        }
+
+    def _check_termination(self, vehicle_state: Dict) -> Tuple[bool, str]:
+        """
+        Check if episode should terminate.
+
+        Termination conditions:
+        1. Collision detected → immediate termination
+        2. Off-road > threshold time
+        3. Wrong way driving > threshold time
+        4. Route completion (reached goal)
+        5. Max steps exceeded
+
+        Args:
+            vehicle_state: Current vehicle state dict
+
+        Returns:
+            Tuple of (done: bool, reason: str)
+        """
+        # Collision: immediate termination
+        if self.sensors.is_collision_detected():
+            return True, "collision"
+
+        # Off-road detection
+        if self.sensors.is_lane_invaded():
+            return True, "off_road"
+
+        # Wrong way: penalize but don't terminate immediately
+        # (penalty is in reward function)
+
+        # Route completion
+        if self.waypoint_manager.is_route_finished():
+            return True, "route_completed"
+
+        # Max steps
+        if self.current_step >= self.max_episode_steps:
+            return True, "max_steps"
+
+        return False, "running"
+
+    def _spawn_npc_traffic(self):
+        """
+        Spawn NPC vehicles for traffic.
+
+        Uses traffic manager for autonomous control.
+        NPC count from training_config.yaml.
+        """
+        # Get configured NPC count
+        scenario = self.training_config.get("scenarios", {}).get("current_scenario", 0)
+        scenarios = self.training_config.get("scenarios", {}).get("traffic_densities", [])
+
+        if scenario < len(scenarios):
+            npc_count = scenarios[scenario].get("num_npcs", 50)
+        else:
+            npc_count = 50
+
+        self.logger.info(f"Spawning {npc_count} NPC vehicles...")
+
+        try:
+            # Get traffic manager
+            self.traffic_manager = self.client.get_trafficmanager()
+            self.traffic_manager.set_synchronous_mode(True)
+
+            # Spawn NPCs
+            vehicle_bp = self.world.get_blueprint_library().filter("vehicle")
+            spawn_points = np.random.choice(
+                self.spawn_points, min(npc_count, len(self.spawn_points)), replace=False
+            )
+
+            for spawn_point in spawn_points:
+                # Avoid spawning at same point as ego vehicle
+                if spawn_point.location.distance(self.vehicle.get_location()) < 10.0:
+                    continue
+
+                try:
+                    npc = self.world.spawn_actor(
+                        np.random.choice(vehicle_bp), spawn_point
+                    )
+                    self.traffic_manager.update_vehicle_lights(npc, True)
+                    self.traffic_manager.auto_lane_change(npc, True)
+                    self.npcs.append(npc)
+                except Exception as e:
+                    self.logger.debug(f"Failed to spawn NPC: {e}")
+
+            self.logger.info(f"Successfully spawned {len(self.npcs)} NPCs")
+
+        except Exception as e:
+            self.logger.warning(f"NPC traffic spawning failed: {e}")
+
+    def _cleanup_episode(self):
+        """Clean up vehicles and sensors from previous episode."""
+        if self.vehicle:
+            self.vehicle.destroy()
+            self.vehicle = None
+
+        if self.sensors:
+            self.sensors.destroy()
+            self.sensors = None
+
+        for npc in self.npcs:
+            try:
+                npc.destroy()
+            except:
+                pass
+        self.npcs = []
+
+    def close(self):
+        """Shut down environment and disconnect from CARLA."""
+        self.logger.info("Closing CARLA environment...")
+
+        self._cleanup_episode()
+
+        if self.world:
+            # Restore async mode
+            settings = self.world.get_settings()
+            settings.synchronous_mode = False
+            self.world.apply_settings(settings)
+
+        if self.client:
+            self.client = None
+
+        self.logger.info("CARLA environment closed")
+
+    def render(self, mode: str = "human"):
+        """Not implemented (CARLA runs headless for efficiency)."""
+        pass
