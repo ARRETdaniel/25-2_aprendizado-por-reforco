@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-TD3 Agent Training Script for Autonomous Vehicle Navigation in CARLA
+DDPG Agent Training Script for Autonomous Vehicle Navigation in CARLA
 
-This script orchestrates the complete training pipeline:
+This script orchestrates the complete training pipeline for DDPG baseline:
 1. Initialize CARLA environment (Gym interface)
-2. Initialize TD3 agent with networks and replay buffer
+2. Initialize DDPG agent with networks and replay buffer
 3. Training loop with:
    - Exploration phase (random actions for buffer population)
    - Policy learning phase (select_action + train steps)
@@ -13,7 +13,7 @@ This script orchestrates the complete training pipeline:
 4. Logging and monitoring (TensorBoard)
 
 Configuration:
-- Load from config/carla_config.yaml, config/td3_config.yaml
+- Load from config/carla_config.yaml, config/ddpg_config.yaml
 - Command-line arguments for scenario selection, seed, etc.
 - TensorBoard logging to logs/ directory
 
@@ -32,13 +32,13 @@ import torch
 import yaml
 from torch.utils.tensorboard import SummaryWriter
 
-from src.agents.td3_agent import TD3Agent
+from src.agents.ddpg_agent import DDPGAgent
 from src.environment.carla_env import CARLANavigationEnv
 
 
-class TD3TrainingPipeline:
+class DDPGTrainingPipeline:
     """
-    Main training pipeline for TD3 agent in CARLA environment.
+    Main training pipeline for DDPG agent in CARLA environment.
 
     Responsibilities:
     - Environment management and episode resets
@@ -57,7 +57,7 @@ class TD3TrainingPipeline:
         checkpoint_freq: int = 10000,
         num_eval_episodes: int = 10,
         carla_config_path: str = "config/carla_config.yaml",
-        agent_config_path: str = "config/td3_config.yaml",
+        agent_config_path: str = "config/ddpg_config.yaml",
         log_dir: str = "data/logs",
         checkpoint_dir: str = "data/checkpoints"
     ):
@@ -72,7 +72,7 @@ class TD3TrainingPipeline:
             checkpoint_freq: Checkpoint saving frequency (steps)
             num_eval_episodes: Number of episodes per evaluation
             carla_config_path: Path to CARLA config
-            agent_config_path: Path to TD3 config
+            agent_config_path: Path to DDPG config
             log_dir: Directory for TensorBoard logs
             checkpoint_dir: Directory for checkpoints
         """
@@ -97,7 +97,7 @@ class TD3TrainingPipeline:
 
         # Load configurations
         print("\n" + "="*70)
-        print("TD3 TRAINING PIPELINE - AUTONOMOUS VEHICLE NAVIGATION")
+        print("DDPG TRAINING PIPELINE - AUTONOMOUS VEHICLE NAVIGATION")
         print("="*70)
         print(f"\n[CONFIG] Loading configurations...")
 
@@ -124,8 +124,8 @@ class TD3TrainingPipeline:
         print(f"[ENVIRONMENT] Action space: {self.env.action_space}")
 
         # Initialize agent
-        print(f"\n[AGENT] Initializing TD3 agent...")
-        self.agent = TD3Agent(
+        print(f"\n[AGENT] Initializing DDPG agent...")
+        self.agent = DDPGAgent(
             state_dim=535,
             action_dim=2,
             max_action=1.0,
@@ -135,7 +135,7 @@ class TD3TrainingPipeline:
         # Initialize logging
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         scenario_name = f"scenario_{scenario}_npcs_{npc_densities[scenario]}"
-        self.log_name = f"TD3_{scenario_name}_{timestamp}"
+        self.log_name = f"DDPG_{scenario_name}_{timestamp}"
         self.log_path = self.log_dir / self.log_name
         self.log_path.mkdir(parents=True, exist_ok=True)
 
@@ -165,7 +165,7 @@ class TD3TrainingPipeline:
         """
         Main training loop.
 
-        Implements the complete TD3 training workflow:
+        Implements the complete DDPG training workflow:
         1. Initialize state from environment reset
         2. For each timestep until convergence:
            - Exploration phase (random actions)
@@ -222,11 +222,8 @@ class TD3TrainingPipeline:
                 # Log training metrics every 100 steps
                 if t % 100 == 0:
                     self.writer.add_scalar('train/critic_loss', metrics['critic_loss'], t)
-                    self.writer.add_scalar('train/q1_value', metrics['q1_value'], t)
-                    self.writer.add_scalar('train/q2_value', metrics['q2_value'], t)
-
-                    if 'actor_loss' in metrics:  # Actor updated only on delayed steps
-                        self.writer.add_scalar('train/actor_loss', metrics['actor_loss'], t)
+                    self.writer.add_scalar('train/q_value', metrics['q_value'], t)
+                    self.writer.add_scalar('train/actor_loss', metrics['actor_loss'], t)
 
             # Episode termination
             if done:
@@ -282,7 +279,7 @@ class TD3TrainingPipeline:
 
             # Checkpoint saving
             if t % self.checkpoint_freq == 0:
-                checkpoint_path = self.checkpoint_dir / f"td3_scenario_{self.scenario}_step_{t}.pth"
+                checkpoint_path = self.checkpoint_dir / f"ddpg_scenario_{self.scenario}_step_{t}.pth"
                 self.agent.save_checkpoint(str(checkpoint_path))
                 print(f"[CHECKPOINT] Saved to {checkpoint_path}")
 
@@ -365,7 +362,7 @@ class TD3TrainingPipeline:
 
 def main():
     """
-    Main entry point for TD3 training script.
+    Main entry point for DDPG training script.
 
     Command-line arguments:
     - --scenario: Traffic scenario (0=20, 1=50, 2=100 NPCs)
@@ -375,7 +372,7 @@ def main():
     - --checkpoint-freq: Checkpoint saving frequency
     """
     parser = argparse.ArgumentParser(
-        description="Train TD3 agent for autonomous vehicle navigation in CARLA"
+        description="Train DDPG agent for autonomous vehicle navigation in CARLA"
     )
     parser.add_argument(
         '--scenario',
@@ -423,8 +420,8 @@ def main():
     parser.add_argument(
         '--agent-config',
         type=str,
-        default='config/td3_config.yaml',
-        help='Path to TD3 agent config file'
+        default='config/ddpg_config.yaml',
+        help='Path to DDPG agent config file'
     )
     parser.add_argument(
         '--log-dir',
@@ -442,7 +439,7 @@ def main():
     args = parser.parse_args()
 
     # Initialize and run training
-    trainer = TD3TrainingPipeline(
+    trainer = DDPGTrainingPipeline(
         scenario=args.scenario,
         seed=args.seed,
         max_timesteps=args.max_timesteps,

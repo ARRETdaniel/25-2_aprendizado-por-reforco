@@ -36,17 +36,17 @@ from src.utils.replay_buffer import ReplayBuffer
 class DDPGAgent:
     """
     DDPG agent for autonomous vehicle control.
-    
+
     The agent learns a deterministic policy that maps states (visual features +
     kinematic data + waypoints) to continuous actions (steering + throttle/brake).
-    
+
     DDPG Mechanisms:
     - Off-policy learning with experience replay
     - Deterministic policy gradient
     - Single Q-network for value estimation
     - Target networks for stable learning (soft updates)
     - Exploration via action noise (not policy smoothing)
-    
+
     Key Attributes:
         actor: Policy network μ_φ(s)
         actor_target: Target policy for stable learning
@@ -119,7 +119,7 @@ class DDPGAgent:
             max_action=max_action,
             hidden_sizes=network_config['hidden_sizes']
         ).to(self.device)
-        
+
         # Create target actor as deep copy
         self.actor_target = copy.deepcopy(self.actor)
         self.actor_optimizer = torch.optim.Adam(
@@ -134,7 +134,7 @@ class DDPGAgent:
             action_dim=action_dim,
             hidden_sizes=critic_config['hidden_sizes']
         ).to(self.device)
-        
+
         # Create target critic as deep copy
         self.critic_target = copy.deepcopy(self.critic)
         self.critic_optimizer = torch.optim.Adam(
@@ -219,7 +219,7 @@ class DDPGAgent:
                 - q_value: Mean Q prediction
         """
         self.total_it += 1
-        
+
         if batch_size is None:
             batch_size = self.batch_size
 
@@ -230,7 +230,7 @@ class DDPGAgent:
             # For DDPG: Use target actor WITHOUT noise smoothing (unlike TD3)
             # This is the key difference: direct target action from target actor
             next_action = self.actor_target(next_state)
-            
+
             # IMPORTANT: DDPG uses SINGLE Q-network (not twin minimum)
             # Compute target Q-value: y = r + γ * Q_θ'(s', μ_φ'(s'))
             target_Q = self.critic_target(next_state, next_action)
@@ -287,7 +287,7 @@ class DDPGAgent:
             filepath: Path to save checkpoint (e.g., 'checkpoints/ddpg_100k.pth')
         """
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        
+
         checkpoint = {
             'total_it': self.total_it,
             'actor_state_dict': self.actor.state_dict(),
@@ -296,7 +296,7 @@ class DDPGAgent:
             'critic_optimizer_state_dict': self.critic_optimizer.state_dict(),
             'config': self.config
         }
-        
+
         torch.save(checkpoint, filepath)
         print(f"Checkpoint saved to {filepath}")
 
@@ -317,22 +317,22 @@ class DDPGAgent:
             raise FileNotFoundError(f"Checkpoint not found: {filepath}")
 
         checkpoint = torch.load(filepath, map_location=self.device)
-        
+
         # Restore networks
         self.actor.load_state_dict(checkpoint['actor_state_dict'])
         self.critic.load_state_dict(checkpoint['critic_state_dict'])
-        
+
         # Recreate target networks
         self.actor_target = copy.deepcopy(self.actor)
         self.critic_target = copy.deepcopy(self.critic)
-        
+
         # Restore optimizers
         self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
         self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
-        
+
         # Restore training state
         self.total_it = checkpoint['total_it']
-        
+
         print(f"Checkpoint loaded from {filepath}")
         print(f"  Resumed at iteration: {self.total_it}")
 
@@ -357,23 +357,23 @@ if __name__ == "__main__":
     print("\n" + "="*60)
     print("DDPG BASELINE AGENT FOR COMPARISON WITH TD3")
     print("="*60)
-    
+
     # Initialize agent (will load config from file)
     agent = DDPGAgent(
         state_dim=535,
         action_dim=2,
         max_action=1.0
     )
-    
+
     print("\nAgent stats:", agent.get_stats())
-    
+
     # Test action selection
     dummy_state = np.random.randn(535)
     action = agent.select_action(dummy_state, noise=0.1)
     print(f"\nSelected action: {action}")
     print(f"  Steering: {action[0]:.3f}")
     print(f"  Throttle/Brake: {action[1]:.3f}")
-    
+
     # Add some transitions to replay buffer
     print("\nFilling replay buffer...")
     for i in range(1000):
@@ -382,11 +382,11 @@ if __name__ == "__main__":
         next_state = np.random.randn(535)
         reward = np.random.randn()
         done = (i % 100 == 0)
-        
+
         agent.replay_buffer.add(state, action, next_state, reward, done)
-    
+
     print(f"Buffer size: {len(agent.replay_buffer)}")
-    
+
     # Test training
     print("\nPerforming 5 training steps...")
     for step in range(5):
@@ -394,15 +394,15 @@ if __name__ == "__main__":
         print(f"Step {step+1}:")
         for key, value in metrics.items():
             print(f"  {key}: {value:.4f}")
-    
+
     # Test checkpoint save/load
     checkpoint_path = "/tmp/test_ddpg_checkpoint.pth"
     print(f"\nSaving checkpoint to {checkpoint_path}...")
     agent.save_checkpoint(checkpoint_path)
-    
+
     print("Loading checkpoint...")
     agent.load_checkpoint(checkpoint_path)
-    
+
     print("\n✓ DDPGAgent tests passed!")
     print("\n" + "="*60)
     print("KEY DIFFERENCES FROM TD3:")

@@ -1,74 +1,96 @@
-# Base image: CARLA 0.9.16 (includes Unreal Engine, Python 3.10)
+# TD3 Autonomous Vehicle System with CARLA 0.9.16
+# SOLUTION: Install Python 3.10 on top of official CARLA 0.9.16 image
+# Based on: https://carla.readthedocs.io/en/latest/build_docker/
+#
+# PROBLEM IDENTIFIED: Official carlasim/carla:0.9.16 has Python 3.8.10
+# but CARLA 0.9.16 wheels are built for Python 3.10, 3.11, 3.12 only
+# SOLUTION: Install Python 3.10 from deadsnakes PPA
+
 FROM carlasim/carla:0.9.16
 
-# Metadata
-LABEL maintainer="Daniel Terra Gomes <danielterragomes@dcc.ufmg.br>"
-LABEL description="TD3-based Autonomous Vehicle System for CARLA + ROS 2"
-LABEL version="1.0"
-
-# Avoid interactive prompts during build
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Switch to root user for installations
+# Switch to root for package installations
 USER root
 
-# Create necessary directories with proper permissions
-RUN mkdir -p /var/lib/apt/lists/partial && chmod -R 755 /var/lib/apt
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV CARLA_ROOT=/workspace
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    software-properties-common \
-    curl \
-    gnupg2 \
-    lsb-release \
-    wget \
-    git \
-    vim \
-    && rm -rf /var/lib/apt/lists/*
+# Install Miniforge for Python 3.10 (uses conda-forge by default, no TOS required)
+# Miniforge is a community-driven conda distribution
+# Also install xvfb for virtual display in headless mode
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        wget \
+        git \
+        curl \
+        ca-certificates \
+        xvfb \
+        mesa-utils && \
+    rm -rf /var/lib/apt/lists/*
 
-# Add ROS 2 repository
-RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
-RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" | \
-    tee /etc/apt/sources.list.d/ros2.list > /dev/null
+# Download and install Miniforge (conda-forge by default, no TOS)
+RUN wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O /tmp/miniforge.sh && \
+    bash /tmp/miniforge.sh -b -p /opt/conda && \
+    rm /tmp/miniforge.sh
 
-# Install ROS 2 Foxy
-RUN apt-get update && apt-get install -y \
-    ros-foxy-desktop \
-    python3-colcon-common-extensions \
-    python3-rosdep \
-    python3-pip \
-    && rm -rf /var/lib/apt/lists/*
+# Add conda to PATH
+ENV PATH="/opt/conda/bin:$PATH"
 
-# Initialize rosdep
-RUN rosdep init || true
-RUN rosdep update
+# Create Python 3.10 environment and make it default
+RUN conda create -y -n py310 python=3.10 pip && \
+    conda clean -afy
 
-# Install Python ML dependencies
-RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
-COPY requirements.txt /tmp/requirements.txt
-# Use --break-system-packages to allow overriding distutils-installed packages from base image (PyYAML, etc.)
-RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
+# Activate the py310 environment by default
+ENV CONDA_DEFAULT_ENV=py310
+ENV CONDA_PREFIX=/opt/conda/envs/py310
+ENV PATH="/opt/conda/envs/py310/bin:$PATH"
 
-# Set up workspace
-WORKDIR /workspace
-COPY . /workspace/av_td3_system/
+# Verify Python version and install pip if needed
+RUN python --version && python -m pip --version
 
-# Set environment variables (must be separated due to Docker build var interpolation)
-ENV CARLA_ROOT=/home/carla/carla
-ENV PYTHONPATH=/home/carla/carla/PythonAPI/carla:/home/carla/carla/PythonAPI/carla/dist:/workspace/av_td3_system/src
-ENV ROS_DISTRO=foxy
-ENV LD_LIBRARY_PATH=/opt/ros/foxy/lib
-# Note: In dockerfile, $VARIABLE references are not expanded recursively, so we use absolute paths instead
+# Upgrade pip and install build tools
+RUN python -m pip install --upgrade pip setuptools==69.2.0 wheel
 
-# Copy entrypoint script
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# Install CARLA Python API from the included wheel (Python 3.10 wheel)
+RUN python -m pip install /workspace/PythonAPI/carla/dist/carla-0.9.16-cp310-cp310-manylinux_2_31_x86_64.whl
 
-# Expose CARLA ports
-EXPOSE 2000 2001 2002
+# Install Gymnasium (modern OpenAI Gym replacement)
+# Required for: src/environment/carla_env.py
+RUN python -m pip install gymnasium==0.29.1
 
-# Set entrypoint
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+# Install PyTorch with CUDA 12.1 support (for RTX 2060 compatibility)
+RUN python -m pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
 
-# Default command: run training
-CMD ["python3", "/workspace/av_td3_system/scripts/train_td3.py", "--config", "/workspace/av_td3_system/config/td3_config.yaml"]
+# Install other Python dependencies
+RUN python -m pip install \
+    numpy==1.24.3 \
+    opencv-python==4.8.1.78 \
+    pyyaml==6.0.1 \
+    tensorboard==2.15.0 \
+    matplotlib==3.7.3 \
+    pandas==2.0.3 \
+    scikit-learn==1.3.2
+
+    # Verify all critical dependencies
+    RUN python -c "import carla; print(f'CARLA API: Successfully imported')" && \
+        python -c "import gymnasium; print(f'Gymnasium: {gymnasium.__version__}')" && \
+        python -c "import torch; print(f'PyTorch: {torch.__version__}, CUDA available: {torch.cuda.is_available()}')" && \
+        python -c "import cv2; print(f'OpenCV: {cv2.__version__}')" && \
+        python -c "import numpy; print(f'NumPy: {numpy.__version__}')" && \
+        python -c "import yaml; print(f'PyYAML: {yaml.__version__}')"
+
+    # Create project directory
+    WORKDIR /workspace/av_td3_system
+
+# Copy project files (will be mounted as volume in practice)
+# COPY . /workspace/av_td3_system/
+
+# Ensure CARLA server script is executable
+RUN chmod +x /workspace/CarlaUE4.sh
+
+# Expose CARLA default ports
+EXPOSE 2000 2001
+
+# Set default command (don't auto-start CARLA server - let user control it)
+CMD ["/bin/bash"]

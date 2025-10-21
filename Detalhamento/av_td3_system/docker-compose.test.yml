@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  # CARLA Server - runs the simulator
+  carla-server:
+    image: carlasim/carla:0.9.16
+    container_name: carla-server-test
+    runtime: nvidia
+    user: "${UID}:${GID}"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - DISPLAY=${DISPLAY}
+    network_mode: host
+    working_dir: /workspace
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    command: bash CarlaUE4.sh -nosound -carla-rpc-port=2000
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import sys; sys.path.insert(0, '/workspace/PythonAPI'); import carla; carla.Client('localhost', 2000).get_world()"]
+      interval: 10s
+      timeout: 60s
+      retries: 10
+      start_period: 60s
+
+  # Test Suite Runner - tests CARLA connectivity
+  test-carla-connectivity:
+    image: td3-av-system:v2.0-python310
+    container_name: test-carla-connectivity
+    depends_on:
+      carla-server:
+        condition: service_healthy
+    network_mode: host
+    working_dir: /workspace
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python3 /workspace/tests/test_2_carla_connectivity.py
+    volumes:
+      - ./data:/workspace/data
+      - ./logs:/workspace/logs
+      - ./:/workspace
+
+  # Test Suite Runner - tests environment integration
+  test-environment:
+    image: td3-av-system:v2.0-python310
+    container_name: test-environment-integration
+    depends_on:
+      carla-server:
+        condition: service_healthy
+    network_mode: host
+    working_dir: /workspace
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python3 /workspace/tests/test_3_environment_integration.py
+    volumes:
+      - ./data:/workspace/data
+      - ./logs:/workspace/logs
+      - ./:/workspace
+
+  # Test Suite Runner - tests agent functionality
+  test-agent:
+    image: td3-av-system:v2.0-python310
+    container_name: test-agent-functionality
+    depends_on:
+      - carla-server
+    network_mode: host
+    working_dir: /workspace
+    environment:
+      - PYTHONUNBUFFERED=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    command: python3 /workspace/tests/test_4_agent_functionality.py
+    volumes:
+      - ./data:/workspace/data
+      - ./logs:/workspace/logs
+      - ./:/workspace
+
+  # Test Suite Runner - training pipeline validation
+  test-training-pipeline:
+    image: td3-av-system:v2.0-python310
+    container_name: test-training-pipeline
+    depends_on:
+      carla-server:
+        condition: service_healthy
+    network_mode: host
+    runtime: nvidia
+    working_dir: /workspace
+    environment:
+      - PYTHONUNBUFFERED=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    command: python3 /workspace/tests/test_5_training_pipeline.py
+    volumes:
+      - ./data:/workspace/data
+      - ./logs:/workspace/logs
+      - ./:/workspace
+
+  # Test Suite Runner - full end-to-end integration
+  test-integration:
+    image: td3-av-system:v2.0-python310
+    container_name: test-end-to-end
+    depends_on:
+      carla-server:
+        condition: service_healthy
+    network_mode: host
+    runtime: nvidia
+    working_dir: /workspace
+    environment:
+      - PYTHONUNBUFFERED=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    command: python3 /workspace/tests/test_6_end_to_end_integration.py
+    volumes:
+      - ./data:/workspace/data
+      - ./logs:/workspace/logs
+      - ./:/workspace

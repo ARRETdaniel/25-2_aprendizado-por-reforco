@@ -6,7 +6,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: td3-av-system:latest
+    image: td3-av-system:v2.0-python310
     container_name: td3_training
     runtime: nvidia
     environment:
@@ -31,7 +31,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: td3-av-system:latest
+    image: td3-av-system:v2.0-python310
     container_name: ddpg_training
     runtime: nvidia
     environment:
@@ -54,7 +54,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: td3-av-system:latest
+    image: td3-av-system:v2.0-python310
     container_name: td3_evaluation
     runtime: nvidia
     environment:

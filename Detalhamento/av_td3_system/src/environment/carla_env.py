@@ -20,7 +20,7 @@ from collections import deque
 import yaml
 
 import carla
-from gym import Env, spaces
+from gymnasium import Env, spaces
 
 # Relative imports
 from .sensors import SensorSuite

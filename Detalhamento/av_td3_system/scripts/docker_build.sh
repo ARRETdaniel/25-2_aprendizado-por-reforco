@@ -14,9 +14,9 @@ PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
 cd "$PROJECT_ROOT"
 
-# Build the image
-echo "Building image: td3-av-system:latest"
-docker build -t td3-av-system:latest .
+# Build the image with multiple tags
+echo "Building image: td3-av-system:v2.0-python310 (also tagged as :latest)"
+docker build -t td3-av-system:v2.0-python310 -t td3-av-system:latest .
 
 echo ""
 echo "========================================"
@@ -67,7 +67,7 @@ echo ""
 echo "========================================"
 echo "Build successful! 🎉"
 echo "========================================"
-echo "Image: td3-av-system:latest"
+echo "Images: td3-av-system:v2.0-python310, td3-av-system:latest"
 echo ""
 echo "Next steps:"
 echo "  1. Run training:    ./scripts/docker_run_train.sh"

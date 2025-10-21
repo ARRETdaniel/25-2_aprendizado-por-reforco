@@ -166,11 +166,26 @@ traffic:
     keep_right_rule: true
 
 # ============================================================================
+# ROUTE SETTINGS (Paper: Goal-oriented features)
+# ============================================================================
+route:
+  # Waypoint file (from FinalProject/waypoints.txt)
+  waypoints_file: '/workspace/config/waypoints.txt'
+
+  # Waypoint processing
+  lookahead_distance: 50.0  # meters (how far ahead to look)
+  num_waypoints_ahead: 10   # Number of future waypoints to include in state
+  waypoint_spacing: 2.0    # meters (distance between waypoints)
+
+  # Coordinate transformation
+  use_relative_coordinates: true  # Transform to vehicle local frame
+
+# ============================================================================
 # WAYPOINT SETTINGS (Paper: Goal-oriented features)
 # ============================================================================
 waypoints:
   # Waypoint file (from FinalProject/waypoints.txt)
-  file_path: '/workspace/data/waypoints/town01_route_1.txt'
+  file_path: '/workspace/config/waypoints.txt'
 
   # Waypoint processing
   lookahead_distance: 5.0  # meters (how far ahead to look)

@@ -52,14 +52,17 @@ The system uses a **Docker-first architecture** to ensure reproducibility, scala
 
 ### Docker Infrastructure Status
 
-**✅ Phase 0 COMPLETED (October 20, 2025)**
+**✅ Phase 0 COMPLETED (October 21, 2025)**
 
 - Docker Engine 28.1.1 with NVIDIA Container Toolkit 1.17.9-1
-- Final image: `td3-av-system:v1.0` (30.6GB)
-- Base: `carlasim/carla:0.9.16` (Ubuntu 20.04, Python 3.8.10)
+- **Final image: `td3-av-system:v2.0-python310` (30.6GB)**
+- **Dockerfile: Using Miniforge Python 3.10 solution**
+- Base: `carlasim/carla:0.9.16` (Ubuntu 20.04)
+- **Python: 3.10.19 (installed via Miniforge/conda-forge)**
 - PyTorch 2.4.1+cu121 with CUDA support verified
-- All Python dependencies compatible with Python 3.8
+- All Python dependencies compatible with Python 3.10
 - GPU access confirmed: `torch.cuda.is_available()=True`
+- **Archived failed Dockerfiles in `docker/failed_dockerfiles/`**
 
 ---
 
