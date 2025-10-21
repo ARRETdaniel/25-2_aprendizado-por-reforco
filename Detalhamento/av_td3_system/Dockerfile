@@ -21,12 +21,12 @@ ENV CARLA_ROOT=/workspace
 # Also install xvfb for virtual display in headless mode
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        wget \
-        git \
-        curl \
-        ca-certificates \
-        xvfb \
-        mesa-utils && \
+    wget \
+    git \
+    curl \
+    ca-certificates \
+    xvfb \
+    mesa-utils && \
     rm -rf /var/lib/apt/lists/*
 
 # Download and install Miniforge (conda-forge by default, no TOS)
@@ -72,16 +72,16 @@ RUN python -m pip install \
     pandas==2.0.3 \
     scikit-learn==1.3.2
 
-    # Verify all critical dependencies
-    RUN python -c "import carla; print(f'CARLA API: Successfully imported')" && \
-        python -c "import gymnasium; print(f'Gymnasium: {gymnasium.__version__}')" && \
-        python -c "import torch; print(f'PyTorch: {torch.__version__}, CUDA available: {torch.cuda.is_available()}')" && \
-        python -c "import cv2; print(f'OpenCV: {cv2.__version__}')" && \
-        python -c "import numpy; print(f'NumPy: {numpy.__version__}')" && \
-        python -c "import yaml; print(f'PyYAML: {yaml.__version__}')"
+# Verify all critical dependencies
+RUN python -c "import carla; print(f'CARLA API: Successfully imported')" && \
+    python -c "import gymnasium; print(f'Gymnasium: {gymnasium.__version__}')" && \
+    python -c "import torch; print(f'PyTorch: {torch.__version__}, CUDA available: {torch.cuda.is_available()}')" && \
+    python -c "import cv2; print(f'OpenCV: {cv2.__version__}')" && \
+    python -c "import numpy; print(f'NumPy: {numpy.__version__}')" && \
+    python -c "import yaml; print(f'PyYAML: {yaml.__version__}')"
 
-    # Create project directory
-    WORKDIR /workspace/av_td3_system
+# Create project directory
+WORKDIR /workspace/av_td3_system
 
 # Copy project files (will be mounted as volume in practice)
 # COPY . /workspace/av_td3_system/
