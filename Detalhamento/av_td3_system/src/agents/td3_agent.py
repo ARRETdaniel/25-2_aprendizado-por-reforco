@@ -50,7 +50,8 @@ class TD3Agent:
         action_dim: int = 2,
         max_action: float = 1.0,
         config: Optional[Dict] = None,
-        config_path: Optional[str] = None
+        config_path: Optional[str] = None,
+        device: Optional[str] = None
     ):
         """
         Initialize TD3 agent with networks and hyperparameters.
@@ -63,6 +64,7 @@ class TD3Agent:
             max_action: Maximum absolute value of actions (default: 1.0)
             config: Dictionary with TD3 hyperparameters (if None, loads from file)
             config_path: Path to YAML config file (default: config/td3_config.yaml)
+            device: Device to use ('cpu' or 'cuda'). If None, auto-detect.
         """
         # Load configuration
         if config is None:
@@ -79,35 +81,42 @@ class TD3Agent:
 
         # Extract hyperparameters from config
         algo_config = config['algorithm']
-        self.discount = algo_config['gamma']  # Discount factor γ
+        self.discount = algo_config.get('gamma', algo_config.get('discount', 0.99))  # γ discount factor
         self.tau = algo_config['tau']  # Soft update rate for target networks
         self.policy_noise = algo_config['policy_noise']  # Noise for target smoothing
         self.noise_clip = algo_config['noise_clip']  # Clip range for target noise
         self.policy_freq = algo_config['policy_freq']  # Delayed policy update frequency
-        self.actor_lr = algo_config['actor_lr']
-        self.critic_lr = algo_config['critic_lr']
+        self.actor_lr = algo_config.get('actor_lr', algo_config.get('learning_rate', 0.0003))
+        self.critic_lr = algo_config.get('critic_lr', algo_config.get('learning_rate', 0.0003))
 
         # Training config
-        training_config = config['training']
-        self.batch_size = training_config['batch_size']
-        self.buffer_size = training_config['buffer_size']
-        self.start_timesteps = training_config['start_timesteps']
+        training_config = config.get('training', config.get('algorithm', {}))
+        self.batch_size = training_config.get('batch_size', 256)
+        self.buffer_size = training_config.get('buffer_size', 1000000)
+        self.start_timesteps = training_config.get('start_timesteps', training_config.get('learning_starts', 25000))
 
-        # Exploration config
-        exploration_config = config['exploration']
-        self.expl_noise = exploration_config['expl_noise']
+        # Exploration config (handle both nested and flat structures)
+        exploration_config = config.get('exploration', {})
+        self.expl_noise = exploration_config.get('expl_noise', algo_config.get('exploration_noise', 0.1))
 
         # Set device
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"TD3Agent initialized on device: {self.device}")
+        if device is not None:
+            self.device = torch.device(device)
+            print(f"TD3Agent initialized on device: {self.device} (manually specified)")
+        else:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            print(f"TD3Agent initialized on device: {self.device}")
 
         # Initialize actor networks
-        network_config = config['networks']['actor']
+        network_config = config.get('networks', {}).get('actor', {})
+        hidden_layers = network_config.get('hidden_sizes', network_config.get('hidden_layers', [256, 256]))
+        # Extract hidden_size from list (Actor uses fixed 3-layer architecture with same width)
+        hidden_size = hidden_layers[0] if isinstance(hidden_layers, list) else hidden_layers
         self.actor = Actor(
             state_dim=state_dim,
             action_dim=action_dim,
             max_action=max_action,
-            hidden_sizes=network_config['hidden_sizes']
+            hidden_size=hidden_size
         ).to(self.device)
 
         # Create target actor as deep copy
@@ -118,11 +127,14 @@ class TD3Agent:
         )
 
         # Initialize twin critic networks
-        critic_config = config['networks']['critic']
+        critic_config = config.get('networks', {}).get('critic', {})
+        hidden_layers = critic_config.get('hidden_sizes', critic_config.get('hidden_layers', [256, 256]))
+        # Extract hidden_size from list (Critic uses fixed 3-layer architecture with same width)
+        hidden_size = hidden_layers[0] if isinstance(hidden_layers, list) else hidden_layers
         self.critic = TwinCritic(
             state_dim=state_dim,
             action_dim=action_dim,
-            hidden_sizes=critic_config['hidden_sizes']
+            hidden_size=hidden_size
         ).to(self.device)
 
         # Create target critics as deep copy
@@ -145,8 +157,8 @@ class TD3Agent:
 
         print(f"TD3Agent initialized with:")
         print(f"  State dim: {state_dim}, Action dim: {action_dim}")
-        print(f"  Actor hidden sizes: {network_config['hidden_sizes']}")
-        print(f"  Critic hidden sizes: {critic_config['hidden_sizes']}")
+        print(f"  Actor hidden size: {network_config.get('hidden_sizes', network_config.get('hidden_layers', [256, 256]))}")
+        print(f"  Critic hidden size: {critic_config.get('hidden_sizes', critic_config.get('hidden_layers', [256, 256]))}")
         print(f"  Discount γ: {self.discount}, Tau τ: {self.tau}")
         print(f"  Policy freq: {self.policy_freq}, Policy noise: {self.policy_noise}")
         print(f"  Exploration noise: {self.expl_noise}")

@@ -14,7 +14,9 @@ Section III: System Architecture and Environment Setup
 
 import numpy as np
 import logging
+import math  # For yaw calculation from waypoint direction
 import time
+import os
 from typing import Dict, Tuple, Optional, Any
 from collections import deque
 import yaml
@@ -25,6 +27,7 @@ from gymnasium import Env, spaces
 # Relative imports
 from .sensors import SensorSuite
 from .waypoint_manager import WaypointManager
+from .dynamic_route_manager import DynamicRouteManager
 from .reward_functions import RewardCalculator
 
 
@@ -120,11 +123,11 @@ class CARLANavigationEnv(Env):
         self.sensors = None
         self.npcs = []
 
-        # Waypoint manager
+        # Waypoint manager (Legacy - for extracting start/end)
         waypoints_file = self.carla_config.get("route", {}).get(
             "waypoints_file", "waypoints.txt"
         )
-        self.waypoint_manager = WaypointManager(
+        legacy_waypoint_manager = WaypointManager(
             waypoints_file=waypoints_file,
             lookahead_distance=self.carla_config.get("route", {}).get(
                 "lookahead_distance", 50.0
@@ -133,6 +136,60 @@ class CARLANavigationEnv(Env):
                 "num_waypoints_ahead", 10
             ),
         )
+
+        # Extract start and end locations from legacy waypoints file
+        # These provide fixed, reproducible start/end points for training
+        route_start_legacy = legacy_waypoint_manager.waypoints[0]  # (x, y, z)
+        route_end_legacy = legacy_waypoint_manager.waypoints[-1]  # (x, y, z)
+
+        self.logger.info(
+            f"Route definition (from {waypoints_file}):\n"
+            f"  Start: ({route_start_legacy[0]:.2f}, {route_start_legacy[1]:.2f}, {route_start_legacy[2]:.2f})\n"
+            f"  End: ({route_end_legacy[0]:.2f}, {route_end_legacy[1]:.2f}, {route_end_legacy[2]:.2f})"
+        )
+
+        # Dynamic Route Manager (uses CARLA's GlobalRoutePlanner API)
+        # Generates waypoints dynamically using road topology
+        self.use_dynamic_routes = self.carla_config.get("route", {}).get(
+            "use_dynamic_generation", True
+        )
+
+        if self.use_dynamic_routes:
+            # Initialize DynamicRouteManager (needs world/map to be loaded)
+            self._route_start_location = route_start_legacy
+            self._route_end_location = route_end_legacy
+
+            sampling_resolution = self.carla_config.get("route", {}).get(
+                "sampling_resolution", 2.0
+            )
+
+            try:
+                self.route_manager = DynamicRouteManager(
+                    carla_world=self.world,
+                    start_location=self._route_start_location,
+                    end_location=self._route_end_location,
+                    sampling_resolution=sampling_resolution,
+                    logger=self.logger
+                )
+                # Create adapter to make route_manager compatible with WaypointManager interface
+                self.waypoint_manager = self._create_waypoint_manager_adapter()
+                self.logger.info(
+                    f"DynamicRouteManager initialized: {len(self.route_manager.waypoints)} waypoints, "
+                    f"~{self.route_manager.get_route_length():.0f}m route length"
+                )
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to initialize DynamicRouteManager: {e}\n"
+                    f"Falling back to legacy waypoint manager"
+                )
+                self.use_dynamic_routes = False
+                self.waypoint_manager = legacy_waypoint_manager
+                self.route_manager = None
+        else:
+            # Fallback: use legacy waypoint manager
+            self.waypoint_manager = legacy_waypoint_manager
+            self.route_manager = None
+            self.logger.info("Using legacy static waypoints from file")
 
         # Reward calculator
         reward_config = self.training_config.get("reward", {})
@@ -150,6 +207,66 @@ class CARLANavigationEnv(Env):
 
         self.logger.info(
             f"CARLA environment initialized: {map_name}, {self.max_episode_steps} steps/episode"
+        )
+
+    def _create_waypoint_manager_adapter(self):
+        """
+        Create adapter to make DynamicRouteManager compatible with WaypointManager interface.
+
+        This allows existing code to continue working while using dynamic route generation.
+
+        Returns:
+            Object with waypoint_manager interface (waypoints attribute, reset() method, etc.)
+        """
+        class WaypointManagerAdapter:
+            def __init__(self, route_manager, lookahead_distance, num_waypoints_ahead):
+                self.route_manager = route_manager
+                self.lookahead_distance = lookahead_distance
+                self.num_waypoints_ahead = num_waypoints_ahead
+                self._current_waypoint_index = 0
+
+            @property
+            def waypoints(self):
+                """Return waypoints array from route manager."""
+                return self.route_manager.get_waypoints()
+
+            def reset(self):
+                """Reset waypoint tracking."""
+                self._current_waypoint_index = 0
+
+            def get_next_waypoints(self, vehicle_location, current_index=None):
+                """
+                Get next waypoints ahead of vehicle.
+
+                Args:
+                    vehicle_location: carla.Location of vehicle
+                    current_index: Optional current waypoint index
+
+                Returns:
+                    Array of next waypoints (N, 3) shape
+                """
+                if current_index is None:
+                    current_index = self._current_waypoint_index
+
+                # Update index based on vehicle position
+                self._current_waypoint_index = self.route_manager.get_next_waypoint_index(
+                    vehicle_location,
+                    current_index
+                )
+
+                # Get next N waypoints
+                start_idx = self._current_waypoint_index
+                end_idx = min(
+                    start_idx + self.num_waypoints_ahead,
+                    len(self.waypoints)
+                )
+
+                return self.waypoints[start_idx:end_idx]
+
+        return WaypointManagerAdapter(
+            route_manager=self.route_manager,
+            lookahead_distance=self.carla_config.get("route", {}).get("lookahead_distance", 50.0),
+            num_waypoints_ahead=self.carla_config.get("route", {}).get("num_waypoints_ahead", 10)
         )
 
     def _connect_to_carla(self, max_retries: int = 5):
@@ -251,13 +368,68 @@ class CARLANavigationEnv(Env):
         # Clean up previous episode
         self._cleanup_episode()
 
+        # ✅ DYNAMIC ROUTE GENERATION: Use CARLA's GlobalRoutePlanner
+        if self.use_dynamic_routes and self.route_manager is not None:
+            # Get spawn transform from DynamicRouteManager
+            # This uses CARLA's road topology for correct position and orientation
+            spawn_point = self.route_manager.get_start_transform()
+
+            self.logger.info(
+                f"✅ Using DYNAMIC route (GlobalRoutePlanner):\n"
+                f"   Start: ({spawn_point.location.x:.2f}, {spawn_point.location.y:.2f}, {spawn_point.location.z:.2f})\n"
+                f"   Heading: {spawn_point.rotation.yaw:.2f}°\n"
+                f"   Route length: ~{self.route_manager.get_route_length():.0f}m\n"
+                f"   Waypoints: {len(self.route_manager.waypoints)}"
+            )
+        else:
+            # ✅ FALLBACK: Legacy waypoint-based spawn (for backward compatibility)
+            # Get the first waypoint as spawn location
+            route_start = self.waypoint_manager.waypoints[0]  # (x, y, z)
+
+            # Calculate initial heading from first two waypoints
+            if len(self.waypoint_manager.waypoints) >= 2:
+                wp0 = self.waypoint_manager.waypoints[0]
+                wp1 = self.waypoint_manager.waypoints[1]
+                dx = wp1[0] - wp0[0]
+                dy = wp1[1] - wp0[1]
+                initial_yaw = math.degrees(math.atan2(dy, dx))
+            else:
+                initial_yaw = 0.0
+                self.logger.warning("Only one waypoint available, using default yaw=0")
+
+            # Get proper ground-level Z coordinate from CARLA map
+            carla_map = self.world.get_map()
+            road_location = carla.Location(x=route_start[0], y=route_start[1], z=0.0)
+            road_waypoint = carla_map.get_waypoint(
+                road_location,
+                project_to_road=True,
+                lane_type=carla.LaneType.Driving
+            )
+
+            if road_waypoint is not None:
+                spawn_z = road_waypoint.transform.location.z + 0.5
+                self.logger.info(f"Using CARLA map Z: {spawn_z:.2f}m (original: {route_start[2]:.2f}m)")
+            else:
+                spawn_z = route_start[2] + 0.5
+                self.logger.warning(f"Could not get road waypoint, using Z + 0.5m: {spawn_z:.2f}m")
+
+            spawn_point = carla.Transform(
+                carla.Location(x=route_start[0], y=route_start[1], z=spawn_z),
+                carla.Rotation(pitch=0.0, yaw=initial_yaw, roll=0.0)
+            )
+
+            self.logger.info(
+                f"✅ Using LEGACY static waypoints:\n"
+                f"   Location: ({route_start[0]:.2f}, {route_start[1]:.2f}, {spawn_z:.2f})\n"
+                f"   Heading: {initial_yaw:.2f}°"
+            )
+
         # Spawn ego vehicle (Tesla Model 3)
-        spawn_point = np.random.choice(self.spawn_points)
         vehicle_bp = self.world.get_blueprint_library().find("vehicle.tesla.model3")
 
         try:
             self.vehicle = self.world.spawn_actor(vehicle_bp, spawn_point)
-            self.logger.info(f"Ego vehicle spawned at {spawn_point.location}")
+            self.logger.info(f"✅ Ego vehicle spawned successfully")
         except RuntimeError as e:
             raise RuntimeError(f"Failed to spawn ego vehicle: {e}")
 
@@ -286,7 +458,7 @@ class CARLANavigationEnv(Env):
 
         return observation
 
-    def step(self, action: np.ndarray) -> Tuple[Dict, float, bool, Dict]:
+    def step(self, action: np.ndarray) -> Tuple[Dict, float, bool, bool, Dict]:
         """
         Execute one step in the environment.
 
@@ -294,10 +466,11 @@ class CARLANavigationEnv(Env):
             action: 2D array [steering, throttle/brake] in [-1, 1]
 
         Returns:
-            Tuple of (observation, reward, done, info)
+            Tuple of (observation, reward, terminated, truncated, info)
             - observation: Dict with 'image' and 'vector'
             - reward: Float reward for this step
-            - done: Boolean, True if episode ended
+            - terminated: Boolean, True if episode ended naturally (collision, goal reached)
+            - truncated: Boolean, True if episode ended due to time/step limit
             - info: Dict with additional metrics
         """
         # Apply action to vehicle
@@ -306,6 +479,16 @@ class CARLANavigationEnv(Env):
         # Tick CARLA simulation
         self.world.tick()
         self.sensors.tick()
+
+        # 🔍 DEBUG: Verify simulation is advancing (first 10 steps)
+        if self.current_step < 10:
+            snapshot = self.world.get_snapshot()
+            self.logger.info(
+                f"🔍 DEBUG Step {self.current_step} - World State After Tick:\n"
+                f"   Frame: {snapshot.frame}\n"
+                f"   Timestamp: {snapshot.timestamp.elapsed_seconds:.3f}s\n"
+                f"   Delta: {snapshot.timestamp.delta_seconds:.3f}s"
+            )
 
         # Get new state
         observation = self._get_observation()
@@ -328,6 +511,12 @@ class CARLANavigationEnv(Env):
         # Check termination conditions
         done, termination_reason = self._check_termination(vehicle_state)
 
+        # Gymnasium API: split done into terminated and truncated
+        # terminated: episode ended naturally (collision, goal, off-road)
+        # truncated: episode ended due to time/step limit
+        truncated = (self.current_step >= self.max_episode_steps) and not done
+        terminated = done and not truncated
+
         # Update step counter
         self.current_step += 1
 
@@ -340,12 +529,13 @@ class CARLANavigationEnv(Env):
             "collision_info": self.sensors.get_collision_info(),
         }
 
-        if done:
+        if terminated or truncated:
             self.logger.info(
-                f"Episode ended: {termination_reason} after {self.current_step} steps"
+                f"Episode ended: {termination_reason} after {self.current_step} steps "
+                f"(terminated={terminated}, truncated={truncated})"
             )
 
-        return observation, reward, done, info
+        return observation, reward, terminated, truncated, info
 
     def _apply_action(self, action: np.ndarray):
         """
@@ -381,6 +571,25 @@ class CARLANavigationEnv(Env):
         )
 
         self.vehicle.apply_control(control)
+
+        # 🔍 DEBUG: Log control application and vehicle response (first 10 steps)
+        if self.current_step < 10:
+            # Get vehicle velocity
+            velocity = self.vehicle.get_velocity()
+            speed_mps = (velocity.x**2 + velocity.y**2 + velocity.z**2)**0.5
+            speed_kmh = speed_mps * 3.6
+
+            # Get applied control to verify
+            applied_control = self.vehicle.get_control()
+
+            self.logger.info(
+                f"🔍 DEBUG Step {self.current_step}:\n"
+                f"   Input Action: steering={action[0]:+.4f}, throttle/brake={action[1]:+.4f}\n"
+                f"   Sent Control: throttle={throttle:.4f}, brake={brake:.4f}, steer={steering:.4f}\n"
+                f"   Applied Control: throttle={applied_control.throttle:.4f}, brake={applied_control.brake:.4f}, steer={applied_control.steer:.4f}\n"
+                f"   Speed: {speed_kmh:.2f} km/h ({speed_mps:.2f} m/s)\n"
+                f"   Hand Brake: {applied_control.hand_brake}, Reverse: {applied_control.reverse}, Gear: {applied_control.gear}"
+            )
 
     def _get_observation(self) -> Dict[str, np.ndarray]:
         """
@@ -529,16 +738,22 @@ class CARLANavigationEnv(Env):
         Spawn NPC vehicles for traffic.
 
         Uses traffic manager for autonomous control.
-        NPC count from training_config.yaml.
+        NPC count from training_config.yaml scenarios list.
         """
-        # Get configured NPC count
-        scenario = self.training_config.get("scenarios", {}).get("current_scenario", 0)
-        scenarios = self.training_config.get("scenarios", {}).get("traffic_densities", [])
+        # Get configured NPC count from scenarios list
+        scenarios = self.training_config.get("scenarios", [])
 
-        if scenario < len(scenarios):
-            npc_count = scenarios[scenario].get("num_npcs", 50)
+        # Use first scenario by default (for testing), or get from environment variable
+        scenario_idx = int(os.getenv('CARLA_SCENARIO_INDEX', '0'))
+
+        if isinstance(scenarios, list) and len(scenarios) > 0:
+            scenario_idx = min(scenario_idx, len(scenarios) - 1)
+            scenario = scenarios[scenario_idx]
+            npc_count = scenario.get("num_vehicles", 50)
+            self.logger.info(f"Using scenario: {scenario.get('name', 'unknown')} (index {scenario_idx})")
         else:
             npc_count = 50
+            self.logger.warning(f"No scenarios found in config, using default NPC count: {npc_count}")
 
         self.logger.info(f"Spawning {npc_count} NPC vehicles...")
 

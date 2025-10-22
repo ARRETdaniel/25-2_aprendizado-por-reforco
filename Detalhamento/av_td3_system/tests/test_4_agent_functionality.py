@@ -33,11 +33,12 @@ def test_4_1_agent_initialization():
 
         print(f"✅ TD3Agent imported successfully")
 
-        # Initialize agent (device is determined automatically)
+        # Initialize agent with absolute config path
         agent = TD3Agent(
             state_dim=535,
             action_dim=2,
-            max_action=1.0
+            max_action=1.0,
+            config_path='/workspace/config/td3_config.yaml'
         )
 
         print(f"✅ TD3 Agent initialized")
@@ -97,6 +98,15 @@ def test_4_2_action_selection():
 
     try:
         from src.agents.td3_agent import TD3Agent
+
+        # Initialize agent for this test
+        agent = TD3Agent(
+            state_dim=535,
+            action_dim=2,
+            max_action=1.0,
+            config_path='/workspace/config/td3_config.yaml'
+        )
+        print(f"✅ Agent initialized on {agent.device}")
 
         # Create dummy state
         state = np.random.randn(535).astype(np.float32)
@@ -160,10 +170,15 @@ def test_4_3_training_step():
     try:
         from src.agents.td3_agent import TD3Agent
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        agent = TD3Agent(state_dim=535, action_dim=2, max_action=1.0, device=device)
+        # Initialize agent (device is auto-detected internally)
+        agent = TD3Agent(
+            state_dim=535,
+            action_dim=2,
+            max_action=1.0,
+            config_path='/workspace/config/td3_config.yaml'
+        )
 
-        print(f"✅ Agent initialized on {device}")
+        print(f"✅ Agent initialized on {agent.device}")
 
         # Populate replay buffer
         print(f"\n📚 Populating replay buffer...")
@@ -186,7 +201,9 @@ def test_4_3_training_step():
         print(f"\n🔄 Performing training update...")
         batch_size = 64
 
-        critic_loss, actor_loss = agent.train(batch_size=batch_size)
+        metrics = agent.train(batch_size=batch_size)
+        critic_loss = metrics['critic_loss']
+        actor_loss = metrics.get('actor_loss', None)  # May be None if delayed
 
         print(f"✅ Training step completed")
         print(f"   Batch size: {batch_size}")
@@ -203,7 +220,9 @@ def test_4_3_training_step():
         losses_history = []
 
         for step in range(10):
-            critic_loss, actor_loss = agent.train(batch_size=batch_size)
+            metrics = agent.train(batch_size=batch_size)
+            critic_loss = metrics['critic_loss']
+            actor_loss = metrics.get('actor_loss', None)
             losses_history.append((critic_loss, actor_loss))
 
             if (step + 1) % 2 == 0:
@@ -237,11 +256,15 @@ def test_4_4_checkpoint():
     try:
         from src.agents.td3_agent import TD3Agent
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-
-        # Create and train first agent
+        # Create and train first agent (device is auto-detected internally)
         print(f"✅ Creating Agent 1...")
-        agent1 = TD3Agent(state_dim=535, action_dim=2, max_action=1.0, device=device)
+        agent1 = TD3Agent(
+            state_dim=535,
+            action_dim=2,
+            max_action=1.0,
+            config_path='/workspace/config/td3_config.yaml'
+        )
+        print(f"   Device: {agent1.device}")
 
         # Add data and train
         for i in range(300):
@@ -268,7 +291,7 @@ def test_4_4_checkpoint():
         with tempfile.TemporaryDirectory() as tmpdir:
             checkpoint_path = os.path.join(tmpdir, "test_checkpoint.pth")
 
-            agent1.save(checkpoint_path)
+            agent1.save_checkpoint(checkpoint_path)
 
             assert os.path.exists(checkpoint_path), "❌ Checkpoint file not created!"
             file_size = os.path.getsize(checkpoint_path) / 1024 / 1024  # MB
@@ -278,7 +301,13 @@ def test_4_4_checkpoint():
 
             # Create new agent and load
             print(f"\n🔄 Creating Agent 2 and loading checkpoint...")
-            agent2 = TD3Agent(state_dim=535, action_dim=2, max_action=1.0, device=device)
+            agent2 = TD3Agent(
+                state_dim=535,
+                action_dim=2,
+                max_action=1.0,
+                config_path='/workspace/config/td3_config.yaml'
+            )
+            print(f"   Device: {agent2.device}")
 
             # Verify they're different before loading
             action_agent2_before = agent2.select_action(test_state, noise=0.0)
@@ -286,7 +315,7 @@ def test_4_4_checkpoint():
             print(f"   Agents different before load: {different_before}")
 
             # Load checkpoint
-            agent2.load(checkpoint_path)
+            agent2.load_checkpoint(checkpoint_path)
             print(f"✅ Checkpoint loaded")
             print(f"   Total iterations: {agent2.total_it}")
 

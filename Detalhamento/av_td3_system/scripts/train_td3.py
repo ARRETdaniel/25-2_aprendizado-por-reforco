@@ -21,12 +21,16 @@ Author: Daniel Terra
 Date: 2024
 """
 
+import sys
+import os
+sys.path.insert(0, '/workspace/av_td3_system')
+
 import argparse
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 
+import cv2
 import numpy as np
 import torch
 import yaml
@@ -59,7 +63,8 @@ class TD3TrainingPipeline:
         carla_config_path: str = "config/carla_config.yaml",
         agent_config_path: str = "config/td3_config.yaml",
         log_dir: str = "data/logs",
-        checkpoint_dir: str = "data/checkpoints"
+        checkpoint_dir: str = "data/checkpoints",
+        debug: bool = False
     ):
         """
         Initialize training pipeline.
@@ -75,6 +80,7 @@ class TD3TrainingPipeline:
             agent_config_path: Path to TD3 config
             log_dir: Directory for TensorBoard logs
             checkpoint_dir: Directory for checkpoints
+            debug: Enable visual feedback with OpenCV (for short runs)
         """
         # Set random seeds
         np.random.seed(seed)
@@ -88,6 +94,7 @@ class TD3TrainingPipeline:
         self.eval_freq = eval_freq
         self.checkpoint_freq = checkpoint_freq
         self.num_eval_episodes = num_eval_episodes
+        self.debug = debug
 
         # Create directories
         self.log_dir = Path(log_dir)
@@ -114,22 +121,33 @@ class TD3TrainingPipeline:
         # Update NPC density based on scenario
         npc_densities = [20, 50, 100]
         if scenario < len(npc_densities):
-            self.carla_config['simulation']['npc_count'] = npc_densities[scenario]
-            print(f"[CONFIG] NPC count set to: {npc_densities[scenario]}")
+            if 'traffic' in self.carla_config:
+                self.carla_config['traffic']['num_vehicles'] = npc_densities[scenario]
+                print(f"[CONFIG] NPC count set to: {npc_densities[scenario]}")
+            else:
+                print(f"[WARNING] 'traffic' section not found in config, using default NPC count")
 
         # Initialize environment
         print(f"\n[ENVIRONMENT] Initializing CARLA environment...")
-        self.env = CARLANavigationEnv(self.carla_config)
+        self.env = CARLANavigationEnv(
+            carla_config_path,
+            agent_config_path,
+            agent_config_path  # Use same config for training_config_path
+        )
         print(f"[ENVIRONMENT] State space: {self.env.observation_space}")
         print(f"[ENVIRONMENT] Action space: {self.env.action_space}")
 
         # Initialize agent
         print(f"\n[AGENT] Initializing TD3 agent...")
+        # Use CPU for agent to save GPU memory for CARLA (6GB RTX 2060 constraint)
+        agent_device = 'cpu' if self.debug else 'cuda' if torch.cuda.is_available() else 'cpu'
+        print(f"[AGENT] Using device: {agent_device}")
         self.agent = TD3Agent(
             state_dim=535,
             action_dim=2,
             max_action=1.0,
-            config=self.agent_config
+            config=self.agent_config,
+            device=agent_device
         )
 
         # Initialize logging
@@ -142,6 +160,15 @@ class TD3TrainingPipeline:
         self.writer = SummaryWriter(str(self.log_path))
 
         print(f"[LOGGING] TensorBoard logs: {self.log_path}")
+
+        # Debug mode setup
+        if self.debug:
+            print(f"\n[DEBUG] Visual feedback enabled (OpenCV display)")
+            print(f"[DEBUG] Press 'q' to quit, 'p' to pause/unpause")
+            self.window_name = "TD3 Training - Debug View"
+            cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(self.window_name, 1200, 600)
+            self.paused = False
 
         # Training state
         self.episode_num = 0
@@ -161,6 +188,184 @@ class TD3TrainingPipeline:
         print(f"[INIT] Seed: {seed}")
         print("="*70 + "\n")
 
+    def flatten_dict_obs(self, obs_dict):
+        """
+        Flatten Dict observation to 1D array for TD3 agent.
+
+        Args:
+            obs_dict: Dictionary with 'image' (4, 84, 84) and 'vector' (23,) keys
+
+        Returns:
+            np.ndarray: Flattened state vector of shape (535,)
+                        - First 512 elements: Image features (averaged across frames)
+                        - Last 23 elements: Vector state (velocity, waypoints, etc.)
+        """
+        # Extract image and flatten across frames
+        image = obs_dict['image']  # Shape: (4, 84, 84)
+        image_flat = image.reshape(4, -1).mean(axis=0)  # Average across frames: (7056,)
+        image_features = image_flat[:512]  # Take first 512 features
+
+        # Extract vector state
+        vector = obs_dict['vector']  # Shape: (23,)
+
+        # Concatenate to final state
+        flat_state = np.concatenate([image_features, vector]).astype(np.float32)
+
+        return flat_state  # Shape: (535,)
+
+    def _visualize_debug(self, obs_dict, action, reward, info, t):
+        """
+        Display debug visualization using OpenCV.
+
+        Shows:
+        - Front camera view
+        - Action values (steering, throttle/brake)
+        - Reward breakdown
+        - Vehicle state
+        - Episode info
+
+        Args:
+            obs_dict: Current observation dictionary with 'image' and 'vector' keys
+            action: Action taken [steering, throttle/brake]
+            reward: Reward received
+            info: Environment info dict
+            t: Current timestep
+        """
+        try:
+            # Extract camera image from observation dict
+            # obs_dict['image'] has shape (4, 84, 84) - 4 stacked grayscale frames
+            if 'image' not in obs_dict:
+                return
+
+            # Get the latest frame from the stack
+            latest_frame = obs_dict['image'][-1]  # Shape: (84, 84)
+
+            # Convert from [0, 1] float to [0, 255] uint8
+            frame_uint8 = (latest_frame * 255).astype(np.uint8)
+
+            # Resize to larger display size
+            frame_resized = cv2.resize(frame_uint8, (800, 600), interpolation=cv2.INTER_LINEAR)
+
+            # Convert grayscale to BGR for OpenCV display
+            display_frame = cv2.cvtColor(frame_resized, cv2.COLOR_GRAY2BGR)
+
+            # Add info overlay
+            vehicle_state = info.get('vehicle_state', {})
+            reward_breakdown = info.get('reward_breakdown', {})
+
+            # Create info panel
+            info_panel = np.zeros((600, 400, 3), dtype=np.uint8)
+
+            # Title
+            cv2.putText(info_panel, "TD3 TRAINING - DEBUG", (10, 30),
+                       cv2.FONT_HERSHEY_DUPLEX, 0.6, (0, 255, 0), 2)
+
+            # Timestep info
+            y_offset = 70
+            cv2.putText(info_panel, f"Timestep: {t}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            y_offset += 25
+            cv2.putText(info_panel, f"Episode: {self.episode_num}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            y_offset += 25
+            cv2.putText(info_panel, f"Episode Step: {self.episode_timesteps}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+            # Action
+            y_offset += 40
+            cv2.putText(info_panel, "ACTION:", (10, y_offset),
+                       cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 255, 255), 1)
+            y_offset += 25
+            cv2.putText(info_panel, f"  Steering: {action[0]:+.3f}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            y_offset += 25
+            cv2.putText(info_panel, f"  Throttle/Brake: {action[1]:+.3f}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+            # Vehicle state
+            y_offset += 40
+            cv2.putText(info_panel, "VEHICLE STATE:", (10, y_offset),
+                       cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 255, 255), 1)
+            y_offset += 25
+            speed_kmh = vehicle_state.get('velocity', 0) * 3.6
+            cv2.putText(info_panel, f"  Speed: {speed_kmh:.1f} km/h", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            y_offset += 25
+            cv2.putText(info_panel, f"  Lat Dev: {vehicle_state.get('lateral_deviation', 0):.2f} m",
+                       (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            y_offset += 25
+            cv2.putText(info_panel, f"  Head Err: {vehicle_state.get('heading_error', 0):.2f} rad",
+                       (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+            # Reward
+            y_offset += 40
+            cv2.putText(info_panel, "REWARD:", (10, y_offset),
+                       cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 255, 255), 1)
+            y_offset += 25
+            reward_color = (0, 255, 0) if reward > 0 else (0, 0, 255)
+            cv2.putText(info_panel, f"  Total: {reward:+.3f}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, reward_color, 1)
+            y_offset += 25
+            cv2.putText(info_panel, f"  Episode: {self.episode_reward:.2f}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+            # Reward breakdown
+            y_offset += 30
+            cv2.putText(info_panel, "Breakdown:", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
+            for component, (weight, value, weighted) in reward_breakdown.items():
+                y_offset += 20
+                text = f"  {component[:8]}: {weighted:+.2f}"
+                cv2.putText(info_panel, text, (10, y_offset),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
+
+            # Collision info
+            y_offset += 30
+            collision_color = (0, 0, 255) if self.episode_collision_count > 0 else (0, 255, 0)
+            cv2.putText(info_panel, f"Collisions: {self.episode_collision_count}",
+                       (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, collision_color, 1)
+
+            # Instructions
+            y_offset = 580
+            cv2.putText(info_panel, "q:quit  p:pause", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (100, 100, 100), 1)
+
+            # Combine camera and info panel
+            combined_frame = np.hstack([display_frame, info_panel])
+
+            # Display
+            cv2.imshow(self.window_name, combined_frame)
+
+            # Handle key presses
+            key = cv2.waitKey(1) & 0xFF
+
+            if key == ord('q'):
+                print("\n[DEBUG] User requested quit (q pressed)")
+                cv2.destroyAllWindows()
+                self.env.close()
+                import sys
+                sys.exit(0)
+            elif key == ord('p'):
+                self.paused = not self.paused
+                print(f"[DEBUG] Paused: {self.paused}")
+
+            # Pause handling
+            while self.paused:
+                key = cv2.waitKey(100) & 0xFF
+                if key == ord('p'):
+                    self.paused = False
+                    print("[DEBUG] Resumed")
+                elif key == ord('q'):
+                    print("\n[DEBUG] User requested quit (q pressed)")
+                    cv2.destroyAllWindows()
+                    self.env.close()
+                    import sys
+                    sys.exit(0)
+
+        except Exception as e:
+            print(f"[DEBUG] Visualization error: {e}")
+            # Continue training even if visualization fails
+
     def train(self):
         """
         Main training loop.
@@ -176,10 +381,13 @@ class TD3TrainingPipeline:
         """
         print(f"[TRAINING] Starting training loop...")
 
-        state = self.env.reset()
+        # Get initial observation (Dict) and flatten for agent
+        obs_dict = self.env.reset()
+        state = self.flatten_dict_obs(obs_dict)
         done = False
 
-        start_timesteps = self.agent_config['training']['start_timesteps']
+        start_timesteps = self.agent_config.get('algorithm', {}).get('learning_starts', 25000)
+        batch_size = self.agent_config.get('algorithm', {}).get('batch_size', 256)
 
         for t in range(1, int(self.max_timesteps) + 1):
             self.episode_timesteps += 1
@@ -195,16 +403,35 @@ class TD3TrainingPipeline:
                     noise=self.agent.expl_noise
                 )
 
-            # Step environment
-            next_state, reward, done, info = self.env.step(action)
+            # Step environment (get Dict observation)
+            next_obs_dict, reward, done, truncated, info = self.env.step(action)
+
+            # Flatten next observation for agent
+            next_state = self.flatten_dict_obs(next_obs_dict)
+
+            # Debug visualization (use original Dict observation)
+            if self.debug:
+                self._visualize_debug(obs_dict, action, reward, info, t)
+
+                # 🔍 DEBUG: Print detailed step info to terminal every 10 steps
+                if t % 10 == 0:
+                    vehicle_state = info.get('vehicle_state', {})
+                    print(
+                        f"🔍 [DEBUG Step {t:4d}] "
+                        f"Act=[steer:{action[0]:+.3f}, thr/brk:{action[1]:+.3f}] | "
+                        f"Rew={reward:+7.2f} | "
+                        f"Speed={vehicle_state.get('velocity', 0)*3.6:5.1f} km/h | "
+                        f"LatDev={vehicle_state.get('lateral_deviation', 0):+.2f}m | "
+                        f"Collisions={self.episode_collision_count}"
+                    )
 
             # Track episode metrics
             self.episode_reward += reward
             self.episode_collision_count += info.get('collision_count', 0)
             self.episode_steps_since_collision = info.get('steps_since_collision', 0)
 
-            # Store transition in replay buffer
-            done_bool = float(done) if self.episode_timesteps < 300 else True  # 300s timeout
+            # Store transition in replay buffer (use flat states)
+            done_bool = float(done or truncated) if self.episode_timesteps < 300 else True  # 300s timeout
             self.agent.replay_buffer.add(
                 state,
                 action,
@@ -213,11 +440,13 @@ class TD3TrainingPipeline:
                 done_bool
             )
 
+            # Update state for next iteration (both representations)
             state = next_state
+            obs_dict = next_obs_dict
 
             # Train agent (only after exploration phase)
             if t > start_timesteps:
-                metrics = self.agent.train(batch_size=self.agent_config['training']['batch_size'])
+                metrics = self.agent.train(batch_size=batch_size)
 
                 # Log training metrics every 100 steps
                 if t % 100 == 0:
@@ -229,7 +458,7 @@ class TD3TrainingPipeline:
                         self.writer.add_scalar('train/actor_loss', metrics['actor_loss'], t)
 
             # Episode termination
-            if done:
+            if done or truncated:
                 # Log episode metrics
                 self.training_rewards.append(self.episode_reward)
                 self.writer.add_scalar('train/episode_reward', self.episode_reward, self.episode_num)
@@ -251,8 +480,9 @@ class TD3TrainingPipeline:
                         f"Collisions {self.episode_collision_count:2d}"
                     )
 
-                # Reset episode metrics
-                state = self.env.reset()
+                # Reset episode (get Dict and flatten)
+                obs_dict = self.env.reset()
+                state = self.flatten_dict_obs(obs_dict)
                 self.episode_num += 1
                 self.episode_reward = 0
                 self.episode_timesteps = 0
@@ -306,20 +536,30 @@ class TD3TrainingPipeline:
         eval_collisions = []
         eval_lengths = []
 
-        for ep in range(self.num_eval_episodes):
-            state = self.env.reset()
+        for episode in range(self.num_eval_episodes):
+            obs_dict = self.env.reset()  # Use main env, not eval_env
+            state = self.flatten_dict_obs(obs_dict)  # Flatten Dict → flat array
             episode_reward = 0
             episode_length = 0
             done = False
+            max_eval_steps = 1000  # Safety limit: max 1000 steps per eval episode
 
-            while not done:
+            while not done and episode_length < max_eval_steps:
                 # Deterministic action (no noise)
                 action = self.agent.select_action(state, noise=0.0)
-                next_state, reward, done, info = self.env.step(action)
+                next_obs_dict, reward, done, truncated, info = self.env.step(action)  # Use main env
+                next_state = self.flatten_dict_obs(next_obs_dict)  # Flatten next obs
 
                 episode_reward += reward
                 episode_length += 1
                 state = next_state
+
+                if truncated:
+                    done = True
+
+            # Log if episode hit the safety limit
+            if episode_length >= max_eval_steps:
+                print(f"[EVAL] Warning: Episode {episode+1} reached max eval steps ({max_eval_steps})")
 
             eval_rewards.append(episode_reward)
             eval_successes.append(info.get('success', 0))
@@ -357,6 +597,9 @@ class TD3TrainingPipeline:
 
     def close(self):
         """Clean up resources."""
+        if self.debug:
+            cv2.destroyAllWindows()
+            print(f"[DEBUG] OpenCV windows closed")
         self.save_final_results()
         self.env.close()
         self.writer.close()
@@ -438,6 +681,11 @@ def main():
         default='data/checkpoints',
         help='Directory for checkpoints'
     )
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Enable visual debug mode with OpenCV display (recommended for short runs, e.g., 1000 steps)'
+    )
 
     args = parser.parse_args()
 
@@ -452,7 +700,8 @@ def main():
         carla_config_path=args.carla_config,
         agent_config_path=args.agent_config,
         log_dir=args.log_dir,
-        checkpoint_dir=args.checkpoint_dir
+        checkpoint_dir=args.checkpoint_dir,
+        debug=args.debug
     )
 
     trainer.train()

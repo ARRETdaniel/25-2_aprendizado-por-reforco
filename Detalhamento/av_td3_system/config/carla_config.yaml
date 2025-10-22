@@ -169,13 +169,23 @@ traffic:
 # ROUTE SETTINGS (Paper: Goal-oriented features)
 # ============================================================================
 route:
-  # Waypoint file (from FinalProject/waypoints.txt)
-  waypoints_file: '/workspace/config/waypoints.txt'
+  # Dynamic route generation using CARLA's GlobalRoutePlanner API
+  # When enabled, routes are generated using A* pathfinding on road topology
+  # Start/end locations are extracted from waypoints_file for reproducibility
+  use_dynamic_generation: true  # Enable dynamic waypoint generation
 
-  # Waypoint processing
+  # Waypoint file (from FinalProject/waypoints.txt)
+  # IMPORTANT: When use_dynamic_generation=true, only the FIRST and LAST
+  # waypoints are used to define start/end locations. CARLA's API generates
+  # all intermediate waypoints automatically using the road network.
+  waypoints_file: '/workspace/av_td3_system/config/waypoints.txt'
+
+  # Dynamic route generation settings (used when use_dynamic_generation=true)
+  sampling_resolution: 2.0  # Distance between waypoints in meters (default: 2.0)
+
+  # Waypoint processing (applies to both static and dynamic routes)
   lookahead_distance: 50.0  # meters (how far ahead to look)
   num_waypoints_ahead: 10   # Number of future waypoints to include in state
-  waypoint_spacing: 2.0    # meters (distance between waypoints)
 
   # Coordinate transformation
   use_relative_coordinates: true  # Transform to vehicle local frame
@@ -218,17 +228,23 @@ episode:
 # REWARD FUNCTION WEIGHTS (Paper Section III.B)
 # ============================================================================
 reward:
-  # Efficiency reward (target speed tracking)
-  efficiency:
-    weight: 1.0
-    target_speed: 30.0  # km/h
-    speed_tolerance: 5.0  # km/h (±5 km/h)
+  # Component weights (must match RewardCalculator expected structure)
+  weights:
+    efficiency: 3.0      # INCREASED from 1.0 to strongly encourage movement
+    lane_keeping: 1.0   # REDUCED from 2.0 to balance with efficiency
+    comfort: 0.5
+    safety: -100.0
 
-  # Lane keeping reward
+  # Efficiency reward parameters (target speed tracking)
+  efficiency:
+    target_speed: 8.33  # m/s (30 km/h) - CODE EXPECTS M/S!
+    speed_tolerance: 1.39  # m/s (5 km/h tolerance)
+    overspeed_penalty_scale: 2.0
+
+  # Lane keeping reward parameters
   lane_keeping:
-    weight: 2.0  # Higher weight for safety
-    max_lateral_deviation: 1.0  # meters
-    max_heading_error: 15.0      # degrees
+    lateral_tolerance: 0.5  # meters
+    heading_tolerance: 0.1  # radians (~5.7 degrees)
 
   # Comfort penalty (minimize jerk)
   comfort:

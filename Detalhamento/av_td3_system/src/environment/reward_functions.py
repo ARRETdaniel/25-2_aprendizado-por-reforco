@@ -51,8 +51,8 @@ class RewardCalculator:
         })
 
         # Efficiency parameters
-        self.target_speed = config.get("efficiency", {}).get("target_speed", 10.0)  # m/s
-        self.speed_tolerance = config.get("efficiency", {}).get("speed_tolerance", 2.0)
+        self.target_speed = config.get("efficiency", {}).get("target_speed", 8.33)  # m/s (default: 30 km/h)
+        self.speed_tolerance = config.get("efficiency", {}).get("speed_tolerance", 1.39)  # m/s (default: 5 km/h)
         self.overspeed_penalty_scale = config.get("efficiency", {}).get(
             "overspeed_penalty_scale", 2.0
         )

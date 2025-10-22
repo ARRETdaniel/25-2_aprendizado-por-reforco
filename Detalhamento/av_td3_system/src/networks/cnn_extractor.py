@@ -1,17 +1,336 @@
 """
-Convolutional Neural Network for Visual Feature Extraction
+CNN Feature Extractor for Visual Navigation.
 
-Implements NatureCNN architecture from DQN paper (Mnih et al., 2015):
-- 3 convolutional layers with ReLU activations
-- Flattening layer
-- Fully connected layer (512 units) producing feature vector
-
-Input: 4×84×84 stacked grayscale frames
-Output: 512-dimensional feature vector for concatenation with kinematic features
-
-Paper Reference: "Human-level control through deep reinforcement learning" (DQN)
-Architecture: Conv(32,8,4) → Conv(64,4,2) → Conv(64,3,1) → FC(512)
+Extracts features from stacked camera frames for TD3 agent.
+Implements transfer learning using pretrained MobileNetV3 for efficiency.
 """
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torchvision import models
+from typing import Optional
+
+
+class NatureCNN(nn.Module):
+    """
+    Nature CNN architecture for feature extraction.
+
+    Input: 4-channel stacked grayscale images (4, 84, 84)
+    Output: 512-dimensional feature vector
+
+    Architecture:
+        - Conv1: 4x84x84 -> 32x20x20 (8x8 kernel, stride 4)
+        - Conv2: 32x20x20 -> 64x9x9 (4x4 kernel, stride 2)
+        - Conv3: 64x9x9 -> 64x7x7 (3x3 kernel, stride 1)
+        - Flatten: 64x7x7 -> 3136
+        - FC1: 3136 -> 512
+
+    Reference:
+        Mnih et al., "Human-level control through deep reinforcement learning"
+        Nature 518.7540 (2015): 529-533.
+    """
+
+    def __init__(self, input_channels: int = 4, output_dim: int = 512):
+        """
+        Initialize Nature CNN.
+
+        Args:
+            input_channels: Number of input channels (default: 4 for stacked frames)
+            output_dim: Dimension of output feature vector (default: 512)
+        """
+        super(NatureCNN, self).__init__()
+
+        self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=8, stride=4)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=4, stride=2)
+        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1)
+
+        # Calculate flattened size after convolutions
+        # Input: 84x84
+        # After conv1: (84 - 8) // 4 + 1 = 20
+        # After conv2: (20 - 4) // 2 + 1 = 9
+        # After conv3: (9 - 3) // 1 + 1 = 7
+        # Flattened: 64 * 7 * 7 = 3136
+        self.fc1 = nn.Linear(64 * 7 * 7, output_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass.
+
+        Args:
+            x: Input tensor of shape (batch_size, 4, 84, 84)
+
+        Returns:
+            Feature vector of shape (batch_size, 512)
+        """
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = x.view(x.size(0), -1)  # Flatten
+        x = F.relu(self.fc1(x))
+        return x
+
+
+class MobileNetV3FeatureExtractor(nn.Module):
+    """
+    MobileNetV3-based feature extractor with transfer learning.
+
+    Uses pretrained MobileNetV3-Small as backbone for efficient feature extraction.
+    Adapted for 4-channel grayscale input (stacked frames) and 512-dim output.
+
+    This provides better feature learning than training from scratch while
+    maintaining real-time performance suitable for autonomous navigation.
+
+    Input: 4-channel stacked grayscale images (4, 84, 84)
+    Output: 512-dimensional feature vector
+
+    Architecture:
+        - Input adaptation: 4-channel grayscale -> 3-channel RGB conversion
+        - MobileNetV3-Small backbone (pretrained on ImageNet)
+        - Custom classifier head: backbone_features -> 512
+
+    Reference:
+        Howard et al., "Searching for MobileNetV3" (2019)
+        https://arxiv.org/abs/1905.02244
+    """
+
+    def __init__(
+        self,
+        input_channels: int = 4,
+        output_dim: int = 512,
+        pretrained: bool = True,
+        freeze_backbone: bool = False
+    ):
+        """
+        Initialize MobileNetV3 feature extractor.
+
+        Args:
+            input_channels: Number of input channels (default: 4 for stacked frames)
+            output_dim: Dimension of output feature vector (default: 512)
+            pretrained: Whether to use ImageNet pretrained weights (default: True)
+            freeze_backbone: Whether to freeze backbone weights (default: False)
+        """
+        super(MobileNetV3FeatureExtractor, self).__init__()
+
+        self.input_channels = input_channels
+        self.output_dim = output_dim
+
+        # Load pretrained MobileNetV3-Small
+        if pretrained:
+            weights = models.MobileNet_V3_Small_Weights.DEFAULT
+            self.backbone = models.mobilenet_v3_small(weights=weights)
+        else:
+            self.backbone = models.mobilenet_v3_small(weights=None)
+
+        # Adapt first conv layer for 4-channel input
+        # Original: Conv2d(3, 16, kernel_size=3, stride=2, padding=1)
+        # We'll use a projection layer to convert 4 channels -> 3 channels
+        self.input_projection = nn.Conv2d(
+            input_channels, 3,
+            kernel_size=1, stride=1, padding=0, bias=False
+        )
+        nn.init.kaiming_normal_(self.input_projection.weight, mode='fan_out', nonlinearity='relu')
+
+        # Freeze backbone if requested (for faster training initially)
+        if freeze_backbone:
+            for param in self.backbone.parameters():
+                param.requires_grad = False
+
+        # Replace classifier with custom head
+        # MobileNetV3-Small last conv outputs 576 features
+        backbone_output_features = self.backbone.classifier[0].in_features
+        self.backbone.classifier = nn.Identity()  # Remove original classifier
+
+        # Custom classifier head for 512-dim output
+        self.feature_head = nn.Sequential(
+            nn.Linear(backbone_output_features, 1024),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            nn.Linear(1024, output_dim),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass.
+
+        Args:
+            x: Input tensor of shape (batch_size, 4, 84, 84)
+
+        Returns:
+            Feature vector of shape (batch_size, 512)
+        """
+        # Project 4 channels to 3 channels for backbone
+        x = self.input_projection(x)
+
+        # Extract features using MobileNetV3 backbone
+        x = self.backbone.features(x)
+
+        # Global average pooling
+        x = self.backbone.avgpool(x)
+        x = torch.flatten(x, 1)
+
+        # Custom feature head
+        x = self.feature_head(x)
+
+        return x
+
+    def unfreeze_backbone(self):
+        """Unfreeze backbone weights for fine-tuning."""
+        for param in self.backbone.parameters():
+            param.requires_grad = True
+
+
+class ResNet18FeatureExtractor(nn.Module):
+    """
+    ResNet18-based feature extractor with transfer learning.
+
+    Uses pretrained ResNet18 as backbone for robust feature extraction.
+    Adapted for 4-channel grayscale input (stacked frames) and 512-dim output.
+
+    This provides strong feature representations at the cost of slightly
+    more computation compared to MobileNetV3.
+
+    Input: 4-channel stacked grayscale images (4, 84, 84)
+    Output: 512-dimensional feature vector
+
+    Reference:
+        He et al., "Deep Residual Learning for Image Recognition" (2016)
+        https://arxiv.org/abs/1512.03385
+    """
+
+    def __init__(
+        self,
+        input_channels: int = 4,
+        output_dim: int = 512,
+        pretrained: bool = True,
+        freeze_backbone: bool = False
+    ):
+        """
+        Initialize ResNet18 feature extractor.
+
+        Args:
+            input_channels: Number of input channels (default: 4 for stacked frames)
+            output_dim: Dimension of output feature vector (default: 512)
+            pretrained: Whether to use ImageNet pretrained weights (default: True)
+            freeze_backbone: Whether to freeze backbone weights (default: False)
+        """
+        super(ResNet18FeatureExtractor, self).__init__()
+
+        self.input_channels = input_channels
+        self.output_dim = output_dim
+
+        # Load pretrained ResNet18
+        if pretrained:
+            weights = models.ResNet18_Weights.DEFAULT
+            self.backbone = models.resnet18(weights=weights)
+        else:
+            self.backbone = models.resnet18(weights=None)
+
+        # Adapt first conv layer for 4-channel input
+        self.input_projection = nn.Conv2d(
+            input_channels, 3,
+            kernel_size=1, stride=1, padding=0, bias=False
+        )
+        nn.init.kaiming_normal_(self.input_projection.weight, mode='fan_out', nonlinearity='relu')
+
+        # Freeze backbone if requested
+        if freeze_backbone:
+            for param in self.backbone.parameters():
+                param.requires_grad = False
+
+        # Remove final FC layer and replace with custom head
+        backbone_output_features = self.backbone.fc.in_features  # 512 for ResNet18
+        self.backbone.fc = nn.Identity()
+
+        # Custom classifier head
+        self.feature_head = nn.Sequential(
+            nn.Linear(backbone_output_features, output_dim),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass.
+
+        Args:
+            x: Input tensor of shape (batch_size, 4, 84, 84)
+
+        Returns:
+            Feature vector of shape (batch_size, 512)
+        """
+        # Project 4 channels to 3 channels for backbone
+        x = self.input_projection(x)
+
+        # Extract features using ResNet18 backbone
+        x = self.backbone.conv1(x)
+        x = self.backbone.bn1(x)
+        x = self.backbone.relu(x)
+        x = self.backbone.maxpool(x)
+
+        x = self.backbone.layer1(x)
+        x = self.backbone.layer2(x)
+        x = self.backbone.layer3(x)
+        x = self.backbone.layer4(x)
+
+        x = self.backbone.avgpool(x)
+        x = torch.flatten(x, 1)
+
+        # Custom feature head
+        x = self.feature_head(x)
+
+        return x
+
+    def unfreeze_backbone(self):
+        """Unfreeze backbone weights for fine-tuning."""
+        for param in self.backbone.parameters():
+            param.requires_grad = True
+
+
+def get_cnn_extractor(
+    architecture: str = "mobilenet",
+    input_channels: int = 4,
+    output_dim: int = 512,
+    pretrained: bool = True,
+    freeze_backbone: bool = False
+) -> nn.Module:
+    """
+    Factory function to get CNN feature extractor.
+
+    Args:
+        architecture: CNN architecture to use ('nature', 'mobilenet', 'resnet18')
+        input_channels: Number of input channels (default: 4)
+        output_dim: Output feature dimension (default: 512)
+        pretrained: Use pretrained weights (default: True)
+        freeze_backbone: Freeze backbone for transfer learning (default: False)
+
+    Returns:
+        CNN feature extractor module
+
+    Raises:
+        ValueError: If architecture is not recognized
+    """
+    if architecture.lower() == "nature":
+        return NatureCNN(input_channels=input_channels, output_dim=output_dim)
+    elif architecture.lower() == "mobilenet":
+        return MobileNetV3FeatureExtractor(
+            input_channels=input_channels,
+            output_dim=output_dim,
+            pretrained=pretrained,
+            freeze_backbone=freeze_backbone
+        )
+    elif architecture.lower() == "resnet18":
+        return ResNet18FeatureExtractor(
+            input_channels=input_channels,
+            output_dim=output_dim,
+            pretrained=pretrained,
+            freeze_backbone=freeze_backbone
+        )
+    else:
+        raise ValueError(
+            f"Unknown architecture: {architecture}. "
+            f"Choose from: 'nature', 'mobilenet', 'resnet18'"
+        )
 
 import torch
 import torch.nn as nn

@@ -142,33 +142,35 @@ class WaypointManager:
 
         return np.array(waypoints_local, dtype=np.float32)
 
-    def _update_current_waypoint(self, vehicle_location: Tuple[float, float, float]):
+    def _update_current_waypoint(self, vehicle_location):
         """
         Update current waypoint index based on vehicle position.
 
-        Finds the next waypoint ahead of the vehicle.
+        Uses a proper "passing" threshold: only advances to next waypoint
+        when vehicle is within 5m radius of current waypoint.
+
+        Args:
+            vehicle_location: Current vehicle location (can be carla.Location or tuple (x,y,z))
         """
-        vx, vy, vz = vehicle_location
+        # Handle both carla.Location and tuple inputs
+        if hasattr(vehicle_location, 'x'):  # carla.Location object
+            vx, vy, vz = vehicle_location.x, vehicle_location.y, vehicle_location.z
+        else:  # Tuple (x, y, z)
+            vx, vy, vz = vehicle_location
 
-        # Find closest waypoint ahead
-        min_dist = float("inf")
-        closest_idx = self.current_waypoint_idx
+        # Waypoint passing threshold (meters)
+        WAYPOINT_PASSED_THRESHOLD = 5.0
 
-        for idx in range(self.current_waypoint_idx, len(self.waypoints)):
-            wpx, wpy, wpz = self.waypoints[idx]
+        # Check if current waypoint has been passed
+        if self.current_waypoint_idx < len(self.waypoints):
+            wpx, wpy, wpz = self.waypoints[self.current_waypoint_idx]
+            dist_to_current = math.sqrt((vx - wpx) ** 2 + (vy - wpy) ** 2)
 
-            # Calculate distance
-            dist = math.sqrt((vx - wpx) ** 2 + (vy - wpy) ** 2)
-
-            if dist < min_dist:
-                min_dist = dist
-                closest_idx = idx
-
-            # Stop if we've moved significantly past this waypoint
-            if idx > self.current_waypoint_idx and dist > min_dist + 10.0:
-                break
-
-        self.current_waypoint_idx = closest_idx
+            # If within threshold, consider this waypoint reached and advance
+            if dist_to_current < WAYPOINT_PASSED_THRESHOLD:
+                # Move to next waypoint if available
+                if self.current_waypoint_idx < len(self.waypoints) - 1:
+                    self.current_waypoint_idx += 1
 
     def _global_to_local(
         self,
@@ -185,16 +187,27 @@ class WaypointManager:
         - Origin: vehicle location
 
         Args:
-            global_point: (x, y, z) in global CARLA coordinates
-            vehicle_location: (x, y, z) of vehicle in global coordinates
+            global_point: (x, y, z) in global CARLA coordinates or carla.Location
+            vehicle_location: (x, y, z) of vehicle in global coordinates or carla.Location
             vehicle_heading: Vehicle heading angle in radians
 
         Returns:
             [local_x, local_y] in vehicle frame
         """
+        # Handle carla.Location objects
+        if hasattr(global_point, 'x'):
+            gx, gy = global_point.x, global_point.y
+        else:
+            gx, gy = global_point[0], global_point[1]
+
+        if hasattr(vehicle_location, 'x'):
+            vx, vy = vehicle_location.x, vehicle_location.y
+        else:
+            vx, vy = vehicle_location[0], vehicle_location[1]
+
         # Vector from vehicle to waypoint
-        dx = global_point[0] - vehicle_location[0]
-        dy = global_point[1] - vehicle_location[1]
+        dx = gx - vx
+        dy = gy - vy
 
         # Rotate to vehicle frame
         # Heading = 0 is North, positive is counter-clockwise
@@ -227,14 +240,12 @@ class WaypointManager:
         """
         return self.current_waypoint_idx >= len(self.waypoints) - 1
 
-    def get_target_heading(
-        self, vehicle_location: Tuple[float, float, float]
-    ) -> float:
+    def get_target_heading(self, vehicle_location) -> float:
         """
-        Get target heading towards next waypoint.
+        Get target heading to next waypoint.
 
         Args:
-            vehicle_location: Current vehicle (x, y, z)
+            vehicle_location: Current vehicle location (can be carla.Location or tuple (x,y,z))
 
         Returns:
             Target heading in radians (0=North, π/2=East)
@@ -242,28 +253,38 @@ class WaypointManager:
         if self.current_waypoint_idx >= len(self.waypoints):
             return 0.0
 
+        # Handle both carla.Location and tuple inputs
+        if hasattr(vehicle_location, 'x'):  # carla.Location object
+            vx, vy = vehicle_location.x, vehicle_location.y
+        else:  # Tuple (x, y, z)
+            vx, vy = vehicle_location[0], vehicle_location[1]
+
         next_wp = self.waypoints[self.current_waypoint_idx]
-        dx = next_wp[0] - vehicle_location[0]
-        dy = next_wp[1] - vehicle_location[1]
+        dx = next_wp[0] - vx
+        dy = next_wp[1] - vy
 
         # Calculate heading (0=North, π/2=East in CARLA)
         heading = math.atan2(dx, dy)  # Note: CARLA uses y as "north"
         return heading
 
-    def get_lateral_deviation(
-        self, vehicle_location: Tuple[float, float, float]
-    ) -> float:
+    def get_lateral_deviation(self, vehicle_location) -> float:
         """
         Get lateral deviation from route (perpendicular distance to waypoint).
 
         Args:
-            vehicle_location: Current vehicle (x, y, z)
+            vehicle_location: Current vehicle location (can be carla.Location or tuple (x,y,z))
 
         Returns:
             Lateral deviation in meters (positive = right of route)
         """
         if self.current_waypoint_idx >= len(self.waypoints):
             return 0.0
+
+        # Handle both carla.Location and tuple inputs
+        if hasattr(vehicle_location, 'x'):  # carla.Location object
+            vx_pos, vy_pos = vehicle_location.x, vehicle_location.y
+        else:  # Tuple (x, y, z)
+            vx_pos, vy_pos = vehicle_location[0], vehicle_location[1]
 
         # Get current and next waypoints
         if self.current_waypoint_idx == 0:
@@ -282,8 +303,8 @@ class WaypointManager:
             return 0.0
 
         # Vector from wp1 to vehicle
-        vx = vehicle_location[0] - wp1[0]
-        vy = vehicle_location[1] - wp1[1]
+        vx = vx_pos - wp1[0]
+        vy = vy_pos - wp1[1]
 
         # Perpendicular distance (cross product divided by route length)
         cross = route_dx * vy - route_dy * vx

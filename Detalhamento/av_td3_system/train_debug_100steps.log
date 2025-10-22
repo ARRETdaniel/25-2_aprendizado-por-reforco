@@ -1,0 +1,46 @@
+
+======================================================================
+TD3 TRAINING PIPELINE - AUTONOMOUS VEHICLE NAVIGATION
+======================================================================
+
+[CONFIG] Loading configurations...
+[CONFIG] CARLA config: config/carla_config.yaml
+[CONFIG] Agent config: config/td3_config.yaml
+[CONFIG] Scenario: 0 (0=20, 1=50, 2=100 NPCs)
+[CONFIG] NPC count set to: 20
+
+[ENVIRONMENT] Initializing CARLA environment...
+[ENVIRONMENT] State space: Dict('image': Box(0.0, 1.0, (4, 84, 84), float32), 'vector': Box(-inf, inf, (23,), float32))
+[ENVIRONMENT] Action space: Box(-1.0, 1.0, (2,), float32)
+
+[AGENT] Initializing TD3 agent...
+[AGENT] Using device: cpu
+TD3Agent initialized on device: cpu (manually specified)
+TD3Agent initialized with:
+  State dim: 535, Action dim: 2
+  Actor hidden size: [256, 256]
+  Critic hidden size: [256, 256]
+  Discount γ: 0.99, Tau τ: 0.005
+  Policy freq: 2, Policy noise: 0.2
+  Exploration noise: 0.1
+  Buffer size: 1000000, Batch size: 256
+[LOGGING] TensorBoard logs: data/logs/TD3_scenario_0_npcs_20_20251022-220522
+
+[DEBUG] Visual feedback enabled (OpenCV display)
+[DEBUG] Press 'q' to quit, 'p' to pause/unpause
+
+[INIT] Training pipeline ready!
+[INIT] Max timesteps: 100
+[INIT] Seed: 42
+======================================================================
+
+[TRAINING] Starting training loop...
+No scenarios found in config, using default NPC count: 50
+Traceback (most recent call last):
+  File "/workspace/scripts/train_td3.py", line 652, in <module>
+    main()
+  File "/workspace/scripts/train_td3.py", line 648, in main
+    trainer.train()
+  File "/workspace/scripts/train_td3.py", line 359, in train
+    start_timesteps = self.agent_config['training']['start_timesteps']
+KeyError: 'start_timesteps'

@@ -77,7 +77,8 @@ def test_3_1_env_initialization():
         # Cleanup
         env.close()
         print(f"\n✅ TEST 3.1 PASSED")
-        return True    except Exception as e:
+        return True
+    except Exception as e:
         print(f"\n❌ TEST 3.1 FAILED: {e}")
         import traceback
         traceback.print_exc()
@@ -93,54 +94,110 @@ def test_3_2_state_composition():
     try:
         from src.environment.carla_env import CARLANavigationEnv
 
-        with open('/workspace/config/carla_config.yaml', 'r') as f:
-            config = yaml.safe_load(f)
-
         print(f"✅ Loading environment...")
-        env = CARLANavigationEnv(config)
+        env = CARLANavigationEnv(
+            carla_config_path='/workspace/config/carla_config.yaml',
+            td3_config_path='/workspace/config/td3_config.yaml',
+            training_config_path='/workspace/config/training_config.yaml',
+            host='localhost',
+            port=2000
+        )
         state = env.reset()
 
         print(f"✅ Environment reset")
-        print(f"   Total state size: {state.shape[0]} dimensions")
+        print(f"   State type: {type(state)}")
+        print(f"   State keys: {state.keys() if isinstance(state, dict) else 'Not a dict'}")
 
-        # Extract state components
-        cnn_features = state[:512]
-        kinematics = state[512:515]
-        waypoints = state[515:535]
+        # Handle Dict observation space
+        if isinstance(state, dict):
+            image_state = state['image']
+            vector_state = state['vector']
+            print(f"   Image shape: {image_state.shape}")
+            print(f"   Vector shape: {vector_state.shape}")
 
-        print(f"\n📋 State Breakdown:")
-        print(f"   CNN Features:  [{state[0]:.3f}, ..., {state[511]:.3f}] (512 dims)")
-        print(f"      Range: [{cnn_features.min():.3f}, {cnn_features.max():.3f}]")
-        print(f"      Mean: {cnn_features.mean():.3f}, Std: {cnn_features.std():.3f}")
+            # For analysis, focus on vector state which has kinematics + waypoints
+            # Vector state = [velocity, lateral_dev, heading_error, ...waypoints_x1, waypoints_y1, ...]
+            kinematics = vector_state[:3]
+            waypoints = vector_state[3:]  # Remaining elements are waypoints
 
-        print(f"\n   Kinematics:    {kinematics} (3 dims)")
-        print(f"      velocity: {kinematics[0]:.3f}")
-        print(f"      lateral_deviation: {kinematics[1]:.3f}")
-        print(f"      heading_error: {kinematics[2]:.3f}")
+            print(f"\n📋 State Breakdown:")
+            print(f"   Image Features: {image_state.shape} (4 stacked frames, 84×84 grayscale)")
+            print(f"      Range: [{image_state.min():.3f}, {image_state.max():.3f}]")
+            print(f"      Mean: {image_state.mean():.3f}, Std: {image_state.std():.3f}")
 
-        print(f"\n   Waypoints:     (20 dims = 10 waypoints × 2 coords)")
-        for i in range(0, 20, 2):
-            print(f"      WP{i//2}: x={waypoints[i]:.3f}, y={waypoints[i+1]:.3f}")
+            print(f"\n   Kinematics:    {kinematics} (3 dims)")
+            print(f"      velocity: {kinematics[0]:.3f}")
+            print(f"      lateral_deviation: {kinematics[1]:.3f}")
+            print(f"      heading_error: {kinematics[2]:.3f}")
 
-        # Validation checks
-        print(f"\n✓ Validating state properties...")
+            print(f"\n   Waypoints:     ({len(waypoints)} dims)")
+            num_waypoints = len(waypoints) // 2
+            for i in range(min(5, num_waypoints)):  # Show first 5 waypoints
+                print(f"      WP{i}: x={waypoints[i*2]:.3f}, y={waypoints[i*2+1]:.3f}")
 
-        # Check for NaN/Inf
-        assert not np.any(np.isnan(state)), "❌ State contains NaN values!"
-        print(f"✅ No NaN values in state")
+            # Validation checks
+            print(f"\n✓ Validating state properties...")
 
-        assert not np.any(np.isinf(state)), "❌ State contains Inf values!"
-        print(f"✅ No Inf values in state")
+            # Check for NaN/Inf
+            assert not np.any(np.isnan(image_state)), "❌ Image state contains NaN values!"
+            assert not np.any(np.isnan(vector_state)), "❌ Vector state contains NaN values!"
+            print(f"✅ No NaN values in state")
 
-        # Check reasonable ranges
-        assert np.all(kinematics >= -10) and np.all(kinematics <= 10), \
-            f"❌ Kinematics out of reasonable range: {kinematics}"
-        print(f"✅ Kinematics in reasonable range [-10, 10]")
+            assert not np.any(np.isinf(image_state)), "❌ Image state contains Inf values!"
+            assert not np.any(np.isinf(vector_state)), "❌ Vector state contains Inf values!"
+            print(f"✅ No Inf values in state")
 
-        # Check waypoints are reasonable positions
-        assert np.all(np.abs(waypoints)) < 500, \
-            f"❌ Waypoints unreasonably far: {np.max(np.abs(waypoints))}"
-        print(f"✅ Waypoints in reasonable range")
+            # Check reasonable ranges
+            assert np.all(kinematics >= -100) and np.all(kinematics <= 100), \
+                f"❌ Kinematics out of reasonable range: {kinematics}"
+            print(f"✅ Kinematics in reasonable range [-100, 100]")
+
+            # Check waypoints are reasonable positions
+            assert np.all(np.abs(waypoints)) < 1000, \
+                f"❌ Waypoints unreasonably far: {np.max(np.abs(waypoints))}"
+            print(f"✅ Waypoints in reasonable range")
+        else:
+            # Legacy flat array format
+            print(f"   Total state size: {state.shape[0]} dimensions")
+
+            # Extract state components
+            cnn_features = state[:512]
+            kinematics = state[512:515]
+            waypoints = state[515:535]
+
+            print(f"\n📋 State Breakdown:")
+            print(f"   CNN Features:  [{state[0]:.3f}, ..., {state[511]:.3f}] (512 dims)")
+            print(f"      Range: [{cnn_features.min():.3f}, {cnn_features.max():.3f}]")
+            print(f"      Mean: {cnn_features.mean():.3f}, Std: {cnn_features.std():.3f}")
+
+            print(f"\n   Kinematics:    {kinematics} (3 dims)")
+            print(f"      velocity: {kinematics[0]:.3f}")
+            print(f"      lateral_deviation: {kinematics[1]:.3f}")
+            print(f"      heading_error: {kinematics[2]:.3f}")
+
+            print(f"\n   Waypoints:     (20 dims = 10 waypoints × 2 coords)")
+            for i in range(0, 20, 2):
+                print(f"      WP{i//2}: x={waypoints[i]:.3f}, y={waypoints[i+1]:.3f}")
+
+            # Validation checks
+            print(f"\n✓ Validating state properties...")
+
+            # Check for NaN/Inf
+            assert not np.any(np.isnan(state)), "❌ State contains NaN values!"
+            print(f"✅ No NaN values in state")
+
+            assert not np.any(np.isinf(state)), "❌ State contains Inf values!"
+            print(f"✅ No Inf values in state")
+
+            # Check reasonable ranges
+            assert np.all(kinematics >= -10) and np.all(kinematics <= 10), \
+                f"❌ Kinematics out of reasonable range: {kinematics}"
+            print(f"✅ Kinematics in reasonable range [-10, 10]")
+
+            # Check waypoints are reasonable positions
+            assert np.all(np.abs(waypoints)) < 500, \
+                f"❌ Waypoints unreasonably far: {np.max(np.abs(waypoints))}"
+            print(f"✅ Waypoints in reasonable range")
 
         env.close()
         print(f"\n✅ TEST 3.2 PASSED")
@@ -162,14 +219,22 @@ def test_3_3_environment_step():
     try:
         from src.environment.carla_env import CARLANavigationEnv
 
-        with open('/workspace/config/carla_config.yaml', 'r') as f:
-            config = yaml.safe_load(f)
-
-        env = CARLANavigationEnv(config)
+        env = CARLANavigationEnv(
+            carla_config_path='/workspace/config/carla_config.yaml',
+            td3_config_path='/workspace/config/td3_config.yaml',
+            training_config_path='/workspace/config/training_config.yaml',
+            host='localhost',
+            port=2000
+        )
         state = env.reset()
 
         print(f"✅ Environment ready")
-        print(f"   Initial state shape: {state.shape}")
+        if isinstance(state, dict):
+            print(f"   State type: Dict")
+            print(f"   Image shape: {state['image'].shape}")
+            print(f"   Vector shape: {state['vector'].shape}")
+        else:
+            print(f"   Initial state shape: {state.shape}")
 
         # Test basic step
         print(f"\n🔄 Executing single step...")
@@ -177,14 +242,26 @@ def test_3_3_environment_step():
         next_state, reward, done, truncated, info = env.step(action)
 
         print(f"✅ Step executed")
-        print(f"   Next state shape: {next_state.shape}")
+        if isinstance(next_state, dict):
+            print(f"   Next state type: Dict")
+            print(f"   Image shape: {next_state['image'].shape}")
+            print(f"   Vector shape: {next_state['vector'].shape}")
+
+            # Validate shapes match
+            assert next_state['image'].shape == state['image'].shape, \
+                f"❌ Image shape changed: {next_state['image'].shape} != {state['image'].shape}"
+            assert next_state['vector'].shape == state['vector'].shape, \
+                f"❌ Vector shape changed: {next_state['vector'].shape} != {state['vector'].shape}"
+        else:
+            print(f"   Next state shape: {next_state.shape}")
+            # Validate return types
+            assert next_state.shape == state.shape, f"❌ State shape changed: {next_state.shape} != {state.shape}"
+
         print(f"   Reward: {reward:.4f}")
         print(f"   Done: {done}")
         print(f"   Truncated: {truncated}")
         print(f"   Info keys: {list(info.keys())[:5]}...")
 
-        # Validate return types
-        assert next_state.shape == state.shape, f"❌ State shape changed: {next_state.shape} != {state.shape}"
         assert isinstance(reward, (float, np.floating)), f"❌ Reward not float: {type(reward)}"
         assert isinstance(done, (bool, np.bool_)), f"❌ Done not bool: {type(done)}"
         assert isinstance(truncated, (bool, np.bool_)), f"❌ Truncated not bool: {type(truncated)}"

@@ -29,6 +29,39 @@ scenarios:
 # Episode settings
 episode:
   max_steps: 1000  # Maximum timesteps per episode
+
+# ============================================================================
+# REWARD FUNCTION CONFIGURATION (Paper Section III.B)
+# ============================================================================
+# Multi-component reward function for autonomous driving
+reward:
+  # Component weights (carefully tuned to encourage movement)
+  weights:
+    efficiency: 3.0      # INCREASED from 1.0 to strongly encourage movement
+    lane_keeping: 1.0    # REDUCED from 2.0 to balance with efficiency
+    comfort: 0.5         # Smooth driving
+    safety: -100.0       # Large negative for collisions
+
+  # Efficiency reward parameters (target speed tracking)
+  efficiency:
+    target_speed: 8.33  # m/s (30 km/h) - MUST BE IN M/S!
+    speed_tolerance: 1.39  # m/s (5 km/h tolerance)
+    overspeed_penalty_scale: 2.0
+
+  # Lane keeping reward parameters
+  lane_keeping:
+    lateral_tolerance: 0.5  # meters
+    heading_tolerance: 0.1  # radians (~5.7 degrees)
+
+  # Comfort penalty (minimize jerk)
+  comfort:
+    jerk_threshold: 2.0  # m/s³
+
+  # Safety penalty (collisions, off-road)
+  safety:
+    collision_penalty: -200.0  # Large negative reward
+    off_road_penalty: -100.0
+    wrong_way_penalty: -50.0
   max_duration: 300.0  # Maximum duration in seconds (5 minutes)
   max_distance: 1000.0  # Maximum distance in meters
 
