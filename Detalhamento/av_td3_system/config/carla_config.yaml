@@ -178,7 +178,7 @@ route:
   # IMPORTANT: When use_dynamic_generation=true, only the FIRST and LAST
   # waypoints are used to define start/end locations. CARLA's API generates
   # all intermediate waypoints automatically using the road network.
-  waypoints_file: '/workspace/av_td3_system/config/waypoints.txt'
+  waypoints_file: '/workspace/config/waypoints.txt'
 
   # Dynamic route generation settings (used when use_dynamic_generation=true)
   sampling_resolution: 2.0  # Distance between waypoints in meters (default: 2.0)

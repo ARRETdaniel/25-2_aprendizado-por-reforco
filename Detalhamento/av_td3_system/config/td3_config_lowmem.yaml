@@ -174,7 +174,7 @@ experiment:
   version: '1.0.0-lowmem'
   author: 'Daniel Terra Gomes'
   paper: 'End-to-End Visual Autonomous Navigation with Twin Delayed DDPG'
-  
+
 # Memory Optimization Notes:
 # ================================
 # This configuration is optimized for 6GB GPUs running alongside CARLA (~5.4GB).

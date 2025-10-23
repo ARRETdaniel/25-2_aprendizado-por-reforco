@@ -83,7 +83,7 @@ docker run --rm --network host --runtime nvidia \
 
 **Console Output Sample**:
 ```
-[ENVIRONMENT] State space: Dict('image': Box(0.0, 1.0, (4, 84, 84), float32), 
+[ENVIRONMENT] State space: Dict('image': Box(0.0, 1.0, (4, 84, 84), float32),
                                 'vector': Box(-inf, inf, (23,), float32))
 [ENVIRONMENT] Action space: Box(-1.0, 1.0, (2,), float32)
 
@@ -149,26 +149,26 @@ state = self.flatten_dict_obs(obs_dict)  # Flat for agent
 for t in range(max_timesteps):
     # Select action (uses flat state)
     action = self.agent.select_action(state)
-    
+
     # Step environment (returns Dict)
     next_obs_dict, reward, done, truncated, info = self.env.step(action)
     next_state = self.flatten_dict_obs(next_obs_dict)
-    
+
     # Visualize (uses original Dict)
     if self.debug:
         self._visualize_debug(obs_dict, action, reward, info, t)
-    
+
     # Store in replay buffer (uses flat states)
     self.agent.replay_buffer.add(state, action, next_state, reward, done)
-    
+
     # Train agent (uses flat states)
     if t > start_timesteps:
         self.agent.train(batch_size=256)
-    
+
     # Update for next iteration
     state = next_state
     obs_dict = next_obs_dict
-    
+
     # Reset if episode done
     if done or truncated:
         obs_dict = self.env.reset()
@@ -199,11 +199,11 @@ for t in range(max_timesteps):
    # Scenario 0 (Low Density - 20 NPCs)
    python3 scripts/train_td3.py --scenario 0 --max-timesteps 1000000 \
      --eval-freq 10000 --checkpoint-freq 50000
-   
+
    # Scenario 1 (Medium Density - 50 NPCs)
    python3 scripts/train_td3.py --scenario 1 --max-timesteps 1000000 \
      --eval-freq 10000 --checkpoint-freq 50000
-   
+
    # Scenario 2 (High Density - 100 NPCs)
    python3 scripts/train_td3.py --scenario 2 --max-timesteps 1000000 \
      --eval-freq 10000 --checkpoint-freq 50000
@@ -264,7 +264,7 @@ for t in range(max_timesteps):
 
 ---
 
-**Status**: ✅ **COMPLETE AND TESTED**  
-**Date**: 2024-10-22  
-**Author**: Daniel Terra  
+**Status**: ✅ **COMPLETE AND TESTED**
+**Date**: 2024-10-22
+**Author**: Daniel Terra
 **Test Results**: 100 timesteps completed successfully without errors

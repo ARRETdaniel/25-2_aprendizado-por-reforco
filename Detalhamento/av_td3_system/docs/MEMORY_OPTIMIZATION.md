@@ -5,7 +5,7 @@
 When running CARLA (5.4GB) + PyTorch TD3 agent on a 6GB GPU (RTX 2060), we encounter CUDA Out of Memory errors:
 
 ```
-torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. 
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB.
 GPU 0 has a total capacity of 5.61 GiB of which 6.94 MiB is free.
 ```
 
@@ -240,7 +240,7 @@ print(f"PYTORCH_CUDA_ALLOC_CONF: {os.environ.get('PYTORCH_CUDA_ALLOC_CONF', 'Not
 if torch.cuda.is_available():
     print(f"Allocated: {torch.cuda.memory_allocated()/1e9:.2f}GB")
     print(f"Reserved: {torch.cuda.memory_reserved()/1e9:.2f}GB")
-    
+
     # Get detailed stats
     stats = torch.cuda.memory_stats()
     print(f"Peak allocated: {stats['allocated_bytes.all.peak']/1e9:.2f}GB")

@@ -178,30 +178,42 @@ class RewardCalculator:
         """
         Calculate efficiency reward for target speed tracking.
 
-        Reward increases if velocity is close to target speed.
-        Penalizes both underspeeding and overspeeding (with higher penalty for overspeeding).
+        CRITICAL: Agent must be incentivized to MOVE. Following Pérez-Gil et al. (2022):
+        - Reward longitudinal velocity (forward movement)
+        - Heavily penalize staying still or moving too slow
+        - Penalize excessive speed
+
+        Paper formula: R = Σ|v_t * cos(φ_t)| - |v_t * sin(φ_t)| - |v_t| * |d_t|
 
         Args:
             velocity: Current velocity (m/s)
 
         Returns:
-            Efficiency reward (typically 0 to 1)
+            Efficiency reward (range: -1.0 to 1.0, BUT heavily negative when not moving)
         """
-        speed_diff = abs(velocity - self.target_speed)
+        # Normalize velocity to [0, 1] where 1.0 = target speed
+        velocity_normalized = velocity / self.target_speed
 
-        if speed_diff <= self.speed_tolerance:
-            # Within tolerance: positive reward
-            efficiency = 1.0 - (speed_diff / self.speed_tolerance) * 0.5
+        if velocity < 1.0:  # Below 1 m/s (3.6 km/h) = essentially stopped
+            # STRONG penalty for not moving - agent must learn to accelerate
+            efficiency = -1.0
+        elif velocity < self.target_speed * 0.5:  # Below half target speed
+            # Moderate penalty for moving too slow
+            efficiency = -0.5 + (velocity_normalized * 0.5)
+        elif abs(velocity - self.target_speed) <= self.speed_tolerance:
+            # Within tolerance: positive reward (optimal range)
+            speed_diff = abs(velocity - self.target_speed)
+            efficiency = 1.0 - (speed_diff / self.speed_tolerance) * 0.3
         else:
-            # Outside tolerance: negative reward
-            excess = speed_diff - self.speed_tolerance
-
+            # Outside tolerance
             if velocity > self.target_speed:
-                # Overspeeding: higher penalty
-                efficiency = -excess / self.target_speed * self.overspeed_penalty_scale
+                # Overspeeding: penalty but less than underspeeding
+                excess = velocity - self.target_speed
+                efficiency = 0.7 - (excess / self.target_speed) * self.overspeed_penalty_scale
             else:
-                # Underspeeding: lower penalty
-                efficiency = -excess / self.target_speed * 0.5
+                # Underspeeding: penalty
+                deficit = self.target_speed - velocity
+                efficiency = -0.3 - (deficit / self.target_speed) * 0.3
 
         return float(np.clip(efficiency, -1.0, 1.0))
 

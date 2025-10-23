@@ -24,7 +24,7 @@ road_location = carla.Location(x=route_start[0], y=route_start[1], z=0.0)
 # 3. Use CARLA map to get proper waypoint at road surface
 carla_map = self.world.get_map()
 road_waypoint = carla_map.get_waypoint(
-    road_location, 
+    road_location,
     project_to_road=True,  # ✅ Projects to nearest road
     lane_type=carla.LaneType.Driving
 )
@@ -44,7 +44,7 @@ From [CARLA Python API - carla.Map.get_waypoint](https://carla.readthedocs.io/en
 
 > **get_waypoint**(self, location, project_to_road=True, lane_type=carla.LaneType.Driving)
 >
-> Returns a waypoint that can be located in an exact location or **translated to the center of the nearest lane**. Said lane type can be defined using flags such as `LaneType.Driving & LaneType.Shoulder`. 
+> Returns a waypoint that can be located in an exact location or **translated to the center of the nearest lane**. Said lane type can be defined using flags such as `LaneType.Driving & LaneType.Shoulder`.
 >
 > **Parameters**:
 > - `location` (carla.Location - meters): Location used as reference for the carla.Waypoint.
@@ -100,7 +100,7 @@ spawn_point = carla.Transform(
 )
 ```
 
-**Solution**: 
+**Solution**:
 1. Query CARLA map for proper road height at (X, Y) position
 2. Add small offset (+0.5m) to avoid Z-collision with road surface
 3. Vehicle spawns directly on road, no falling
@@ -195,7 +195,7 @@ spawn_points = carla_map.get_spawn_points()  # CARLA's predefined points
 **Why not**: These are random locations, not at our route start
 
 ### Option 3: Use map.get_waypoint() ✅ (CHOSEN)
-**Why yes**: 
+**Why yes**:
 - Dynamic (works for any X,Y coordinates)
 - Accurate (uses CARLA's road geometry)
 - Documented (official CARLA API method)
@@ -213,7 +213,7 @@ spawn_points = carla_map.get_spawn_points()  # CARLA's predefined points
 | **Physics State** | Falling for 1 second | Stable on road |
 | **Lateral Deviation** | N/A (crashed immediately) | 0.00m (on route) |
 
-**Status**: ✅ FIXED  
-**Date**: 2025-10-22  
-**Impact**: Critical - Prevents false collisions at episode start  
+**Status**: ✅ FIXED
+**Date**: 2025-10-22
+**Impact**: Critical - Prevents false collisions at episode start
 **Confidence**: VERY HIGH - Uses official CARLA API method for road height

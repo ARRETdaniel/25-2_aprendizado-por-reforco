@@ -109,13 +109,13 @@ av_td3_system/
 route:
   # Enable dynamic route generation (recommended)
   use_dynamic_generation: true
-  
+
   # Waypoints file (only START and END are used when dynamic=true)
   waypoints_file: '/workspace/av_td3_system/config/waypoints.txt'
-  
+
   # Sampling resolution (distance between waypoints in meters)
   sampling_resolution: 2.0  # Default: 2m
-  
+
   # Waypoint processing (same for both static and dynamic)
   lookahead_distance: 50.0
   num_waypoints_ahead: 10
@@ -228,10 +228,10 @@ maps = ['Town01', 'Town02', 'Town03']
 for map_name in maps:
     world = client.load_world(map_name)
     spawn_points = world.get_map().get_spawn_points()
-    
+
     route_manager = DynamicRouteManager(
-        world, 
-        spawn_points[0], 
+        world,
+        spawn_points[0],
         spawn_points[-1]
     )
 ```
@@ -349,10 +349,10 @@ use_dynamic_generation: true  # Uses fixed start/end from waypoints.txt
 
 ## Summary
 
-✅ **Implemented**: Dynamic route generation using CARLA's GlobalRoutePlanner  
-✅ **Maintains**: Fixed start/end from waypoints.txt for reproducibility  
-✅ **Benefits**: Correct Z-coordinates, topology-aware, map-agnostic  
-✅ **Compatible**: Drop-in replacement for WaypointManager  
-✅ **Future-ready**: Easy to add route variations, multi-map support  
+✅ **Implemented**: Dynamic route generation using CARLA's GlobalRoutePlanner
+✅ **Maintains**: Fixed start/end from waypoints.txt for reproducibility
+✅ **Benefits**: Correct Z-coordinates, topology-aware, map-agnostic
+✅ **Compatible**: Drop-in replacement for WaypointManager
+✅ **Future-ready**: Easy to add route variations, multi-map support
 
 **Status**: Ready for testing and deployment 🚀
