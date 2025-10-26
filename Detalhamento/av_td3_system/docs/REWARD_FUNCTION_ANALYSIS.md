@@ -180,10 +180,10 @@ Our implementation extends this with explicit goal-directed reward.
 
 1. **Dense Rewards**: Provide frequent feedback signals
    - ✅ Distance reduction at every step
-   
+
 2. **Milestone Rewards**: Encourage subgoal completion
    - ✅ Waypoint bonuses every ~10-20 meters
-   
+
 3. **Terminal Rewards**: Signal episode success/failure
    - ✅ Goal completion bonus (+100)
    - ✅ Collision penalty (-1000)

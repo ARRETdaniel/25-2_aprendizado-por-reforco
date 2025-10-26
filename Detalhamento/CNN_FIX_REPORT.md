@@ -1,7 +1,7 @@
 # CNN Feature Extraction Fix - Critical Issue Report
 
-**Date**: 2025-01-21  
-**Author**: GitHub Copilot (AI Agent)  
+**Date**: 2025-01-21
+**Author**: GitHub Copilot (AI Agent)
 **Status**: 🚨 **CRITICAL BUG FIXED**
 
 ---
@@ -98,7 +98,7 @@ print(f"[AGENT] CNN architecture: 4×84×84 → Conv layers → 512 features")
 def flatten_dict_obs(self, obs_dict):
     """
     Flatten Dict observation to 1D array using CNN feature extraction.
-    
+
     Returns:
         np.ndarray: Shape (535,)
             - First 512: CNN-extracted visual features
@@ -106,24 +106,24 @@ def flatten_dict_obs(self, obs_dict):
     """
     # Extract image and convert to PyTorch tensor
     image = obs_dict['image']  # Shape: (4, 84, 84)
-    
+
     # Convert to tensor and add batch dimension
     image_tensor = torch.from_numpy(image).unsqueeze(0).float()
     image_tensor = image_tensor.to(self.agent.device)
-    
+
     # Extract features using CNN (no gradient tracking needed)
     with torch.no_grad():
         image_features = self.cnn_extractor(image_tensor)  # (1, 512)
-    
+
     # Convert back to numpy and remove batch dimension
     image_features = image_features.cpu().numpy().squeeze()  # (512,)
-    
+
     # Extract vector state
     vector = obs_dict['vector']  # (23,)
-    
+
     # Concatenate: [512 CNN features, 23 kinematic/waypoint]
     flat_state = np.concatenate([image_features, vector]).astype(np.float32)
-    
+
     return flat_state  # (535,)
 ```
 
@@ -167,7 +167,7 @@ if t % 100 == 0 and self.debug:
 
 **Reference**: "Human-level control through deep reinforcement learning" (Mnih et al., Nature 2015)
 
-**Input**: (batch, 4, 84, 84) - 4 stacked grayscale frames  
+**Input**: (batch, 4, 84, 84) - 4 stacked grayscale frames
 **Output**: (batch, 512) - Feature vector
 
 **Layers**:

@@ -55,7 +55,7 @@ if len(self.waypoint_manager.waypoints) >= 2:
     wp1 = self.waypoint_manager.waypoints[1]
     dx = wp1[0] - wp0[0]  # X-component (East in CARLA)
     dy = wp1[1] - wp0[1]  # Y-component (North in CARLA)
-    
+
     # Convert standard atan2 to CARLA yaw convention
     # Standard atan2(dy, dx): 0 rad = East (+X), π/2 rad = North (+Y)
     # CARLA yaw: 0° = North (+Y), 90° = East (+X)
@@ -72,13 +72,13 @@ def get_target_heading(self, vehicle_location) -> float:
     next_wp = self.waypoints[self.current_waypoint_idx]
     dx = next_wp[0] - vx  # X-component (East in CARLA)
     dy = next_wp[1] - vy  # Y-component (North in CARLA)
-    
+
     # Standard math convention: 0=East, π/2=North (radians from +X)
     heading_math = math.atan2(dy, dx)
-    
+
     # Convert to CARLA convention: 0=North, π/2=East (radians from +Y)
     heading_carla = (math.pi / 2.0) - heading_math
-    
+
     return heading_carla
 ```
 

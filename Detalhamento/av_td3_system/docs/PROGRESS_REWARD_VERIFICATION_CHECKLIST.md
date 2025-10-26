@@ -152,15 +152,15 @@ docker run --rm --network host --runtime nvidia \
 ## Expected Results Summary
 
 ### Immediate (200-step test)
-✅ **FIXED**: Progress reward component now visible in output  
-⚠️ **EXPECTED**: Vehicle still not moving much (random exploration)  
-✅ **WORKING**: Progress calculation functional (can see it change)  
+✅ **FIXED**: Progress reward component now visible in output
+⚠️ **EXPECTED**: Vehicle still not moving much (random exploration)
+✅ **WORKING**: Progress calculation functional (can see it change)
 
 ### After Training (50k steps)
-✅ **EXPECTED**: Vehicle learns to move forward  
-✅ **EXPECTED**: Progress reward drives goal-directed behavior  
-✅ **EXPECTED**: Waypoints reached regularly  
-✅ **EXPECTED**: Performance improves over time  
+✅ **EXPECTED**: Vehicle learns to move forward
+✅ **EXPECTED**: Progress reward drives goal-directed behavior
+✅ **EXPECTED**: Waypoints reached regularly
+✅ **EXPECTED**: Performance improves over time
 
 ---
 
@@ -219,12 +219,12 @@ docker run --rm --network host --runtime nvidia \
 
 ## Notes
 
-**Date Tested**: _______________  
-**Docker Image**: td3-av-system:v2.1-python310  
-**Test Duration**: _______________  
-**Issues Found**: _______________  
+**Date Tested**: _______________
+**Docker Image**: td3-av-system:v2.1-python310
+**Test Duration**: _______________
+**Issues Found**: _______________
 
-**Overall Status**: 
+**Overall Status**:
 - [ ] ✅ All checks passed - progress reward working correctly
 - [ ] ⚠️ Display working but need longer training to verify behavior
 - [ ] ❌ Issues found - see notes above

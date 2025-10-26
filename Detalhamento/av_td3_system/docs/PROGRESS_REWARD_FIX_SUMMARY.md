@@ -2,9 +2,9 @@
 
 ## Quick Summary
 
-**Problem**: Progress reward was being calculated correctly but **NOT showing** in debug output  
-**Cause**: Display code in `train_td3.py` only showed 4 reward components, missing the 5th (progress)  
-**Status**: ✅ **FIXED** - Progress reward now visible in all outputs  
+**Problem**: Progress reward was being calculated correctly but **NOT showing** in debug output
+**Cause**: Display code in `train_td3.py` only showed 4 reward components, missing the 5th (progress)
+**Status**: ✅ **FIXED** - Progress reward now visible in all outputs
 
 ---
 
