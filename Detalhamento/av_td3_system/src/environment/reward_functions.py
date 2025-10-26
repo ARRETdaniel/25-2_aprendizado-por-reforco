@@ -34,11 +34,12 @@ class RewardCalculator:
         Args:
             config: Dictionary with reward parameters from training_config.yaml
                 Expected keys:
-                - reward.weights: {efficiency, lane_keeping, comfort, safety}
+                - reward.weights: {efficiency, lane_keeping, comfort, safety, progress}
                 - reward.efficiency: {target_speed, speed_tolerance, overspeed_penalty_scale}
                 - reward.lane_keeping: {lateral_tolerance, heading_tolerance}
                 - reward.comfort: {jerk_threshold}
                 - reward.safety: {collision_penalty, offroad_penalty, wrong_way_penalty}
+                - reward.progress: {waypoint_bonus, distance_scale}
         """
         self.logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class RewardCalculator:
             "lane_keeping": 2.0,
             "comfort": 0.5,
             "safety": -100.0,
+            "progress": 5.0,  # NEW: High weight for goal-directed progress
         })
 
         # Efficiency parameters
@@ -75,9 +77,17 @@ class RewardCalculator:
             "wrong_way_penalty", -200.0
         )
 
+        # Progress parameters (NEW: Goal-directed navigation rewards)
+        self.waypoint_bonus = config.get("progress", {}).get("waypoint_bonus", 10.0)
+        self.distance_scale = config.get("progress", {}).get("distance_scale", 0.1)
+        self.goal_reached_bonus = config.get("progress", {}).get("goal_reached_bonus", 100.0)
+
         # State tracking for jerk calculation
         self.prev_acceleration = 0.0
         self.prev_acceleration_lateral = 0.0
+
+        # State tracking for progress calculation
+        self.prev_distance_to_goal = None  # Will be set on first step
 
     def calculate(
         self,
@@ -90,6 +100,8 @@ class RewardCalculator:
         offroad_detected: bool,
         wrong_way: bool = False,
         distance_to_goal: float = 0.0,
+        waypoint_reached: bool = False,
+        goal_reached: bool = False,
     ) -> Dict:
         """
         Calculate multi-component reward.
@@ -104,6 +116,8 @@ class RewardCalculator:
             offroad_detected: Whether vehicle went off-road
             wrong_way: Whether vehicle is driving in wrong direction
             distance_to_goal: Distance remaining to destination (m)
+            waypoint_reached: Whether agent reached a waypoint this step (NEW)
+            goal_reached: Whether agent reached final goal this step (NEW)
 
         Returns:
             Dictionary with:
@@ -112,6 +126,7 @@ class RewardCalculator:
             - lane_keeping: Lane keeping component
             - comfort: Comfort component
             - safety: Safety component
+            - progress: Progress component (NEW)
             - breakdown: Detailed breakdown of all components
         """
         reward_dict = {}
@@ -121,13 +136,15 @@ class RewardCalculator:
         reward_dict["efficiency"] = efficiency
 
         # 2. LANE KEEPING REWARD: Minimize lateral deviation and heading error
+        # CRITICAL FIX: Pass velocity to gate reward - no reward if stationary
         lane_keeping = self._calculate_lane_keeping_reward(
-            lateral_deviation, heading_error
+            lateral_deviation, heading_error, velocity
         )
         reward_dict["lane_keeping"] = lane_keeping
 
         # 3. COMFORT PENALTY: Minimize jerk
-        comfort = self._calculate_comfort_reward(acceleration, acceleration_lateral)
+        # CRITICAL FIX: Pass velocity to gate reward - no reward if stationary
+        comfort = self._calculate_comfort_reward(acceleration, acceleration_lateral, velocity)
         reward_dict["comfort"] = comfort
 
         # Update previous accelerations for next step
@@ -135,10 +152,17 @@ class RewardCalculator:
         self.prev_acceleration_lateral = acceleration_lateral
 
         # 4. SAFETY PENALTY: Large penalty for dangerous events
+        # CRITICAL FIX: Pass velocity and distance_to_goal to penalize unnecessary stopping
         safety = self._calculate_safety_reward(
-            collision_detected, offroad_detected, wrong_way
+            collision_detected, offroad_detected, wrong_way, velocity, distance_to_goal
         )
         reward_dict["safety"] = safety
+
+        # 5. PROGRESS REWARD: Reward forward progress toward goal (NEW)
+        progress = self._calculate_progress_reward(
+            distance_to_goal, waypoint_reached, goal_reached
+        )
+        reward_dict["progress"] = progress
 
         # Calculate total weighted reward
         total_reward = (
@@ -146,6 +170,7 @@ class RewardCalculator:
             + self.weights["lane_keeping"] * lane_keeping
             + self.weights["comfort"] * comfort
             + self.weights["safety"] * safety
+            + self.weights["progress"] * progress
         )
 
         reward_dict["total"] = total_reward
@@ -169,6 +194,11 @@ class RewardCalculator:
                 self.weights["safety"],
                 safety,
                 self.weights["safety"] * safety,
+            ),
+            "progress": (
+                self.weights["progress"],
+                progress,
+                self.weights["progress"] * progress,
             ),
         }
 
@@ -218,20 +248,27 @@ class RewardCalculator:
         return float(np.clip(efficiency, -1.0, 1.0))
 
     def _calculate_lane_keeping_reward(
-        self, lateral_deviation: float, heading_error: float
+        self, lateral_deviation: float, heading_error: float, velocity: float
     ) -> float:
         """
         Calculate lane keeping reward.
 
-        Reward is high when vehicle stays centered in lane with correct heading.
+        CRITICAL FIX: Reward is ONLY given when vehicle is MOVING.
+        Agent should not be rewarded for staying centered while stationary.
 
         Args:
             lateral_deviation: Perpendicular distance from lane center (m)
             heading_error: Heading error w.r.t. lane direction (radians)
+            velocity: Current velocity (m/s) - REQUIRED to gate the reward
 
         Returns:
-            Lane keeping reward (typically -1 to 1)
+            Lane keeping reward (0 if stationary, -1 to 1 if moving)
         """
+        # CRITICAL: No lane keeping reward if not moving!
+        # Vehicle must be moving at least 1 m/s (3.6 km/h) to get this reward
+        if velocity < 1.0:
+            return 0.0  # Zero reward for staying centered while stationary
+
         # Lateral deviation component (normalized)
         lat_error = min(abs(lateral_deviation) / self.lateral_tolerance, 1.0)
         lat_reward = 1.0 - lat_error * 0.7
@@ -246,20 +283,29 @@ class RewardCalculator:
         return float(np.clip(lane_keeping, -1.0, 1.0))
 
     def _calculate_comfort_reward(
-        self, acceleration: float, acceleration_lateral: float
+        self, acceleration: float, acceleration_lateral: float, velocity: float
     ) -> float:
         """
         Calculate comfort reward (penalize high jerk).
+
+        CRITICAL FIX: Comfort reward is ONLY given when vehicle is MOVING.
+        Agent should not be rewarded for smoothness while stationary.
 
         Jerk = rate of change of acceleration. High jerk indicates jerky/uncomfortable driving.
 
         Args:
             acceleration: Current longitudinal acceleration (m/s²)
             acceleration_lateral: Current lateral acceleration (m/s²)
+            velocity: Current velocity (m/s) - REQUIRED to gate the reward
 
         Returns:
-            Comfort reward (typically -1 to 0)
+            Comfort reward (0 if stationary, -1 to 0.3 if moving)
         """
+        # CRITICAL: No comfort reward if not moving!
+        # Vehicle must be moving at least 1 m/s (3.6 km/h) to get this reward
+        if velocity < 1.0:
+            return 0.0  # Zero reward for smoothness while stationary
+
         # Calculate jerk (change in acceleration)
         jerk_long = abs(acceleration - self.prev_acceleration)
         jerk_lat = abs(acceleration_lateral - self.prev_acceleration_lateral)
@@ -278,17 +324,30 @@ class RewardCalculator:
         return float(np.clip(comfort, -1.0, 0.3))
 
     def _calculate_safety_reward(
-        self, collision_detected: bool, offroad_detected: bool, wrong_way: bool
+        self,
+        collision_detected: bool,
+        offroad_detected: bool,
+        wrong_way: bool,
+        velocity: float,
+        distance_to_goal: float
     ) -> float:
         """
         Calculate safety reward.
 
-        Large negative penalties for unsafe events (collisions, off-road, wrong-way driving).
+        CRITICAL FIX: Added stationary vehicle penalty.
+        It is UNSAFE to stop in the middle of the road when:
+        - No collision/obstruction
+        - Not off-road
+        - Still have distance to cover to goal
+
+        Large negative penalties for unsafe events (collisions, off-road, wrong-way, stopping unnecessarily).
 
         Args:
             collision_detected: Whether collision occurred
             offroad_detected: Whether vehicle went off-road
             wrong_way: Whether vehicle is driving wrong direction
+            velocity: Current velocity (m/s) - to detect stationary behavior
+            distance_to_goal: Distance to destination (m) - to verify goal not reached
 
         Returns:
             Safety reward (0 if safe, very negative if unsafe)
@@ -302,9 +361,71 @@ class RewardCalculator:
         if wrong_way:
             safety += self.wrong_way_penalty
 
+        # REMOVED: Overly aggressive stopping penalty during exploration
+        # The agent needs time to learn how to move forward without being
+        # constantly penalized. The efficiency reward already handles this by
+        # rewarding target speed achievement. Let the agent explore!
+
+        # OLD CODE (disabled):
+        # if velocity < 0.5 and distance_to_goal > 5.0 and not collision_detected and not offroad_detected:
+        #     safety += -1.0  # This was preventing exploration
+
         return float(safety)
+
+    def _calculate_progress_reward(
+        self,
+        distance_to_goal: float,
+        waypoint_reached: bool,
+        goal_reached: bool,
+    ) -> float:
+        """
+        Calculate progress reward for goal-directed navigation.
+
+        Implements dense reward shaping based on:
+        1. Distance reduction to goal (negative reward if moving away)
+        2. Waypoint milestone bonuses
+        3. Goal reached bonus
+
+        This addresses the sparse reward problem cited in arXiv:2408.10215:
+        "Sparse and delayed nature of rewards in many real-world scenarios can hinder learning progress"
+
+        Args:
+            distance_to_goal: Current distance to final goal waypoint (meters)
+            waypoint_reached: Whether agent passed a waypoint this step
+            goal_reached: Whether agent reached the final destination
+
+        Returns:
+            Progress reward (positive for forward progress, negative for backward)
+        """
+        progress = 0.0
+
+        # Component 1: Distance-based reward (dense, continuous)
+        # Reward = (prev_distance - current_distance) * scale
+        # Positive when moving toward goal, negative when moving away
+        if self.prev_distance_to_goal is not None:
+            distance_delta = self.prev_distance_to_goal - distance_to_goal
+            # Normalize by distance scale for better reward magnitude
+            progress += distance_delta * self.distance_scale
+
+        # Update tracking
+        self.prev_distance_to_goal = distance_to_goal
+
+        # Component 2: Waypoint milestone bonus (sparse but frequent)
+        # Encourage agent to reach intermediate waypoints
+        if waypoint_reached:
+            progress += self.waypoint_bonus
+            self.logger.info(f"🎯 Waypoint reached! Bonus: +{self.waypoint_bonus:.1f}")
+
+        # Component 3: Goal reached bonus (sparse but terminal)
+        # Large reward for completing the route
+        if goal_reached:
+            progress += self.goal_reached_bonus
+            self.logger.info(f"🏁 Goal reached! Bonus: +{self.goal_reached_bonus:.1f}")
+
+        return float(np.clip(progress, -10.0, 110.0))  # Clip to reasonable range
 
     def reset(self):
         """Reset internal state for new episode."""
         self.prev_acceleration = 0.0
         self.prev_acceleration_lateral = 0.0
+        self.prev_distance_to_goal = None  # Reset progress tracking

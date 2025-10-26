@@ -19,7 +19,11 @@ algorithm:
   # Training parameters
   batch_size: 256  # Mini-batch size sampled from replay buffer
   buffer_size: 1000000  # Replay buffer capacity (1M transitions)
-  learning_starts: 25000  # Warm-up timesteps with uniform random exploration
+  learning_starts: 10000  # Reduced from 25k based on Elallid et al. 2023 TD3-CARLA paper
+  # Rationale: Papers show 10k-25k range sufficient for CARLA environments.
+  # CARLA physics is more deterministic than MuJoCo (original TD3 benchmark),
+  # so less initial random exploration needed. Shorter warm-up allows agent
+  # to start learning useful behaviors earlier while still populating replay buffer.
   train_freq: 1  # Update networks every step
   gradient_steps: -1  # -1 means as many gradient steps as environment steps
 
@@ -109,9 +113,10 @@ reward:
   # Component weights (tuned for safety-first autonomous driving)
   weights:
     efficiency: 1.0  # Reward for maintaining target speed
-    lane_keeping: 2.0  # Reward for staying centered in lane
-    comfort: 0.5  # Penalty for high jerk (smooth driving)
-    safety: -100.0  # Large penalty for collisions/violations
+    lane_keeping: 2.0  # Reward for staying centered in lane (only when moving!)
+    comfort: 0.5  # Penalty for high jerk / Reward for smooth driving (only when moving!)
+    safety: 1.0  # FIXED: Changed from -100.0. Penalties are already negative values.
+    progress: 5.0  # NEW: Reward for forward progress toward goal (goal-directed navigation)
 
   # Efficiency reward parameters
   efficiency:
@@ -133,6 +138,12 @@ reward:
     collision_penalty: -1000.0  # Terminal penalty for collision
     offroad_penalty: -500.0  # Terminal penalty for going off-road
     wrong_way_penalty: -200.0  # Penalty for driving in wrong direction
+
+  # Progress reward parameters (NEW: Goal-directed navigation)
+  progress:
+    waypoint_bonus: 10.0  # Bonus reward for reaching each waypoint milestone
+    distance_scale: 0.1  # Scale for distance reduction reward (reward = delta_distance * scale)
+    goal_reached_bonus: 100.0  # Large bonus for completing the entire route
 
 # Training configuration
 training:

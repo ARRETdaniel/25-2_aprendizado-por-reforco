@@ -38,6 +38,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from src.agents.td3_agent import TD3Agent
 from src.environment.carla_env import CARLANavigationEnv
+from src.networks.cnn_extractor import NatureCNN
 
 
 class TD3TrainingPipeline:
@@ -64,7 +65,8 @@ class TD3TrainingPipeline:
         agent_config_path: str = "config/td3_config.yaml",
         log_dir: str = "data/logs",
         checkpoint_dir: str = "data/checkpoints",
-        debug: bool = False
+        debug: bool = False,
+        device: str = 'cpu'
     ):
         """
         Initialize training pipeline.
@@ -81,6 +83,7 @@ class TD3TrainingPipeline:
             log_dir: Directory for TensorBoard logs
             checkpoint_dir: Directory for checkpoints
             debug: Enable visual feedback with OpenCV (for short runs)
+            device: Device for TD3 agent ('cpu', 'cuda', or 'auto')
         """
         # Set random seeds
         np.random.seed(seed)
@@ -139,9 +142,19 @@ class TD3TrainingPipeline:
 
         # Initialize agent
         print(f"\n[AGENT] Initializing TD3 agent...")
-        # Use CPU for agent to save GPU memory for CARLA (6GB RTX 2060 constraint)
-        agent_device = 'cpu' if self.debug else 'cuda' if torch.cuda.is_available() else 'cpu'
-        print(f"[AGENT] Using device: {agent_device}")
+        # Device selection strategy:
+        # - 'cpu': Force CPU (use when CARLA needs GPU, e.g., 6GB RTX 2060)
+        # - 'cuda': Force CUDA (use on supercomputers with dedicated training GPUs)
+        # - 'auto': Automatically detect best available device
+        if device == 'auto':
+            agent_device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            print(f"[AGENT] Device set to 'auto', detected: {agent_device}")
+        else:
+            agent_device = device
+            print(f"[AGENT] Device explicitly set to: {agent_device}")
+
+        if agent_device == 'cpu':
+            print(f"[AGENT] Running on CPU to reserve GPU memory for CARLA simulator")
         self.agent = TD3Agent(
             state_dim=535,
             action_dim=2,
@@ -149,6 +162,17 @@ class TD3TrainingPipeline:
             config=self.agent_config,
             device=agent_device
         )
+
+        # Initialize CNN feature extractor for visual observations
+        print(f"[AGENT] Initializing NatureCNN feature extractor...")
+        self.cnn_extractor = NatureCNN(
+            input_channels=4,  # 4 stacked frames
+            num_frames=4,
+            feature_dim=512    # Output 512-dim features
+        ).to(agent_device)
+        self.cnn_extractor.eval()  # Set to evaluation mode (no dropout, etc.)
+        print(f"[AGENT] CNN extractor initialized on {agent_device}")
+        print(f"[AGENT] CNN architecture: 4×84×84 → Conv layers → 512 features")
 
         # Initialize logging
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -190,25 +214,35 @@ class TD3TrainingPipeline:
 
     def flatten_dict_obs(self, obs_dict):
         """
-        Flatten Dict observation to 1D array for TD3 agent.
+        Flatten Dict observation to 1D array for TD3 agent using CNN feature extraction.
 
         Args:
             obs_dict: Dictionary with 'image' (4, 84, 84) and 'vector' (23,) keys
 
         Returns:
             np.ndarray: Flattened state vector of shape (535,)
-                        - First 512 elements: Image features (averaged across frames)
+                        - First 512 elements: CNN-extracted visual features
                         - Last 23 elements: Vector state (velocity, waypoints, etc.)
         """
-        # Extract image and flatten across frames
+        # Extract image and convert to PyTorch tensor
         image = obs_dict['image']  # Shape: (4, 84, 84)
-        image_flat = image.reshape(4, -1).mean(axis=0)  # Average across frames: (7056,)
-        image_features = image_flat[:512]  # Take first 512 features
+
+        # Convert to tensor and add batch dimension
+        # Expected shape: (1, 4, 84, 84)
+        image_tensor = torch.from_numpy(image).unsqueeze(0).float()
+        image_tensor = image_tensor.to(self.agent.device)
+
+        # Extract features using CNN (no gradient tracking needed)
+        with torch.no_grad():
+            image_features = self.cnn_extractor(image_tensor)  # Shape: (1, 512)
+
+        # Convert back to numpy and remove batch dimension
+        image_features = image_features.cpu().numpy().squeeze()  # Shape: (512,)
 
         # Extract vector state
         vector = obs_dict['vector']  # Shape: (23,)
 
-        # Concatenate to final state
+        # Concatenate to final state: [512 CNN features, 23 kinematic/waypoint]
         flat_state = np.concatenate([image_features, vector]).astype(np.float32)
 
         return flat_state  # Shape: (535,)
@@ -319,6 +353,23 @@ class TD3TrainingPipeline:
                 cv2.putText(info_panel, text, (10, y_offset),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
 
+            # Progress info
+            y_offset += 30
+            cv2.putText(info_panel, "PROGRESS:", (10, y_offset),
+                       cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 255, 255), 1)
+            y_offset += 25
+            distance_to_goal = info.get('distance_to_goal', 0)
+            cv2.putText(info_panel, f"  To Goal: {distance_to_goal:.1f}m", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            y_offset += 25
+            progress_pct = info.get('progress_percentage', 0)
+            cv2.putText(info_panel, f"  Progress: {progress_pct:.1f}%", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            y_offset += 25
+            wp_idx = info.get('current_waypoint_idx', 0)
+            cv2.putText(info_panel, f"  Waypoint: {wp_idx}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
             # Collision info
             y_offset += 30
             collision_color = (0, 0, 255) if self.episode_collision_count > 0 else (0, 255, 0)
@@ -380,17 +431,71 @@ class TD3TrainingPipeline:
            - Checkpoint saving
         """
         print(f"[TRAINING] Starting training loop...")
+        print(f"[TRAINING] Initializing CARLA environment (spawning actors)...")
+        print(f"[TRAINING] This may take 1-5 minutes on first reset. Please be patient...")
+        print(f"[TRAINING] Connecting to CARLA server...")
+
+        import time
+        start_reset = time.time()
 
         # Get initial observation (Dict) and flatten for agent
         obs_dict = self.env.reset()
+
+        reset_duration = time.time() - start_reset
+        print(f"[TRAINING] Environment initialized successfully in {reset_duration:.1f} seconds!")
+        print(f"[TRAINING] Actors spawned, sensors ready")
+        print(f"[TRAINING] Beginning training from timestep 1 to {self.max_timesteps:,}")
+
         state = self.flatten_dict_obs(obs_dict)
         done = False
+
+        # DEBUG: Verify CNN → TD3 data flow at initialization
+        if self.debug:
+            print(f"\n{'='*70}")
+            print(f"[DEBUG] CNN -> TD3 DATA FLOW VERIFICATION (Initialization)")
+            print(f"{'='*70}")
+            print(f"[DEBUG] Camera Input:")
+            print(f"   Shape: {obs_dict['image'].shape}")  # (4, 84, 84)
+            print(f"   Range: [{obs_dict['image'].min():.3f}, {obs_dict['image'].max():.3f}]")
+            print(f"   Mean: {obs_dict['image'].mean():.3f}, Std: {obs_dict['image'].std():.3f}")
+            print(f"\n[DEBUG] CNN Features:")
+            print(f"   Shape: {state[:512].shape}")  # First 512 are CNN features
+            print(f"   Range: [{state[:512].min():.3f}, {state[:512].max():.3f}]")
+            print(f"   Mean: {state[:512].mean():.3f}, Std: {state[:512].std():.3f}")
+            print(f"   L2 Norm: {np.linalg.norm(state[:512]):.3f}")
+            print(f"\n[DEBUG] Vector State (Kinematic + Waypoints):")
+            print(f"   Shape: {state[512:].shape}")  # Last 23 are kinematic/waypoints
+            print(f"   Velocity: {state[512]:.3f} m/s")
+            print(f"   Lateral Deviation: {state[513]:.3f} m")
+            print(f"   Heading Error: {state[514]:.3f} rad")
+            print(f"   Waypoints: {state[515:535].shape} (10 waypoints × 2)")
+            print(f"\n[DEBUG] Full State:")
+            print(f"   Shape: {state.shape}")  # (535,)
+            print(f"   Expected: (535,)")
+            print(f"   Match: {state.shape == (535,)}")
+            print(f"{'='*70}\n")
 
         start_timesteps = self.agent_config.get('algorithm', {}).get('learning_starts', 25000)
         batch_size = self.agent_config.get('algorithm', {}).get('batch_size', 256)
 
+        # Phase logging
+        print(f"\n[TRAINING PHASES]")
+        print(f"  Phase 1 (Steps 1-{start_timesteps:,}): EXPLORATION (random actions, filling replay buffer)")
+        print(f"  Phase 2 (Steps {start_timesteps+1:,}-{self.max_timesteps:,}): LEARNING (policy updates)")
+        print(f"  Evaluation every {self.eval_freq:,} steps")
+        print(f"  Checkpoints every {self.checkpoint_freq:,} steps")
+        print(f"\n[PROGRESS] Training starting now - logging every 100 steps...\n")
+
+        # Flag to track first training update
+        first_training_logged = False
+
         for t in range(1, int(self.max_timesteps) + 1):
             self.episode_timesteps += 1
+
+            # Log every 10 steps to show training is progressing
+            if t % 100 == 0:
+                phase = "EXPLORATION" if t <= start_timesteps else "LEARNING"
+                print(f"[{phase}] Processing step {t:6d}/{self.max_timesteps:,}...", flush=True)
 
             # Select action based on training phase
             if t < start_timesteps:
@@ -409,11 +514,20 @@ class TD3TrainingPipeline:
             # Flatten next observation for agent
             next_state = self.flatten_dict_obs(next_obs_dict)
 
+            # DEBUG: Log CNN features every 100 steps
+            if t % 100 == 0 and self.debug:
+                cnn_features = next_state[:512]
+                print(f"\n[DEBUG][Step {t}] CNN Feature Stats:")
+                print(f"  L2 Norm: {np.linalg.norm(cnn_features):.3f}")
+                print(f"  Mean: {cnn_features.mean():.3f}, Std: {cnn_features.std():.3f}")
+                print(f"  Range: [{cnn_features.min():.3f}, {cnn_features.max():.3f}]")
+                print(f"  Action: [{action[0]:.3f}, {action[1]:.3f}] (steering, throttle/brake)")
+
             # Debug visualization (use original Dict observation)
             if self.debug:
                 self._visualize_debug(obs_dict, action, reward, info, t)
 
-                # 🔍 DEBUG: Print detailed step info to terminal every 10 steps
+                # DEBUG: Print detailed step info to terminal every 10 steps
                 if t % 10 == 0:
                     vehicle_state = info.get('vehicle_state', {})
                     reward_breakdown = info.get('reward_breakdown', {})
@@ -445,16 +559,18 @@ class TD3TrainingPipeline:
                     lane_tuple = reward_breakdown.get('lane_keeping', (0, 0, 0))
                     comfort_tuple = reward_breakdown.get('comfort', (0, 0, 0))
                     safety_tuple = reward_breakdown.get('safety', (0, 0, 0))
+                    progress_tuple = reward_breakdown.get('progress', (0, 0, 0))
 
                     # Extract weighted values (index 2)
                     eff_reward = eff_tuple[2] if isinstance(eff_tuple, tuple) else 0.0
                     lane_reward = lane_tuple[2] if isinstance(lane_tuple, tuple) else 0.0
                     comfort_reward = comfort_tuple[2] if isinstance(comfort_tuple, tuple) else 0.0
                     safety_reward = safety_tuple[2] if isinstance(safety_tuple, tuple) else 0.0
+                    progress_reward = progress_tuple[2] if isinstance(progress_tuple, tuple) else 0.0
 
                     # Print main debug line
                     print(
-                        f"\n🔍 [DEBUG Step {t:4d}] "
+                        f"\n[DEBUG Step {t:4d}] "
                         f"Act=[steer:{action[0]:+.3f}, thr/brk:{action[1]:+.3f}] | "
                         f"Rew={reward:+7.2f} | "
                         f"Speed={vehicle_state.get('velocity', 0)*3.6:5.1f} km/h | "
@@ -464,10 +580,11 @@ class TD3TrainingPipeline:
 
                     # Print reward breakdown
                     print(
-                        f"   💰 Reward: Efficiency={eff_reward:+.2f} | "
+                        f"   [Reward] Efficiency={eff_reward:+.2f} | "
                         f"Lane={lane_reward:+.2f} | "
                         f"Comfort={comfort_reward:+.2f} | "
-                        f"Safety={safety_reward:+.2f}"
+                        f"Safety={safety_reward:+.2f} | "
+                        f"Progress={progress_reward:+.2f}"
                     )
 
                     # Print first 3 waypoints (most relevant)
@@ -482,7 +599,7 @@ class TD3TrainingPipeline:
                         dist3 = np.sqrt(wp3_x**2 + wp3_y**2)
 
                         print(
-                            f"   📍 Waypoints (vehicle frame): "
+                            f"   [Waypoints] (vehicle frame): "
                             f"WP1=[{wp1_x:+6.1f}, {wp1_y:+6.1f}]m (d={dist1:5.1f}m) | "
                             f"WP2=[{wp2_x:+6.1f}, {wp2_y:+6.1f}]m (d={dist2:5.1f}m) | "
                             f"WP3=[{wp3_x:+6.1f}, {wp3_y:+6.1f}]m (d={dist3:5.1f}m)"
@@ -490,14 +607,14 @@ class TD3TrainingPipeline:
 
                     # Print image statistics
                     print(
-                        f"   🖼️  Image: shape={image_obs.shape} | "
+                        f"   [Image] shape={image_obs.shape} | "
                         f"mean={img_mean:.3f} | std={img_std:.3f} | "
                         f"range=[{img_min:.3f}, {img_max:.3f}]"
                     )
 
                     # Print state vector info
                     print(
-                        f"   📊 State: velocity={velocity:.2f} m/s | "
+                        f"   [State] velocity={velocity:.2f} m/s | "
                         f"lat_dev={lat_dev:+.3f}m | "
                         f"heading_err={heading_err:+.3f} rad ({np.degrees(heading_err):+.1f}°) | "
                         f"vector_dim={len(vector_obs)}"
@@ -524,6 +641,15 @@ class TD3TrainingPipeline:
 
             # Train agent (only after exploration phase)
             if t > start_timesteps:
+                # Log transition to learning phase (only once)
+                if not first_training_logged:
+                    print(f"\n{'='*70}")
+                    print(f"[PHASE TRANSITION] Starting LEARNING phase at step {t:,}")
+                    print(f"[PHASE TRANSITION] Replay buffer size: {len(self.agent.replay_buffer):,}")
+                    print(f"[PHASE TRANSITION] Policy updates will now begin...")
+                    print(f"{'='*70}\n")
+                    first_training_logged = True
+
                 metrics = self.agent.train(batch_size=batch_size)
 
                 # Log training metrics every 100 steps
@@ -535,7 +661,29 @@ class TD3TrainingPipeline:
                     if 'actor_loss' in metrics:  # Actor updated only on delayed steps
                         self.writer.add_scalar('train/actor_loss', metrics['actor_loss'], t)
 
-            # Episode termination
+            # ALWAYS log progress every 100 steps (not just debug mode)
+            if t % 100 == 0:
+                phase = "EXPLORATION" if t <= start_timesteps else "LEARNING"
+                vehicle_state = info.get('vehicle_state', {})
+                speed_kmh = vehicle_state.get('velocity', 0) * 3.6
+
+                print(
+                    f"[{phase}] Step {t:6d}/{self.max_timesteps:,} | "
+                    f"Episode {self.episode_num:4d} | "
+                    f"Ep Step {self.episode_timesteps:4d} | "
+                    f"Reward={reward:+7.2f} | "
+                    f"Speed={speed_kmh:5.1f} km/h | "
+                    f"Buffer={len(self.agent.replay_buffer):7d}/{self.agent.replay_buffer.max_size}"
+                )
+
+                # Log step-based metrics every 100 steps (so TensorBoard has data even during exploration)
+                self.writer.add_scalar('progress/buffer_size', len(self.agent.replay_buffer), t)
+                self.writer.add_scalar('progress/episode_steps', self.episode_timesteps, t)
+                self.writer.add_scalar('progress/current_reward', reward, t)
+                self.writer.add_scalar('progress/speed_kmh', speed_kmh, t)
+
+                # Flush TensorBoard writer every 100 steps to ensure data is written to disk
+                self.writer.flush()            # Episode termination
             if done or truncated:
                 # Log episode metrics
                 self.training_rewards.append(self.episode_reward)
@@ -620,7 +768,7 @@ class TD3TrainingPipeline:
             episode_reward = 0
             episode_length = 0
             done = False
-            max_eval_steps = 1000  # Safety limit: max 1000 steps per eval episode
+            max_eval_steps = self.max_timesteps  # Safety limit: max timesteps per eval episode
 
             while not done and episode_length < max_eval_steps:
                 # Deterministic action (no noise)
@@ -762,7 +910,14 @@ def main():
     parser.add_argument(
         '--debug',
         action='store_true',
-        help='Enable visual debug mode with OpenCV display (recommended for short runs, e.g., 1000 steps)'
+        help='Enable visual debug mode with OpenCV display (recommended for short runs, e.g., max_timesteps steps)'
+    )
+    parser.add_argument(
+        '--device',
+        type=str,
+        default='cpu',
+        choices=['cpu', 'cuda', 'auto'],
+        help='Device for TD3 agent (cpu/cuda/auto). Use "cpu" for systems with limited GPU memory (CARLA uses GPU), "cuda" for dedicated training GPUs, "auto" to automatically detect.'
     )
 
     args = parser.parse_args()
@@ -779,7 +934,8 @@ def main():
         agent_config_path=args.agent_config,
         log_dir=args.log_dir,
         checkpoint_dir=args.checkpoint_dir,
-        debug=args.debug
+        debug=args.debug,
+        device=args.device
     )
 
     trainer.train()

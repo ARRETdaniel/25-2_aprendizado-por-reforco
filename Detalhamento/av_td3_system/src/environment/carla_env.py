@@ -390,9 +390,15 @@ class CARLANavigationEnv(Env):
             if len(self.waypoint_manager.waypoints) >= 2:
                 wp0 = self.waypoint_manager.waypoints[0]
                 wp1 = self.waypoint_manager.waypoints[1]
-                dx = wp1[0] - wp0[0]
-                dy = wp1[1] - wp0[1]
-                initial_yaw = math.degrees(math.atan2(dy, dx))
+                dx = wp1[0] - wp0[0]  # X-component (East in CARLA)
+                dy = wp1[1] - wp0[1]  # Y-component (North in CARLA)
+
+                # Convert standard atan2 to CARLA yaw convention
+                # Standard atan2(dy, dx): 0 rad = East (+X), π/2 rad = North (+Y)
+                # CARLA yaw: 0° = EAST (+X), 90° = SOUTH (+Y), 180° = WEST (-X), 270° = NORTH (-Y)
+                # CARLA uses same convention as standard math! Just convert radians to degrees
+                heading_rad = math.atan2(dy, dx)  # Standard math convention
+                initial_yaw = math.degrees(heading_rad)  # CARLA uses same angle convention!
             else:
                 initial_yaw = 0.0
                 self.logger.warning("Only one waypoint available, using default yaw=0")
@@ -430,6 +436,28 @@ class CARLANavigationEnv(Env):
         try:
             self.vehicle = self.world.spawn_actor(vehicle_bp, spawn_point)
             self.logger.info(f"✅ Ego vehicle spawned successfully")
+
+            # Verify actual vehicle orientation after spawn
+            actual_transform = self.vehicle.get_transform()
+            forward_vec = actual_transform.get_forward_vector()
+
+            # Calculate expected forward vector from route direction
+            if len(self.waypoint_manager.waypoints) >= 2:
+                wp0 = self.waypoint_manager.waypoints[0]
+                wp1 = self.waypoint_manager.waypoints[1]
+                expected_dx = wp1[0] - wp0[0]
+                expected_dy = wp1[1] - wp0[1]
+                expected_mag = math.sqrt(expected_dx**2 + expected_dy**2)
+                expected_fwd = [expected_dx/expected_mag, expected_dy/expected_mag, 0.0] if expected_mag > 0 else [1.0, 0.0, 0.0]
+
+                self.logger.info(
+                    f"🔍 SPAWN VERIFICATION:\n"
+                    f"   Spawn yaw: {spawn_point.rotation.yaw:.2f}°\n"
+                    f"   Actual yaw: {actual_transform.rotation.yaw:.2f}°\n"
+                    f"   Actual forward vector: [{forward_vec.x:.3f}, {forward_vec.y:.3f}, {forward_vec.z:.3f}]\n"
+                    f"   Expected forward (route): [{expected_fwd[0]:.3f}, {expected_fwd[1]:.3f}, {expected_fwd[2]:.3f}]\n"
+                    f"   Match: {'✓ ALIGNED' if abs(forward_vec.x - expected_fwd[0]) < 0.1 and abs(forward_vec.y - expected_fwd[1]) < 0.1 else '✗ MISALIGNED'}"
+                )
         except RuntimeError as e:
             raise RuntimeError(f"Failed to spawn ego vehicle: {e}")
 
@@ -494,6 +522,12 @@ class CARLANavigationEnv(Env):
         observation = self._get_observation()
         vehicle_state = self._get_vehicle_state()
 
+        # Get progress metrics for reward calculation
+        vehicle_location = self.vehicle.get_location()
+        distance_to_goal = self.waypoint_manager.get_distance_to_goal(vehicle_location)
+        waypoint_reached = self.waypoint_manager.check_waypoint_reached()
+        goal_reached = self.waypoint_manager.check_goal_reached(vehicle_location)
+
         # Calculate reward
         reward_dict = self.reward_calculator.calculate(
             velocity=vehicle_state["velocity"],
@@ -504,6 +538,9 @@ class CARLANavigationEnv(Env):
             collision_detected=self.sensors.is_collision_detected(),
             offroad_detected=self.sensors.is_lane_invaded(),
             wrong_way=vehicle_state["wrong_way"],
+            distance_to_goal=distance_to_goal,
+            waypoint_reached=waypoint_reached,
+            goal_reached=goal_reached,
         )
 
         reward = reward_dict["total"]
@@ -527,6 +564,11 @@ class CARLANavigationEnv(Env):
             "termination_reason": termination_reason,
             "vehicle_state": vehicle_state,
             "collision_info": self.sensors.get_collision_info(),
+            "distance_to_goal": distance_to_goal,
+            "progress_percentage": self.waypoint_manager.get_progress_percentage(),
+            "current_waypoint_idx": self.waypoint_manager.get_current_waypoint_index(),
+            "waypoint_reached": waypoint_reached,
+            "goal_reached": goal_reached,
         }
 
         if terminated or truncated:
@@ -609,8 +651,10 @@ class CARLANavigationEnv(Env):
         # Get next waypoints in vehicle frame
         vehicle_location = self.vehicle.get_location()
         vehicle_transform = self.vehicle.get_transform()
+        # Convert CARLA yaw (degrees) to radians for waypoint manager
+        vehicle_heading_radians = np.radians(vehicle_transform.rotation.yaw)
         next_waypoints = self.waypoint_manager.get_next_waypoints(
-            vehicle_location, vehicle_transform.rotation.yaw
+            vehicle_location, vehicle_heading_radians
         )
 
         # Construct vector observation

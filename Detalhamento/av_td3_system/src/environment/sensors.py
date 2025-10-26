@@ -103,10 +103,12 @@ class CARLACameraManager:
         Runs in CARLA's callback thread, so must be thread-safe.
         """
         try:
-            # Convert CARLA image to numpy array (RGB)
+            # Convert CARLA image to numpy array
+            # Note: CARLA provides BGRA format
             array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
             array = np.reshape(array, (image.height, image.width, 4))
-            array = array[:, :, :3]  # Drop alpha channel
+            array = array[:, :, :3]  # Drop alpha channel → BGR
+            array = array[:, :, ::-1]  # Convert BGR to RGB
 
             # Preprocess
             processed = self._preprocess(array)
@@ -126,18 +128,19 @@ class CARLACameraManager:
 
     def _preprocess(self, image: np.ndarray) -> np.ndarray:
         """
-        Preprocess image for CNN.
+        Preprocess image for CNN (matches DQN reference implementation).
 
         Steps:
-        1. Convert to grayscale
+        1. Convert RGB to grayscale
         2. Resize to 84×84 (standard for CNN in RL)
-        3. Normalize to [0, 1]
+        3. Scale to [0, 1]
+        4. Normalize to [-1, 1] (zero-centered for better CNN performance)
 
         Args:
             image: RGB image as numpy array (H×W×3) with values 0-255
 
         Returns:
-            Grayscale image (84×84) normalized to [0, 1]
+            Grayscale image (84×84) normalized to [-1, 1]
         """
         # Convert RGB to grayscale
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
@@ -147,8 +150,13 @@ class CARLACameraManager:
             gray, (self.target_width, self.target_height), interpolation=cv2.INTER_AREA
         )
 
-        # Normalize to [0, 1]
-        normalized = resized.astype(np.float32) / 255.0
+        # Scale to [0, 1]
+        scaled = resized.astype(np.float32) / 255.0
+
+        # Normalize to [-1, 1] (zero-centered)
+        # This matches the DQN reference and is standard for image CNNs
+        mean, std = 0.5, 0.5
+        normalized = (scaled - mean) / std
 
         return normalized
 
@@ -157,7 +165,7 @@ class CARLACameraManager:
         Get latest preprocessed frame.
 
         Returns:
-            84×84 grayscale image normalized [0,1], or None if no frame available
+            84×84 grayscale image normalized [-1, 1], or None if no frame available
         """
         with self.image_lock:
             return self.latest_image
@@ -207,7 +215,7 @@ class ImageStack:
         Add new frame to stack (removes oldest).
 
         Args:
-            frame: 84×84 preprocessed grayscale image, normalized [0,1]
+            frame: 84×84 preprocessed grayscale image, normalized [-1, 1]
         """
         if frame.shape != (self.frame_height, self.frame_width):
             raise ValueError(
@@ -460,7 +468,7 @@ class SensorSuite:
         Get stacked camera frames.
 
         Returns:
-            (4, 84, 84) array with 4 stacked grayscale frames, normalized [0,1]
+            (4, 84, 84) array with 4 stacked grayscale frames, normalized [-1, 1]
         """
         return self.image_stack.get_stacked_frames()
 

@@ -51,6 +51,7 @@ class WaypointManager:
         # Load waypoints from file
         self.waypoints = self._load_waypoints()  # List of (x, y, z) tuples
         self.current_waypoint_idx = 0
+        self.prev_waypoint_idx = 0  # Track for waypoint reached detection
 
         self.logger.info(
             f"Loaded {len(self.waypoints)} waypoints from {waypoints_file}"
@@ -93,6 +94,7 @@ class WaypointManager:
     def reset(self):
         """Reset waypoint tracking for new episode."""
         self.current_waypoint_idx = 0
+        self.prev_waypoint_idx = 0
 
     def get_next_waypoints(
         self,
@@ -170,6 +172,7 @@ class WaypointManager:
             if dist_to_current < WAYPOINT_PASSED_THRESHOLD:
                 # Move to next waypoint if available
                 if self.current_waypoint_idx < len(self.waypoints) - 1:
+                    self.prev_waypoint_idx = self.current_waypoint_idx
                     self.current_waypoint_idx += 1
 
     def _global_to_local(
@@ -181,18 +184,25 @@ class WaypointManager:
         """
         Transform global coordinates to vehicle-local frame.
 
-        Vehicle frame:
-        - X: forward direction
-        - Y: right direction (perpendicular to X)
+        Vehicle frame (CARLA convention):
+        - X: forward direction (vehicle's front)
+        - Y: right direction (vehicle's right side)
         - Origin: vehicle location
+
+        CARLA yaw convention:
+        - 0° = North (+Y in world)
+        - 90° = East (+X in world)
+        - Positive = clockwise rotation
 
         Args:
             global_point: (x, y, z) in global CARLA coordinates or carla.Location
             vehicle_location: (x, y, z) of vehicle in global coordinates or carla.Location
-            vehicle_heading: Vehicle heading angle in radians
+            vehicle_heading: Vehicle heading angle in radians (CARLA convention: 0=North)
 
         Returns:
-            [local_x, local_y] in vehicle frame
+            [local_x, local_y] in vehicle frame where:
+            - local_x > 0: waypoint is in front
+            - local_y > 0: waypoint is to the right
         """
         # Handle carla.Location objects
         if hasattr(global_point, 'x'):
@@ -205,18 +215,25 @@ class WaypointManager:
         else:
             vx, vy = vehicle_location[0], vehicle_location[1]
 
-        # Vector from vehicle to waypoint
+        # Vector from vehicle to waypoint in world frame
         dx = gx - vx
         dy = gy - vy
 
-        # Rotate to vehicle frame
-        # Heading = 0 is North, positive is counter-clockwise
-        # In CARLA, this corresponds to -heading for rotation matrix
-        cos_h = math.cos(-vehicle_heading)
-        sin_h = math.sin(-vehicle_heading)
+        # CARLA yaw: 0° = EAST (+X), 90° = SOUTH (+Y), 180° = WEST (-X), 270° = NORTH (-Y)
+        # This matches standard math atan2 convention!
+        # Vehicle frame: +X forward, +Y right
+        #
+        # Standard 2D rotation matrix to transform world coordinates to vehicle frame:
+        # [local_x]   [cos(θ)  sin(θ)] [dx]
+        # [local_y] = [-sin(θ) cos(θ)] [dy]
+        #
+        # Where θ = vehicle_heading (in radians)
 
-        local_x = cos_h * dx - sin_h * dy
-        local_y = sin_h * dx + cos_h * dy
+        cos_h = math.cos(vehicle_heading)
+        sin_h = math.sin(vehicle_heading)
+
+        local_x = cos_h * dx + sin_h * dy  # Forward (vehicle +X)
+        local_y = -sin_h * dx + cos_h * dy  # Right (vehicle +Y)
 
         return np.array([local_x, local_y], dtype=np.float32)
 
@@ -260,12 +277,25 @@ class WaypointManager:
             vx, vy = vehicle_location[0], vehicle_location[1]
 
         next_wp = self.waypoints[self.current_waypoint_idx]
-        dx = next_wp[0] - vx
-        dy = next_wp[1] - vy
+        dx = next_wp[0] - vx  # X-component (East in CARLA)
+        dy = next_wp[1] - vy  # Y-component (North in CARLA)
 
-        # Calculate heading (0=North, π/2=East in CARLA)
-        heading = math.atan2(dx, dy)  # Note: CARLA uses y as "north"
-        return heading
+        # Calculate target heading to match CARLA's yaw convention
+        # CARLA yaw: 0° = EAST (+X), 90° = SOUTH (+Y), 180° = WEST (-X), 270° = NORTH (-Y)
+        # Standard atan2(dy, dx): 0 rad = East (+X), π/2 rad = North (+Y)
+        #
+        # CARLA uses the SAME angle convention as standard math!
+        # No conversion needed, just use atan2 directly
+        #
+        # This is because:
+        #   - When dx>0, dy=0 (East): atan2=0 → CARLA yaw=0° ✓
+        #   - When dx=0, dy>0 (South): atan2=π/2 → CARLA yaw=90° ✓
+        #   - When dx<0, dy=0 (West): atan2=±π → CARLA yaw=180° ✓
+        #   - When dx=0, dy<0 (North): atan2=-π/2 → CARLA yaw=270° or -90° ✓
+
+        heading_carla = math.atan2(dy, dx)  # CARLA uses same convention as atan2!
+
+        return heading_carla
 
     def get_lateral_deviation(self, vehicle_location) -> float:
         """
@@ -311,3 +341,71 @@ class WaypointManager:
         lateral_dev = cross / route_length
 
         return lateral_dev
+
+    def get_distance_to_goal(self, vehicle_location: Tuple[float, float, float]) -> float:
+        """
+        Calculate Euclidean distance from vehicle to final goal waypoint.
+
+        Args:
+            vehicle_location: Current vehicle location (x, y, z) or carla.Location
+
+        Returns:
+            Distance to goal in meters
+        """
+        # Handle both carla.Location and tuple inputs
+        if hasattr(vehicle_location, 'x'):
+            vx, vy = vehicle_location.x, vehicle_location.y
+        else:
+            vx, vy = vehicle_location[0], vehicle_location[1]
+
+        # Final waypoint is the goal
+        goal_x, goal_y, _ = self.waypoints[-1]
+
+        distance = math.sqrt((goal_x - vx) ** 2 + (goal_y - vy) ** 2)
+        return distance
+
+    def check_waypoint_reached(self) -> bool:
+        """
+        Check if a new waypoint was reached since last check.
+
+        Returns:
+            True if current_waypoint_idx increased since last call
+        """
+        waypoint_reached = self.current_waypoint_idx > self.prev_waypoint_idx
+        self.prev_waypoint_idx = self.current_waypoint_idx
+        return waypoint_reached
+
+    def check_goal_reached(self, vehicle_location: Tuple[float, float, float], threshold: float = 5.0) -> bool:
+        """
+        Check if vehicle reached the final goal waypoint.
+
+        Args:
+            vehicle_location: Current vehicle location (x, y, z) or carla.Location
+            threshold: Distance threshold in meters to consider goal reached
+
+        Returns:
+            True if vehicle is within threshold of final waypoint
+        """
+        distance_to_goal = self.get_distance_to_goal(vehicle_location)
+        return distance_to_goal < threshold
+
+    def get_progress_percentage(self) -> float:
+        """
+        Calculate route completion percentage.
+
+        Returns:
+            Percentage of route completed (0.0 to 100.0)
+        """
+        if len(self.waypoints) == 0:
+            return 0.0
+
+        return (self.current_waypoint_idx / (len(self.waypoints) - 1)) * 100.0
+
+    def get_current_waypoint_index(self) -> int:
+        """
+        Get the index of the current target waypoint.
+
+        Returns:
+            Index of current waypoint
+        """
+        return self.current_waypoint_idx

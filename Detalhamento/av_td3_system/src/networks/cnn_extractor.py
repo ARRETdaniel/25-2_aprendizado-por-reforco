@@ -403,14 +403,14 @@ class NatureCNN(nn.Module):
             padding=0,
         )
 
+        # Activation function (must be defined before _compute_flat_size)
+        self.relu = nn.ReLU()
+
         # Compute flattened size
         self._compute_flat_size()
 
         # Fully connected layer
         self.fc = nn.Linear(self.flat_size, feature_dim)
-
-        # Activation function
-        self.relu = nn.ReLU()
 
     def _compute_flat_size(self):
         """
