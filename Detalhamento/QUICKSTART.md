@@ -1,3 +1,11 @@
+
+First, let me allow X11 connections:
+
+xhost +local:docker 2>/dev/null || echo "xhost not available, will run without debug mode"
+
+
+cd av_td3_system && docker run --rm --network host --runtime nvidia -e NVIDIA_VISIBLE_DEVICES=all -e NVIDIA_DRIVER_CAPABILITIES=all -e PYTHONUNBUFFERED=1 -e PYTHONPATH=/workspace -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix:rw -v $(pwd):/workspace -w /workspace td3-av-system:v2.0-python310 python3 scripts/train_td3.py --scenario 0 --max-timesteps 1000 --debug --device cpu
+
 # TD3 Training Quick Start Guide
 
 ## 1. Start CARLA Server (Docker)

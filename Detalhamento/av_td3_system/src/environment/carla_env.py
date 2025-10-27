@@ -787,8 +787,13 @@ class CARLANavigationEnv(Env):
         # Get configured NPC count from scenarios list
         scenarios = self.training_config.get("scenarios", [])
 
+        # DEBUG: Print config contents
+        self.logger.debug(f"training_config keys: {self.training_config.keys()}")
+        self.logger.debug(f"scenarios type: {type(scenarios)}, length: {len(scenarios) if isinstance(scenarios, list) else 'N/A'}")
+
         # Use first scenario by default (for testing), or get from environment variable
         scenario_idx = int(os.getenv('CARLA_SCENARIO_INDEX', '0'))
+        self.logger.debug(f"CARLA_SCENARIO_INDEX from environment: {scenario_idx}")
 
         if isinstance(scenarios, list) and len(scenarios) > 0:
             scenario_idx = min(scenario_idx, len(scenarios) - 1)

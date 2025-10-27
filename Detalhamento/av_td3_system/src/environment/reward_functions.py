@@ -361,14 +361,21 @@ class RewardCalculator:
         if wrong_way:
             safety += self.wrong_way_penalty
 
-        # REMOVED: Overly aggressive stopping penalty during exploration
-        # The agent needs time to learn how to move forward without being
-        # constantly penalized. The efficiency reward already handles this by
-        # rewarding target speed achievement. Let the agent explore!
-
-        # OLD CODE (disabled):
-        # if velocity < 0.5 and distance_to_goal > 5.0 and not collision_detected and not offroad_detected:
-        #     safety += -1.0  # This was preventing exploration
+        # RE-INTRODUCED: Gentle stopping penalty (FIX #6 from TRAINING_ANALYSIS_STEP_13300.md)
+        # After agent regression at step 11,600+ (got stuck at 0.0 km/h), we need
+        # a mild disincentive for unnecessary stopping to prevent "don't move = safe" local minimum.
+        #
+        # Conditions for penalty:
+        # 1. Vehicle essentially stopped (< 0.5 m/s = 1.8 km/h)
+        # 2. Still has distance to cover (> 5.0 m from goal)
+        # 3. No legitimate reason to stop (no collision, not off-road)
+        #
+        # Penalty is MILD (-0.5) compared to previous aggressive version (-1.0)
+        # This balances exploration (agent can still try stopping) with
+        # movement incentive (stopping has a small cost).
+        if velocity < 0.5 and distance_to_goal > 5.0:
+            if not collision_detected and not offroad_detected:
+                safety += -0.5  # Gentle penalty for unnecessary stopping
 
         return float(safety)
 

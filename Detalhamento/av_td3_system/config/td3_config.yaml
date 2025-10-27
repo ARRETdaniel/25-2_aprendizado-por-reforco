@@ -28,7 +28,13 @@ algorithm:
   gradient_steps: -1  # -1 means as many gradient steps as environment steps
 
   # Exploration noise (added to actor output during training)
-  exploration_noise: 0.1  # Std of Gaussian noise (scaled by max_action)
+  # INCREASED from 0.1 to 0.2 based on literature recommendations:
+  # - Fujimoto et al. (2018): Original TD3 uses 0.1 for MuJoCo
+  # - Elallid et al. (2023): TD3-CARLA intersection, complex scenarios benefit from higher exploration
+  # - Chen et al., Mnih et al.: Early training needs more exploration to escape local minima
+  # Rationale: After learning regression at step 11,600+, agent got stuck in "don't move" local minimum.
+  # Higher exploration (0.2) encourages continued movement exploration even after initial success.
+  exploration_noise: 0.2  # Std of Gaussian noise (scaled by max_action) - INCREASED for stability
 
 # Network architecture (matching official TD3 implementation)
 networks:

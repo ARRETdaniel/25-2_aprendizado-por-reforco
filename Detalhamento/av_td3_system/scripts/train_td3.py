@@ -18,7 +18,7 @@ Configuration:
 - TensorBoard logging to logs/ directory
 
 Author: Daniel Terra
-Date: 2024
+Date: 2025
 """
 
 import sys
@@ -63,6 +63,7 @@ class TD3TrainingPipeline:
         num_eval_episodes: int = 10,
         carla_config_path: str = "config/carla_config.yaml",
         agent_config_path: str = "config/td3_config.yaml",
+        training_config_path: str = "config/training_config.yaml",
         log_dir: str = "data/logs",
         checkpoint_dir: str = "data/checkpoints",
         debug: bool = False,
@@ -80,6 +81,7 @@ class TD3TrainingPipeline:
             num_eval_episodes: Number of episodes per evaluation
             carla_config_path: Path to CARLA config
             agent_config_path: Path to TD3 config
+            training_config_path: Path to training config (with scenarios)
             log_dir: Directory for TensorBoard logs
             checkpoint_dir: Directory for checkpoints
             debug: Enable visual feedback with OpenCV (for short runs)
@@ -92,12 +94,18 @@ class TD3TrainingPipeline:
             torch.cuda.manual_seed(seed)
 
         self.scenario = scenario
+        self.scenario = scenario
         self.seed = seed
         self.max_timesteps = max_timesteps
         self.eval_freq = eval_freq
         self.checkpoint_freq = checkpoint_freq
         self.num_eval_episodes = num_eval_episodes
         self.debug = debug
+
+        # Store config paths for creating eval environment
+        self.carla_config_path = carla_config_path
+        self.agent_config_path = agent_config_path
+        self.training_config_path = training_config_path
 
         # Create directories
         self.log_dir = Path(log_dir)
@@ -123,19 +131,23 @@ class TD3TrainingPipeline:
 
         # Update NPC density based on scenario
         npc_densities = [20, 50, 100]
+
+        # Set environment variable for CARLA to use correct scenario
+        # (carla_env.py reads this to select from training_config.yaml scenarios list)
+        os.environ['CARLA_SCENARIO_INDEX'] = str(scenario)
+        print(f"[CONFIG] Set CARLA_SCENARIO_INDEX={scenario}")
+
         if scenario < len(npc_densities):
-            if 'traffic' in self.carla_config:
-                self.carla_config['traffic']['num_vehicles'] = npc_densities[scenario]
-                print(f"[CONFIG] NPC count set to: {npc_densities[scenario]}")
-            else:
-                print(f"[WARNING] 'traffic' section not found in config, using default NPC count")
+            print(f"[CONFIG] Expected NPC count: {npc_densities[scenario]}")
+        else:
+            print(f"[WARNING] Invalid scenario index, will use default")
 
         # Initialize environment
         print(f"\n[ENVIRONMENT] Initializing CARLA environment...")
         self.env = CARLANavigationEnv(
             carla_config_path,
             agent_config_path,
-            agent_config_path  # Use same config for training_config_path
+            training_config_path  # Fixed: use training_config_path for scenarios
         )
         print(f"[ENVIRONMENT] State space: {self.env.observation_space}")
         print(f"[ENVIRONMENT] Action space: {self.env.action_space}")
@@ -503,9 +515,24 @@ class TD3TrainingPipeline:
                 action = self.env.action_space.sample()
             else:
                 # Learning phase: use policy with exploration noise
+                # CURRICULUM LEARNING: Exponential decay of exploration noise
+                # Start high (0.3) after exploration phase, decay to baseline (0.1) over 20k steps
+                # Formula: noise = noise_min + (noise_max - noise_min) * exp(-decay_rate * steps_since_learning_start)
+                noise_min = 0.1  # Baseline noise (original TD3 value)
+                noise_max = 0.3  # Initial high exploration after random phase
+                decay_steps = 20000  # Decay over 20k learning steps
+                decay_rate = 5.0 / decay_steps  # ln(noise_max/noise_min) / decay_steps ≈ 0.00025
+
+                steps_since_learning_start = t - start_timesteps
+                current_noise = noise_min + (noise_max - noise_min) * np.exp(-decay_rate * steps_since_learning_start)
+
+                # Log exploration noise to TensorBoard (every 100 steps)
+                if t % 100 == 0:
+                    self.writer.add_scalar('train/exploration_noise', current_noise, t)
+
                 action = self.agent.select_action(
                     state,
-                    noise=self.agent.expl_noise
+                    noise=current_noise  # Use decayed noise instead of fixed self.agent.expl_noise
                 )
 
             # Step environment (get Dict observation)
@@ -749,6 +776,9 @@ class TD3TrainingPipeline:
         """
         Evaluate agent on multiple episodes without exploration noise.
 
+        FIXED: Creates a separate evaluation environment to avoid interfering
+        with training environment state (RNG, CARLA actors, internal counters).
+
         Returns:
             Dictionary with evaluation metrics:
             - mean_reward: Average episode reward
@@ -757,23 +787,33 @@ class TD3TrainingPipeline:
             - avg_collisions: Average collisions per episode
             - avg_episode_length: Average episode length
         """
+        # FIXED: Create separate eval environment (don't reuse self.env)
+        print(f"[EVAL] Creating temporary evaluation environment...")
+        eval_env = CARLANavigationEnv(
+            self.carla_config_path,
+            self.agent_config_path,
+            self.training_config_path  # Fixed: use training_config_path for scenarios
+        )
+
         eval_rewards = []
         eval_successes = []
         eval_collisions = []
         eval_lengths = []
 
+        # FIXED: Use max_episode_steps from config, not max_timesteps (total training steps)
+        max_eval_steps = self.agent_config.get("training", {}).get("max_episode_steps", 1000)
+
         for episode in range(self.num_eval_episodes):
-            obs_dict = self.env.reset()  # Use main env, not eval_env
+            obs_dict = eval_env.reset()  # Use eval_env, not self.env
             state = self.flatten_dict_obs(obs_dict)  # Flatten Dict → flat array
             episode_reward = 0
             episode_length = 0
             done = False
-            max_eval_steps = self.max_timesteps  # Safety limit: max timesteps per eval episode
 
             while not done and episode_length < max_eval_steps:
                 # Deterministic action (no noise)
                 action = self.agent.select_action(state, noise=0.0)
-                next_obs_dict, reward, done, truncated, info = self.env.step(action)  # Use main env
+                next_obs_dict, reward, done, truncated, info = eval_env.step(action)  # Use eval_env
                 next_state = self.flatten_dict_obs(next_obs_dict)  # Flatten next obs
 
                 episode_reward += reward
@@ -791,6 +831,10 @@ class TD3TrainingPipeline:
             eval_successes.append(info.get('success', 0))
             eval_collisions.append(info.get('collision_count', 0))
             eval_lengths.append(episode_length)
+
+        # FIXED: Clean up eval environment
+        print(f"[EVAL] Closing evaluation environment...")
+        eval_env.close()
 
         return {
             'mean_reward': np.mean(eval_rewards),
