@@ -8,6 +8,10 @@ docker run -d \
     --env=NVIDIA_DRIVER_CAPABILITIES=all \
     carlasim/carla:0.9.16 bash CarlaUE4.sh -RenderOffScreen -nosound
 
+# OR
+
+docker start carla-server && sleep 5 && docker ps | grep carla-server
+
 
 docker ps -a
 

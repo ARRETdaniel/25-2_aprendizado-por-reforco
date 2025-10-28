@@ -1,7 +1,7 @@
 # 🚨 CRITICAL BUG ANALYSIS: Inverted Safety Reward Sign
 
-**Date:** October 26, 2025  
-**Severity:** CRITICAL - Root cause of all training failures  
+**Date:** October 26, 2025
+**Severity:** CRITICAL - Root cause of all training failures
 **Status:** ✅ FIXED
 
 ---
@@ -54,7 +54,7 @@ reward:
 ```python
 def _calculate_safety_reward(self, ...):
     safety = 0.0
-    
+
     # Penalties (already negative values from config)
     if collision_detected:
         safety += self.collision_penalty  # -200.0
@@ -62,12 +62,12 @@ def _calculate_safety_reward(self, ...):
         safety += self.offroad_penalty    # -100.0
     if wrong_way:
         safety += self.wrong_way_penalty  # -50.0
-    
+
     # Stopping penalty (added in Fix #6)
     if velocity < 0.5 and distance_to_goal > 5.0:
         if not collision_detected and not offroad_detected:
             safety += -0.5  # Gentle penalty for unnecessary stopping
-    
+
     return float(safety)
 ```
 

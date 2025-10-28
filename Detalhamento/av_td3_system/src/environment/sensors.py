@@ -173,8 +173,13 @@ class CARLACameraManager:
     def destroy(self):
         """Clean up camera sensor."""
         if self.camera_sensor:
-            self.camera_sensor.destroy()
-        self.logger.info("Camera sensor destroyed")
+            try:
+                self.camera_sensor.destroy()
+                self.logger.info("Camera sensor destroyed")
+            except RuntimeError as e:
+                self.logger.warning(f"Camera sensor already destroyed or invalid: {e}")
+            except Exception as e:
+                self.logger.error(f"Error destroying camera sensor: {e}")
 
 
 class ImageStack:
@@ -333,8 +338,13 @@ class CollisionDetector:
     def destroy(self):
         """Clean up collision sensor."""
         if self.collision_sensor:
-            self.collision_sensor.destroy()
-        self.logger.info("Collision sensor destroyed")
+            try:
+                self.collision_sensor.destroy()
+                self.logger.info("Collision sensor destroyed")
+            except RuntimeError as e:
+                self.logger.warning(f"Collision sensor already destroyed or invalid: {e}")
+            except Exception as e:
+                self.logger.error(f"Error destroying collision sensor: {e}")
 
 
 class LaneInvasionDetector:
@@ -405,8 +415,13 @@ class LaneInvasionDetector:
     def destroy(self):
         """Clean up lane invasion sensor."""
         if self.lane_sensor:
-            self.lane_sensor.destroy()
-        self.logger.info("Lane invasion sensor destroyed")
+            try:
+                self.lane_sensor.destroy()
+                self.logger.info("Lane invasion sensor destroyed")
+            except RuntimeError as e:
+                self.logger.warning(f"Lane invasion sensor already destroyed or invalid: {e}")
+            except Exception as e:
+                self.logger.error(f"Error destroying lane invasion sensor: {e}")
 
 
 class SensorSuite:
@@ -503,7 +518,30 @@ class SensorSuite:
 
     def destroy(self):
         """Clean up all sensors."""
-        self.camera.destroy()
-        self.collision_detector.destroy()
-        self.lane_invasion_detector.destroy()
-        self.logger.info("Sensor suite destroyed")
+        errors = []
+
+        # Destroy camera
+        try:
+            self.camera.destroy()
+        except Exception as e:
+            errors.append(f"Camera: {e}")
+            self.logger.warning(f"Error destroying camera: {e}")
+
+        # Destroy collision detector
+        try:
+            self.collision_detector.destroy()
+        except Exception as e:
+            errors.append(f"Collision: {e}")
+            self.logger.warning(f"Error destroying collision detector: {e}")
+
+        # Destroy lane invasion detector
+        try:
+            self.lane_invasion_detector.destroy()
+        except Exception as e:
+            errors.append(f"Lane: {e}")
+            self.logger.warning(f"Error destroying lane invasion detector: {e}")
+
+        if errors:
+            self.logger.warning(f"Sensor cleanup completed with {len(errors)} error(s)")
+        else:
+            self.logger.info("Sensor suite destroyed successfully")

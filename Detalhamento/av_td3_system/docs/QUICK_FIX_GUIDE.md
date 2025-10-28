@@ -1,8 +1,8 @@
 # 🔧 Quick Fix Guide - Reward Function Bug
 
-**Status:** ❌ ONE CRITICAL BUG FOUND  
-**Urgency:** HIGH - Fix before next training run  
-**Time to Fix:** 5 minutes  
+**Status:** ❌ ONE CRITICAL BUG FOUND
+**Urgency:** HIGH - Fix before next training run
+**Time to Fix:** 5 minutes
 
 ---
 
@@ -33,7 +33,7 @@ Open `config/training_config.yaml` and change:
 reward:
   weights:
     progress: 10.0
-  
+
   progress:
     waypoint_bonus: 10.0
     distance_scale: 0.1
@@ -43,7 +43,7 @@ reward:
 reward:
   weights:
     progress: 10.0  # Keep same
-  
+
   progress:
     waypoint_bonus: 1.0     # ⚠️ CHANGE: 10.0 → 1.0
     distance_scale: 0.1     # Keep same
@@ -124,6 +124,6 @@ See: `docs/REWARD_FUNCTION_VALIDATION_ANALYSIS.md`
 
 ---
 
-**Last Updated:** 2025-10-20  
-**Analysis by:** GitHub Copilot Deep Analysis  
+**Last Updated:** 2025-10-20
+**Analysis by:** GitHub Copilot Deep Analysis
 **Status:** READY TO FIX

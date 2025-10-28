@@ -69,11 +69,11 @@ xdg-open data/validation_analysis/validation_analysis.png
 
 ## 🛑 Red Flags (Stop Immediately If You See These)
 
-❌ **Standing still gives POSITIVE reward** → Reward bug regression  
-❌ **Safety component POSITIVE when stationary** → Sign bug  
-❌ **CNN L2 norm constant (no variation)** → Degenerate features  
-❌ **All waypoints behind vehicle (x < 0)** → Coordinate bug  
-❌ **Training crashes repeatedly** → Configuration issue  
+❌ **Standing still gives POSITIVE reward** → Reward bug regression
+❌ **Safety component POSITIVE when stationary** → Sign bug
+❌ **CNN L2 norm constant (no variation)** → Degenerate features
+❌ **All waypoints behind vehicle (x < 0)** → Coordinate bug
+❌ **Training crashes repeatedly** → Configuration issue
 
 ---
 
@@ -125,29 +125,29 @@ data/
 
 ## 🐛 Quick Troubleshooting
 
-**Problem:** CARLA connection timeout  
+**Problem:** CARLA connection timeout
 **Fix:** `docker restart carla-server && sleep 30`
 
-**Problem:** Docker image not found  
+**Problem:** Docker image not found
 **Fix:** `docker build -t td3-av-system:v2.0-python310 -f docker/Dockerfile .`
 
-**Problem:** Out of memory  
+**Problem:** Out of memory
 **Fix:** Use `--device cpu` instead of `cuda` in script
 
-**Problem:** Reward still positive when stationary  
+**Problem:** Reward still positive when stationary
 **Fix:** Check `config/training_config.yaml` → `safety.weight` must be **+100.0**
 
 ---
 
 ## 📞 Help
 
-**Full Guide:** `docs/VALIDATION_TRAINING_GUIDE.md`  
-**Technical Details:** `docs/REWARD_FUNCTION_VALIDATION_ANALYSIS.md`  
+**Full Guide:** `docs/VALIDATION_TRAINING_GUIDE.md`
+**Technical Details:** `docs/REWARD_FUNCTION_VALIDATION_ANALYSIS.md`
 **Task Tracking:** `docs/TODO.md`
 
 ---
 
-**Version:** 1.0  
-**Date:** October 26, 2024  
-**Estimated Time:** ~2-3 hours  
+**Version:** 1.0
+**Date:** October 26, 2024
+**Estimated Time:** ~2-3 hours
 **Ready to Execute:** ✅

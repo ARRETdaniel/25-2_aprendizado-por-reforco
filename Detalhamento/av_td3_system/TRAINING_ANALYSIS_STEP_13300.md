@@ -1,8 +1,8 @@
 # Training Analysis Report - Step 13,300
 
-**Date**: October 26, 2025  
-**Training Status**: Interrupted at step 13,300 / 30,000 (44.3% complete)  
-**Checkpoint Available**: td3_scenario_0_step_10000.pth  
+**Date**: October 26, 2025
+**Training Status**: Interrupted at step 13,300 / 30,000 (44.3% complete)
+**Checkpoint Available**: td3_scenario_0_step_10000.pth
 **Phase**: LEARNING (started at step 10,001)
 
 ---
@@ -34,9 +34,9 @@ This indicates a **learning instability** or **local minimum** in the policy spa
 
 ### Phase 1: Exploration (Steps 1-10,000)
 
-**Behavior**: Random actions, vehicle mostly stationary  
-**Speed Range**: 0.0-1.6 km/h (median: 0.0 km/h)  
-**Reward**: -1.00 (constant efficiency penalty)  
+**Behavior**: Random actions, vehicle mostly stationary
+**Speed Range**: 0.0-1.6 km/h (median: 0.0 km/h)
+**Reward**: -1.00 (constant efficiency penalty)
 **Episodes Completed**: 1 (Episode 0: 5,001 steps, Episode 1: 5,000 steps)
 
 **Analysis**:
@@ -221,7 +221,7 @@ def _calculate_lane_keeping_reward(
     # CRITICAL: No lane keeping reward if not moving!
     if velocity < 1.0:
         return 0.0  # Zero reward for staying centered while stationary
-    
+
     # Only reward lane-keeping when moving
     ...
 ```
@@ -260,19 +260,19 @@ def _calculate_safety_reward(
     distance_to_goal: float
 ) -> float:
     safety = 0.0
-    
+
     if collision_detected:
         safety += self.collision_penalty  # -1000.0
     if offroad_detected:
         safety += self.offroad_penalty  # -500.0
     if wrong_way:
         safety += self.wrong_way_penalty  # -200.0
-    
+
     # REMOVED: Overly aggressive stopping penalty
     # OLD CODE (disabled):
     # if velocity < 0.5 and distance_to_goal > 5.0 and not collision_detected:
     #     safety += -1.0  # This was preventing exploration
-    
+
     return float(safety)
 ```
 
@@ -306,20 +306,20 @@ def _calculate_progress_reward(
     goal_reached: bool,
 ) -> float:
     progress = 0.0
-    
+
     # Distance-based reward (dense)
     if self.prev_distance_to_goal is not None:
         distance_delta = self.prev_distance_to_goal - distance_to_goal
         progress += distance_delta * self.distance_scale  # 0.1
-    
+
     # Waypoint bonus (sparse)
     if waypoint_reached:
         progress += self.waypoint_bonus  # 10.0
-    
+
     # Goal reached bonus (sparse)
     if goal_reached:
         progress += self.goal_reached_bonus  # 100.0
-    
+
     return float(np.clip(progress, -10.0, 110.0))
 ```
 
@@ -380,7 +380,7 @@ def evaluate(self) -> dict:
         episode_length = 0
         done = False
         max_eval_steps = self.max_timesteps  # BUG: Uses training max_timesteps!
-        
+
         while not done and episode_length < max_eval_steps:
             # Deterministic action (no noise)
             action = self.agent.select_action(state, noise=0.0)
@@ -426,15 +426,15 @@ def evaluate(self) -> dict:
         td3_config_path=self.agent_config,
         training_config_path="config/training_config.yaml",
     )
-    
+
     max_eval_steps = self.agent_config.get("training", {}).get("max_episode_steps", 1000)
-    
+
     for episode in range(self.num_eval_episodes):
         obs_dict = eval_env.reset()  # Use eval_env
         ...
         while not done and episode_length < max_eval_steps:  # Use correct timeout
             ...
-    
+
     eval_env.close()  # Clean up
     return {...}
 ```
@@ -699,7 +699,7 @@ Based on Fujimoto et al. (2018) TD3 paper and Elallid et al. (2023) CARLA implem
 
 ---
 
-**Generated**: 2025-10-26  
-**Author**: Training Analysis System  
-**Checkpoint**: td3_scenario_0_step_10000.pth  
+**Generated**: 2025-10-26
+**Author**: Training Analysis System
+**Checkpoint**: td3_scenario_0_step_10000.pth
 **Next Review**: After bug fixes and training restart

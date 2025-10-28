@@ -198,9 +198,9 @@ class CARLANavigationEnv(Env):
         # Episode state
         self.current_step = 0
         self.episode_start_time = None
-        self.max_episode_steps = (
-            self.carla_config.get("episode", {}).get("max_duration_seconds", 300) * 20
-        )  # Convert to steps @ 20 Hz
+        # 🔧 FIX: Read max_time_steps from config (not max_duration_seconds)
+        # Config has episode.max_time_steps (5000) directly in steps
+        self.max_episode_steps = self.carla_config.get("episode", {}).get("max_time_steps", 1000)
 
         # Action/observation spaces
         self._setup_spaces()
@@ -545,6 +545,10 @@ class CARLANavigationEnv(Env):
 
         reward = reward_dict["total"]
 
+        # 🔧 FIX: Increment step counter BEFORE checking termination
+        # This ensures timeout check uses correct step count
+        self.current_step += 1
+
         # Check termination conditions
         done, termination_reason = self._check_termination(vehicle_state)
 
@@ -553,9 +557,6 @@ class CARLANavigationEnv(Env):
         # truncated: episode ended due to time/step limit
         truncated = (self.current_step >= self.max_episode_steps) and not done
         terminated = done and not truncated
-
-        # Update step counter
-        self.current_step += 1
 
         # Prepare info dict
         info = {

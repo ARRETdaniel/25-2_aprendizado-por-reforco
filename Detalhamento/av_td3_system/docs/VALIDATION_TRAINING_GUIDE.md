@@ -2,7 +2,7 @@
 
 **Purpose:** Comprehensive validation of the TD3 autonomous vehicle solution before committing to the full 1M-step training run on the university supercomputer.
 
-**Date:** October 26, 2024  
+**Date:** October 26, 2024
 **Status:** Ready to execute
 
 ---
@@ -128,7 +128,7 @@ Then open browser to: http://localhost:6006
 - **Steps 1-10,000:** Exploration phase (random actions, filling replay buffer)
   - Expected: Mostly stationary or erratic movement
   - This is NORMAL - agent not learning yet
-  
+
 - **Steps 10,001-20,000:** Learning phase (policy updates)
   - Expected: Agent starts learning to move
   - Reward should improve gradually
@@ -480,27 +480,27 @@ av_td3_system/
 
 ## FAQ
 
-**Q: Why 20k steps instead of 800 like before?**  
+**Q: Why 20k steps instead of 800 like before?**
 A: The 800-step test only verified reward signs. 20k steps verifies learning capability, which requires the agent to transition from exploration (steps 1-10k) to learning (steps 10k-20k) and show improvement.
 
-**Q: Can I stop training early if I see it's working?**  
+**Q: Can I stop training early if I see it's working?**
 A: Not recommended. The automated analysis requires the full 20k steps to make statistically valid conclusions about learning progress.
 
-**Q: What if my laptop can't handle 20k steps?**  
+**Q: What if my laptop can't handle 20k steps?**
 A: You can reduce to 15k minimum, but update the analysis script expectations. Better: use a more powerful machine or the university's GPU cluster.
 
-**Q: How much disk space do I need?**  
+**Q: How much disk space do I need?**
 A: ~500 MB for logs, checkpoints, and analysis results. Ensure you have 1-2 GB free to be safe.
 
-**Q: Can I run multiple validation runs in parallel?**  
+**Q: Can I run multiple validation runs in parallel?**
 A: No - CARLA server can only handle one client at a time. Run sequentially.
 
-**Q: Should I use GPU or CPU?**  
+**Q: Should I use GPU or CPU?**
 A: **CPU for validation** (saves GPU for CARLA). **GPU for full 1M-step training** (much faster).
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** October 26, 2024  
-**Author:** Daniel Terra  
+**Document Version:** 1.0
+**Last Updated:** October 26, 2024
+**Author:** Daniel Terra
 **Status:** Ready for execution ✅

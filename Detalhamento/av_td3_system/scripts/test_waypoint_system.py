@@ -39,21 +39,21 @@ def main():
     print("="*80)
     print("\nInitializing CARLA environment...")
     print("This may take 1-2 minutes...")
-    
+
     # Initialize environment
     env = CARLANavigationEnv(
         carla_config_path="config/carla_config.yaml",
         td3_config_path="config/td3_config.yaml",
         training_config_path="config/training_config.yaml"
     )
-    
+
     print("✓ Environment initialized\n")
     print("Starting 500-step test with random actions...")
     print("Monitoring waypoint and goal flags...\n")
-    
+
     # Reset environment
     obs, info = env.reset()
-    
+
     # Tracking variables
     waypoint_count = 0
     goal_count = 0
@@ -61,36 +61,36 @@ def main():
     total_reward = 0.0
     episode_count = 0
     step_count = 0
-    
+
     episode_rewards = []
     current_episode_reward = 0.0
-    
+
     # Run test
     for step in range(500):
         step_count += 1
-        
+
         # Take random action
         action = env.action_space.sample()
         obs, reward, terminated, truncated, info = env.step(action)
-        
+
         current_episode_reward += reward
         total_reward += reward
-        
+
         # Check waypoint flag
         if info.get("waypoint_reached", False):
             waypoint_count += 1
             print(f"[Step {step:3d}] 🎯 WAYPOINT REACHED! (Total: {waypoint_count}) | Reward: {reward:+.2f}")
-        
+
         # Check goal flag
         if info.get("goal_reached", False):
             goal_count += 1
             print(f"[Step {step:3d}] 🏁 GOAL REACHED! (Total: {goal_count}) | Reward: {reward:+.2f}")
-        
+
         # Check positive rewards
         if reward > 0:
             positive_reward_count += 1
             print(f"[Step {step:3d}] ✅ Positive reward: {reward:+.2f} | Info: {info.get('reward_breakdown', {})}")
-        
+
         # Periodic progress logging
         if step % 100 == 0 and step > 0:
             try:
@@ -99,21 +99,21 @@ def main():
                 vehicle_location = env.vehicle.get_location()
                 dist = env.waypoint_manager.get_distance_to_goal(vehicle_location)
                 progress = env.waypoint_manager.get_progress_percentage()
-                
+
                 print(f"\n[Step {step:3d}] PROGRESS CHECK:")
                 print(f"  Waypoint: {wp_idx}/{wp_total}")
                 print(f"  Distance to goal: {dist:.1f}m")
                 print(f"  Route completion: {progress:.1f}%")
                 print(f"  Avg reward (last 100): {current_episode_reward/100:.2f}\n")
-                
+
             except Exception as e:
                 print(f"[Step {step:3d}] Error getting progress info: {e}\n")
-        
+
         # Handle episode termination
         if terminated or truncated:
             episode_count += 1
             episode_rewards.append(current_episode_reward)
-            
+
             termination_reason = "Unknown"
             if info.get("collision", False):
                 termination_reason = "Collision"
@@ -123,15 +123,15 @@ def main():
                 termination_reason = "Goal Reached ✓"
             elif truncated:
                 termination_reason = "Timeout"
-            
+
             print(f"\n[Step {step:3d}] Episode {episode_count} ended ({termination_reason})")
             print(f"  Episode reward: {current_episode_reward:.2f}")
             print(f"  Episode length: {info.get('episode_length', 'N/A')} steps\n")
-            
+
             # Reset for new episode
             obs, info = env.reset()
             current_episode_reward = 0.0
-    
+
     # Final statistics
     print("\n" + "="*80)
     print("TEST RESULTS")
@@ -145,12 +145,12 @@ def main():
     print(f"Positive rewards: {positive_reward_count} ({positive_reward_count/step_count*100:.2f}% of steps)")
     print(f"Total reward: {total_reward:.2f}")
     print(f"Average reward: {total_reward/step_count:.2f} per step")
-    
+
     if episode_count > 0:
         print(f"\n--- EPISODES ---")
         print(f"Average episode reward: {np.mean(episode_rewards):.2f}")
         print(f"Average episode length: {step_count/episode_count:.1f} steps")
-    
+
     print("\n--- DIAGNOSTIC RESULTS ---")
     if waypoint_count == 0:
         print("🔴 PROBLEM: No waypoints reached!")
@@ -163,21 +163,21 @@ def main():
         print("   → Waypoint threshold may be too tight")
     else:
         print("✅ GOOD: Waypoints being reached regularly")
-    
+
     if goal_count == 0:
         print("🟡 INFO: No goals reached")
         print("   → May be normal for short test (500 steps)")
         print("   → Check if any episode lasted >100 steps")
     else:
         print("✅ EXCELLENT: Goal reached successfully!")
-    
+
     if positive_reward_count < step_count * 0.05:  # Less than 5% positive
         print("🔴 PROBLEM: Very few positive rewards!")
         print("   → Progress component may not be working correctly")
         print("   → Check distance reduction calculation")
-    
+
     print("="*80)
-    
+
     # Cleanup
     env.close()
     print("\n✓ Test completed. Environment closed.")

@@ -27,19 +27,19 @@ set -e  # Exit on error
 
 # Configuration
 SCENARIO=0                    # 20 NPCs (light traffic for faster validation)
-MAX_TIMESTEPS=20000           # 20k steps for validation
+MAX_TIMESTEPS=30000           # 30k steps for validation
 EVAL_FREQ=2000                # Evaluate every 2k steps (10 evaluations total)
 EVAL_EPISODES=5               # 5 episodes per evaluation (faster than 10)
 CHECKPOINT_FREQ=5000          # Save checkpoints every 5k steps (4 total)
 SEED=42                       # Fixed seed for reproducibility
 DEVICE="cpu"                  # CPU for laptop (change to "cuda" if GPU available)
-DEBUG_MODE="--debug"          # Enable visual debugging and detailed logs
+DEBUG_MODE=""                 # Disabled for overnight run (no visual window)
 
 # Directories
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOG_DIR="${PROJECT_ROOT}/data/logs"
 CHECKPOINT_DIR="${PROJECT_ROOT}/data/checkpoints"
-VALIDATION_LOG="validation_training_20k_$(date +%Y%m%d_%H%M%S).log"
+VALIDATION_LOG="validation_training_30k_$(date +%Y%m%d_%H%M%S).log"
 
 # Docker configuration
 DOCKER_IMAGE="td3-av-system:v2.0-python310"
@@ -52,7 +52,7 @@ CARLA_PORT=2000
 ###############################################################################
 
 echo "=========================================================================="
-echo "TD3 VALIDATION TRAINING RUN (20,000 STEPS)"
+echo "TD3 VALIDATION TRAINING RUN (30,000 STEPS)"
 echo "=========================================================================="
 echo ""
 echo "Configuration:"
@@ -61,11 +61,11 @@ echo "  Max Timesteps:      ${MAX_TIMESTEPS}"
 echo "  Evaluation Freq:    ${EVAL_FREQ} steps (${EVAL_EPISODES} episodes each)"
 echo "  Checkpoint Freq:    ${CHECKPOINT_FREQ} steps"
 echo "  Device:             ${DEVICE}"
-echo "  Debug Mode:         Enabled"
+echo "  Debug Mode:         Disabled (no visual window)"
 echo "  Seed:               ${SEED}"
 echo ""
-echo "Expected Runtime:    ~2-3 hours"
-echo "Expected Storage:    ~500 MB"
+echo "Expected Runtime:    ~4-5 hours (overnight)"
+echo "Expected Storage:    ~750 MB"
 echo ""
 echo "=========================================================================="
 echo ""

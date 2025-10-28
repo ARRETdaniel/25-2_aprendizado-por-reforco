@@ -209,7 +209,10 @@ waypoints:
 # EPISODE SETTINGS
 # ============================================================================
 episode:
-  max_time_steps: 5000  # Maximum steps per episode (~4 minutes at 20 Hz)
+  # 🔧 FIX: Reduced from 5000 to 1000 steps for faster learning cycles
+  # At 20 Hz: 1000 steps = 50 seconds per episode (reasonable for training)
+  # Original 5000 steps = 250 seconds was causing ultra-long episodes
+  max_time_steps: 1000  # Maximum steps per episode (~50 seconds at 20 Hz)
   max_distance: 1000.0  # Maximum distance (meters)
 
   # Terminal conditions

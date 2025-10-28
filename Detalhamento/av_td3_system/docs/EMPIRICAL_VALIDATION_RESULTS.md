@@ -1,8 +1,8 @@
 # Empirical Validation Results: Reward Function Fix
 
-**Date:** October 26, 2024  
-**Test Duration:** 800 timesteps  
-**Purpose:** Validate that reward function fixes prevent "stand still" exploit  
+**Date:** October 26, 2024
+**Test Duration:** 800 timesteps
+**Purpose:** Validate that reward function fixes prevent "stand still" exploit
 **Status:** ✅ **VALIDATION SUCCESSFUL**
 
 ---
@@ -344,7 +344,7 @@ Progress:   ≈ 0.00  (small positive when moving)
 
 - [x] **No CARLA crashes**
   - Evidence: 800 steps completed successfully
-  
+
 - [x] **No configuration errors**
   - Evidence: Clean initialization and shutdown
 
@@ -491,7 +491,7 @@ docker run --rm --network host --runtime nvidia \
 
 **Estimated runtime:**
 - Scenario 0 (20 NPCs): ~24-48 hours
-- Scenario 1 (50 NPCs): ~36-72 hours  
+- Scenario 1 (50 NPCs): ~36-72 hours
 - Scenario 2 (100 NPCs): ~48-96 hours
 
 **Storage requirements:**
@@ -501,6 +501,6 @@ docker run --rm --network host --runtime nvidia \
 
 ---
 
-**Document version:** 1.0  
-**Last updated:** October 26, 2024  
+**Document version:** 1.0
+**Last updated:** October 26, 2024
 **Test ID:** TD3_scenario_0_npcs_20_20251026-132014

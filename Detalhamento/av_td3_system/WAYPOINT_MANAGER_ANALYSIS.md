@@ -1,7 +1,7 @@
 # Waypoint Manager Analysis: Legacy vs DynamicRouteManager
 
-**Date**: October 26, 2025  
-**Purpose**: Decision analysis for paper scope and timeline constraints  
+**Date**: October 26, 2025
+**Purpose**: Decision analysis for paper scope and timeline constraints
 **Context**: Training showing learning breakthrough, need to stabilize before paper submission
 
 ---
@@ -25,7 +25,7 @@
 
 ### Legacy Waypoint Manager (Active)
 
-**File**: `waypoints.txt` (fixed route in Town01)  
+**File**: `waypoints.txt` (fixed route in Town01)
 **Implementation**: `src/environment/waypoint_manager.py`
 
 **Features**:
@@ -46,7 +46,7 @@
 
 ### DynamicRouteManager (Available but Inactive)
 
-**File**: `src/environment/dynamic_route_manager.py`  
+**File**: `src/environment/dynamic_route_manager.py`
 **Implementation**: Uses CARLA 0.9.16 GlobalRoutePlanner API
 
 **Features**:
@@ -182,13 +182,13 @@
 
 ### Immediate Actions (This Week)
 
-✅ **DO**: Keep legacy waypoint manager  
-✅ **DO**: Focus on fixing learning regression (exploration, reward weights)  
-✅ **DO**: Resume training with fixes applied  
+✅ **DO**: Keep legacy waypoint manager
+✅ **DO**: Focus on fixing learning regression (exploration, reward weights)
+✅ **DO**: Resume training with fixes applied
 ✅ **DO**: Get stable TD3 results for paper
 
-❌ **DON'T**: Switch to DynamicRouteManager now  
-❌ **DON'T**: Risk introducing new bugs before paper deadline  
+❌ **DON'T**: Switch to DynamicRouteManager now
+❌ **DON'T**: Risk introducing new bugs before paper deadline
 ❌ **DON'T**: Distract from core TD3 implementation validation
 
 ---
@@ -316,6 +316,6 @@
 
 ---
 
-*Analysis Date: October 26, 2025*  
-*Decision: Keep Legacy, Defer DynamicRouteManager to Future Work*  
+*Analysis Date: October 26, 2025*
+*Decision: Keep Legacy, Defer DynamicRouteManager to Future Work*
 *Status: APPROVED for paper timeline*
