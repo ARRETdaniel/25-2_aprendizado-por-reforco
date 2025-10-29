@@ -1,7 +1,7 @@
 # Evaluation Function Analysis - TD3 Training Script
 
-**Date**: October 26, 2025  
-**File**: `scripts/train_td3.py`  
+**Date**: October 26, 2025
+**File**: `scripts/train_td3.py`
 **Question**: Is the evaluation function correctly implemented? What is it using to do the movements in the environment?
 
 ---

@@ -215,15 +215,35 @@ class CARLANavigationEnv(Env):
 
         This allows existing code to continue working while using dynamic route generation.
 
+        🔧 FIX: Dynamically calculates num_waypoints_ahead to match lookahead_distance
+        and actual sampling_resolution, preventing spacing mismatch bug.
+
         Returns:
             Object with waypoint_manager interface (waypoints attribute, reset() method, etc.)
         """
         class WaypointManagerAdapter:
-            def __init__(self, route_manager, lookahead_distance, num_waypoints_ahead):
+            def __init__(self, route_manager, lookahead_distance, sampling_resolution):
                 self.route_manager = route_manager
                 self.lookahead_distance = lookahead_distance
-                self.num_waypoints_ahead = num_waypoints_ahead
+                self.sampling_resolution = sampling_resolution
+
+                # 🔧 FIX: Calculate num_waypoints dynamically to match actual spacing
+                # Before: num_waypoints_ahead was hardcoded (10), assuming 5m spacing
+                # After: num_waypoints = lookahead_distance / sampling_resolution
+                # Example: 50m / 2m = 25 waypoints (correct for 2m spacing)
+                self.num_waypoints_ahead = int(np.ceil(lookahead_distance / sampling_resolution))
+
                 self._current_waypoint_index = 0
+
+                # Log the calculated value for verification
+                logger = logging.getLogger(__name__)
+                logger.info(
+                    f"WaypointManagerAdapter initialized:\n"
+                    f"  Lookahead distance: {lookahead_distance}m\n"
+                    f"  Sampling resolution: {sampling_resolution}m\n"
+                    f"  Calculated waypoints ahead: {self.num_waypoints_ahead}\n"
+                    f"  Expected coverage: {self.num_waypoints_ahead * sampling_resolution}m"
+                )
 
             @property
             def waypoints(self):
@@ -263,10 +283,13 @@ class CARLANavigationEnv(Env):
 
                 return self.waypoints[start_idx:end_idx]
 
+        # 🔧 FIX: Pass sampling_resolution instead of hardcoded num_waypoints_ahead
+        sampling_resolution = self.carla_config.get("route", {}).get("sampling_resolution", 2.0)
+
         return WaypointManagerAdapter(
             route_manager=self.route_manager,
             lookahead_distance=self.carla_config.get("route", {}).get("lookahead_distance", 50.0),
-            num_waypoints_ahead=self.carla_config.get("route", {}).get("num_waypoints_ahead", 10)
+            sampling_resolution=sampling_resolution
         )
 
     def _connect_to_carla(self, max_retries: int = 5):
@@ -282,7 +305,7 @@ class CARLANavigationEnv(Env):
         for attempt in range(max_retries):
             try:
                 self.client = carla.Client(self.host, self.port)
-                self.client.set_timeout(10.0)
+                self.client.set_timeout(5.0)
                 # Test connection
                 self.client.get_server_version()
                 self.logger.info(f"Connected to CARLA server at {self.host}:{self.port}")
@@ -303,24 +326,43 @@ class CARLANavigationEnv(Env):
         Define observation and action spaces (Gym API).
 
         Observation space:
-        - Dict with 'image' (4×84×84 float32 [0,1]) and 'vector' (23-dim kinematic+waypoint state)
+        - Dict with 'image' (4×84×84 float32 [-1,1]) and 'vector' (kinematic+waypoint state)
+
+        🔧 FIX: Dynamically calculates vector size based on actual waypoint count.
+        🔧 FIX BUG #8: Image space now matches preprocessing output range [-1,1].
 
         Action space:
         - Box: 2D continuous [-1, 1]
         """
-        # Image observation: 4 stacked frames, 84×84
+        # Image observation: 4 stacked frames, 84×84, normalized to [-1, 1]
+        # 🔧 FIX BUG #8: Match sensors.py preprocessing output (zero-centered normalization)
         image_space = spaces.Box(
-            low=0.0,
+            low=-1.0,
             high=1.0,
             shape=(4, 84, 84),
             dtype=np.float32,
         )
 
-        # Vector observation: velocity (1) + lateral_dev (1) + heading_err (1) + waypoints (20)
+        # 🔧 FIX: Calculate vector observation size dynamically
+        # Components: velocity (1) + lateral_dev (1) + heading_err (1) + waypoints (num_waypoints × 2)
+        lookahead_distance = self.carla_config.get("route", {}).get("lookahead_distance", 50.0)
+        sampling_resolution = self.carla_config.get("route", {}).get("sampling_resolution", 2.0)
+        num_waypoints_ahead = int(np.ceil(lookahead_distance / sampling_resolution))
+
+        # Vector size = 3 (kinematic) + (num_waypoints × 2) (x, y coordinates per waypoint)
+        vector_size = 3 + (num_waypoints_ahead * 2)
+
+        self.logger.info(
+            f"Observation space configuration:\n"
+            f"  Image: (4, 84, 84)\n"
+            f"  Vector: ({vector_size},) = 3 kinematic + {num_waypoints_ahead} waypoints × 2\n"
+            f"  Lookahead: {lookahead_distance}m / {sampling_resolution}m = {num_waypoints_ahead} waypoints"
+        )
+
         vector_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(23,),  # 1 + 1 + 1 + 20
+            shape=(vector_size,),
             dtype=np.float32,
         )
 
@@ -368,21 +410,21 @@ class CARLANavigationEnv(Env):
         # Clean up previous episode
         self._cleanup_episode()
 
-        # ✅ DYNAMIC ROUTE GENERATION: Use CARLA's GlobalRoutePlanner
+        # DYNAMIC ROUTE GENERATION: Use CARLA's GlobalRoutePlanner
         if self.use_dynamic_routes and self.route_manager is not None:
             # Get spawn transform from DynamicRouteManager
             # This uses CARLA's road topology for correct position and orientation
             spawn_point = self.route_manager.get_start_transform()
 
             self.logger.info(
-                f"✅ Using DYNAMIC route (GlobalRoutePlanner):\n"
+                f"Using DYNAMIC route (GlobalRoutePlanner):\n"
                 f"   Start: ({spawn_point.location.x:.2f}, {spawn_point.location.y:.2f}, {spawn_point.location.z:.2f})\n"
                 f"   Heading: {spawn_point.rotation.yaw:.2f}°\n"
                 f"   Route length: ~{self.route_manager.get_route_length():.0f}m\n"
                 f"   Waypoints: {len(self.route_manager.waypoints)}"
             )
         else:
-            # ✅ FALLBACK: Legacy waypoint-based spawn (for backward compatibility)
+            # FALLBACK: Legacy waypoint-based spawn (for backward compatibility)
             # Get the first waypoint as spawn location
             route_start = self.waypoint_manager.waypoints[0]  # (x, y, z)
 
@@ -391,14 +433,19 @@ class CARLANavigationEnv(Env):
                 wp0 = self.waypoint_manager.waypoints[0]
                 wp1 = self.waypoint_manager.waypoints[1]
                 dx = wp1[0] - wp0[0]  # X-component (East in CARLA)
-                dy = wp1[1] - wp0[1]  # Y-component (North in CARLA)
+                dy = wp1[1] - wp0[1]  # Y-component (South in CARLA, +Y direction)
 
-                # Convert standard atan2 to CARLA yaw convention
-                # Standard atan2(dy, dx): 0 rad = East (+X), π/2 rad = North (+Y)
-                # CARLA yaw: 0° = EAST (+X), 90° = SOUTH (+Y), 180° = WEST (-X), 270° = NORTH (-Y)
-                # CARLA uses same convention as standard math! Just convert radians to degrees
-                heading_rad = math.atan2(dy, dx)  # Standard math convention
-                initial_yaw = math.degrees(heading_rad)  # CARLA uses same angle convention!
+                # 🔧 FIX BUG #10: CARLA uses LEFT-HANDED coordinate system (Unreal Engine)
+                # Standard math: +Y = North (right-handed), atan2(dy, dx) assumes this
+                # CARLA/Unreal: +Y = SOUTH (left-handed), 90° yaw points to +Y (South)
+                # Solution: Flip Y-axis by negating dy to convert between coordinate systems
+                # Reference: https://carla.readthedocs.io/en/latest/python_api/#carlarotation
+                # "CARLA uses the Unreal Engine coordinates system. This is a Z-up left-handed system."
+                # "Yaw mapping: 0° = East (+X), 90° = South (+Y), 180° = West (-X), 270° = North (-Y)"
+                #If we get spawning error fallback:heading_rad = math.atan2(dy, dx)
+
+                heading_rad = math.atan2(-dy, dx)  # Negate dy to flip Y-axis for left-handed system
+                initial_yaw = math.degrees(heading_rad)
             else:
                 initial_yaw = 0.0
                 self.logger.warning("Only one waypoint available, using default yaw=0")
@@ -425,7 +472,7 @@ class CARLANavigationEnv(Env):
             )
 
             self.logger.info(
-                f"✅ Using LEGACY static waypoints:\n"
+                f"Using LEGACY static waypoints:\n"
                 f"   Location: ({route_start[0]:.2f}, {route_start[1]:.2f}, {spawn_z:.2f})\n"
                 f"   Heading: {initial_yaw:.2f}°"
             )
@@ -435,7 +482,7 @@ class CARLANavigationEnv(Env):
 
         try:
             self.vehicle = self.world.spawn_actor(vehicle_bp, spawn_point)
-            self.logger.info(f"✅ Ego vehicle spawned successfully")
+            self.logger.info(f" Ego vehicle spawned successfully")
 
             # Verify actual vehicle orientation after spawn
             actual_transform = self.vehicle.get_transform()
@@ -451,7 +498,7 @@ class CARLANavigationEnv(Env):
                 expected_fwd = [expected_dx/expected_mag, expected_dy/expected_mag, 0.0] if expected_mag > 0 else [1.0, 0.0, 0.0]
 
                 self.logger.info(
-                    f"🔍 SPAWN VERIFICATION:\n"
+                    f"SPAWN VERIFICATION:\n"
                     f"   Spawn yaw: {spawn_point.rotation.yaw:.2f}°\n"
                     f"   Actual yaw: {actual_transform.rotation.yaw:.2f}°\n"
                     f"   Actual forward vector: [{forward_vec.x:.3f}, {forward_vec.y:.3f}, {forward_vec.z:.3f}]\n"
@@ -508,11 +555,11 @@ class CARLANavigationEnv(Env):
         self.world.tick()
         self.sensors.tick()
 
-        # 🔍 DEBUG: Verify simulation is advancing (first 10 steps)
+        #  DEBUG: Verify simulation is advancing (first 10 steps)
         if self.current_step < 10:
             snapshot = self.world.get_snapshot()
             self.logger.info(
-                f"🔍 DEBUG Step {self.current_step} - World State After Tick:\n"
+                f" DEBUG Step {self.current_step} - World State After Tick:\n"
                 f"   Frame: {snapshot.frame}\n"
                 f"   Timestamp: {snapshot.timestamp.elapsed_seconds:.3f}s\n"
                 f"   Delta: {snapshot.timestamp.delta_seconds:.3f}s"
@@ -545,7 +592,7 @@ class CARLANavigationEnv(Env):
 
         reward = reward_dict["total"]
 
-        # 🔧 FIX: Increment step counter BEFORE checking termination
+        # FIX: Increment step counter BEFORE checking termination
         # This ensures timeout check uses correct step count
         self.current_step += 1
 
@@ -615,7 +662,7 @@ class CARLANavigationEnv(Env):
 
         self.vehicle.apply_control(control)
 
-        # 🔍 DEBUG: Log control application and vehicle response (first 10 steps)
+        # DEBUG: Log control application and vehicle response (first 10 steps)
         if self.current_step < 10:
             # Get vehicle velocity
             velocity = self.vehicle.get_velocity()
@@ -626,7 +673,7 @@ class CARLANavigationEnv(Env):
             applied_control = self.vehicle.get_control()
 
             self.logger.info(
-                f"🔍 DEBUG Step {self.current_step}:\n"
+                f"DEBUG Step {self.current_step}:\n"
                 f"   Input Action: steering={action[0]:+.4f}, throttle/brake={action[1]:+.4f}\n"
                 f"   Sent Control: throttle={throttle:.4f}, brake={brake:.4f}, steer={steering:.4f}\n"
                 f"   Applied Control: throttle={applied_control.throttle:.4f}, brake={applied_control.brake:.4f}, steer={applied_control.steer:.4f}\n"
@@ -638,10 +685,13 @@ class CARLANavigationEnv(Env):
         """
         Construct observation from sensors and state.
 
+        🔧 FIX BUG #4: Handles variable-length waypoint arrays near route end by padding.
+        🔧 FIX BUG #9: Normalizes all vector features to comparable scales [-1, 1].
+
         Returns:
             Dict with:
-            - 'image': (4, 84, 84) stacked frames, normalized [0,1]
-            - 'vector': (23,) kinematic + waypoint state
+            - 'image': (4, 84, 84) stacked frames, normalized [-1,1]
+            - 'vector': (53,) kinematic + waypoint state (FIXED SIZE, NORMALIZED)
         """
         # Get camera data (4 stacked frames)
         image_obs = self.sensors.get_camera_data()
@@ -658,13 +708,51 @@ class CARLANavigationEnv(Env):
             vehicle_location, vehicle_heading_radians
         )
 
-        # Construct vector observation
+        # 🔧 FIX BUG #4: Handle variable-length waypoint arrays near route end
+        # Expected: num_waypoints_ahead waypoints (e.g., 25 with 2m spacing)
+        # Near route end: may return fewer waypoints
+        # Solution: Pad with last waypoint to maintain fixed observation size
+        expected_num_waypoints = self.waypoint_manager.num_waypoints_ahead
+
+        if len(next_waypoints) < expected_num_waypoints:
+            # Pad with last waypoint to maintain fixed size
+            if len(next_waypoints) > 0:
+                last_waypoint = next_waypoints[-1]
+                padding = np.tile(last_waypoint, (expected_num_waypoints - len(next_waypoints), 1))
+                next_waypoints = np.vstack([next_waypoints, padding])
+            else:
+                # No waypoints available (route finished), use zeros
+                next_waypoints = np.zeros((expected_num_waypoints, 2), dtype=np.float32)
+
+        # 🔧 FIX BUG #9: Normalize all vector features to comparable scales
+        # This prevents large-magnitude features (waypoints ~50m) from dominating
+        # small-magnitude features (heading error ~π), which was causing training failure.
+
+        # Normalize velocity by max expected urban speed (30 m/s = 108 km/h)
+        # Output range: [0, ~1] (can exceed 1 if vehicle goes faster than expected)
+        velocity_normalized = vehicle_state["velocity"] / 30.0
+
+        # Normalize lateral deviation by standard lane width (3.5m)
+        # Output range: typically [-1, 1] for staying within lane
+        lateral_deviation_normalized = vehicle_state["lateral_deviation"] / 3.5
+
+        # Normalize heading error by π radians (maximum possible error)
+        # Output range: [-1, 1]
+        heading_error_normalized = vehicle_state["heading_error"] / np.pi
+
+        # Normalize waypoints by lookahead distance (50m)
+        # Output range: typically [-1, 1] for waypoints within lookahead
+        lookahead_distance = self.carla_config.get("route", {}).get("lookahead_distance", 50.0)
+        waypoints_normalized = next_waypoints / lookahead_distance
+
+        # Construct normalized vector observation
+        # Expected size: 1 (velocity) + 1 (lateral_dev) + 1 (heading_err) + (num_waypoints * 2)
         vector_obs = np.concatenate(
             [
-                [vehicle_state["velocity"]],
-                [vehicle_state["lateral_deviation"]],
-                [vehicle_state["heading_error"]],
-                next_waypoints.flatten(),  # 10 waypoints × 2 = 20 dims
+                [velocity_normalized],
+                [lateral_deviation_normalized],
+                [heading_error_normalized],
+                waypoints_normalized.flatten(),
             ]
         ).astype(np.float32)
 
@@ -742,20 +830,32 @@ class CARLANavigationEnv(Env):
 
     def _check_termination(self, vehicle_state: Dict) -> Tuple[bool, str]:
         """
-        Check if episode should terminate.
+        Check if episode should terminate naturally (within MDP).
 
-        Termination conditions:
+        ✅ FIX BUG #11: This function returns TRUE only for NATURAL MDP terminations.
+        Time limits are NOT MDP terminations - they are handled as TRUNCATION in step().
+
+        Natural MDP Termination Conditions (terminated=True):
         1. Collision detected → immediate termination
-        2. Off-road > threshold time
-        3. Wrong way driving > threshold time
-        4. Route completion (reached goal)
-        5. Max steps exceeded
+        2. Off-road (lane invasion) → safety violation
+        3. Route completion (reached goal) → success
+
+        NOT Included (handled as truncation in step()):
+        - Max steps / time limit → truncated=True, terminated=False
+
+        This distinction is CRITICAL for TD3 bootstrapping:
+        - If terminated=True: Target Q = r + 0 (no future value)
+        - If truncated=True: Target Q = r + γ*V(s') (has future value)
+
+        Per Gymnasium API v0.26+ and official TD3 implementation.
 
         Args:
             vehicle_state: Current vehicle state dict
 
         Returns:
             Tuple of (done: bool, reason: str)
+            - done=True only for natural MDP termination
+            - reason: "collision", "off_road", "route_completed", or "running"
         """
         # Collision: immediate termination
         if self.sensors.is_collision_detected():
@@ -772,9 +872,18 @@ class CARLANavigationEnv(Env):
         if self.waypoint_manager.is_route_finished():
             return True, "route_completed"
 
-        # Max steps
-        if self.current_step >= self.max_episode_steps:
-            return True, "max_steps"
+        # FIX BUG #11: Max steps is NOT an MDP termination condition
+        # Time limits should be handled as TRUNCATION in step(), not TERMINATION here.
+        # Per official TD3 implementation (main.py line 133):
+        #   done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
+        # This pattern explicitly sets done_bool=0 at time limits to prevent incorrect bootstrapping.
+        #
+        # Gymnasium API specification (v0.26+):
+        #   - terminated: Natural MDP termination (collision, goal, death) → V(s')=0
+        #   - truncated: Artificial termination (time limit, bounds) → V(s')≠0
+        #
+        # REMOVED: if self.current_step >= self.max_episode_steps: return True, "max_steps"
+        # Time limit handling is now in step() lines 602-604 as truncation.
 
         return False, "running"
 

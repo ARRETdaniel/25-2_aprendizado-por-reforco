@@ -1,6 +1,6 @@
 # 🚨 CRITICAL BUG SUMMARY - Training Failure Analysis
 
-**Date**: 2025-01-28  
+**Date**: 2025-01-28
 **Status**: **TWO MAJOR BUGS IDENTIFIED**
 
 ---
@@ -130,8 +130,8 @@ def _initialize_cnn_weights(self):
     for module in self.cnn_extractor.modules():
         if isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(
-                module.weight, 
-                mode='fan_out', 
+                module.weight,
+                mode='fan_out',
                 nonlinearity='relu'
             )
             if module.bias is not None:
@@ -180,20 +180,20 @@ self.cnn_optimizer = torch.optim.Adam(
 def flatten_dict_obs(self, obs_dict, train_cnn=False):
     """
     Flatten Dict observation to 1D array.
-    
+
     Args:
         obs_dict: Dictionary with 'image' (4,84,84) and 'vector' (23,)
         train_cnn: If True, compute gradients for CNN training
-    
+
     Returns:
         Flattened state: (512 + 23 = 535,)
     """
     image = obs_dict['image']  # (4, 84, 84) numpy array
-    
+
     # Convert to tensor and move to device
     image_tensor = torch.from_numpy(image).unsqueeze(0).float()
     image_tensor = image_tensor.to(self.agent.device)
-    
+
     if train_cnn:
         # Allow gradients for CNN training
         image_features = self.cnn_extractor(image_tensor)
@@ -201,13 +201,13 @@ def flatten_dict_obs(self, obs_dict, train_cnn=False):
         # No gradients for inference
         with torch.no_grad():
             image_features = self.cnn_extractor(image_tensor)
-    
+
     image_features = image_features.cpu().numpy().squeeze()
-    
+
     # Concatenate with vector features
     vector = obs_dict['vector']
     flat_state = np.concatenate([image_features, vector]).astype(np.float32)
-    
+
     return flat_state
 ```
 
@@ -225,18 +225,18 @@ def _train_cnn_step(self, obs, next_obs):
     # Get features for current and next observation
     obs_tensor = torch.from_numpy(obs['image']).unsqueeze(0).float().to(self.agent.device)
     next_obs_tensor = torch.from_numpy(next_obs['image']).unsqueeze(0).float().to(self.agent.device)
-    
+
     current_features = self.cnn_extractor(obs_tensor)
     next_features = self.cnn_extractor(next_obs_tensor)
-    
+
     # Temporal consistency loss (consecutive frames should have similar features)
     consistency_loss = F.mse_loss(current_features, next_features)
-    
+
     # Update CNN
     self.cnn_optimizer.zero_grad()
     consistency_loss.backward()
     self.cnn_optimizer.step()
-    
+
     return consistency_loss.item()
 ```
 
@@ -314,10 +314,10 @@ Vehicle max speed: 0.0 km/h
    ```bash
    # Edit train_td3.py line 515
    vim av_td3_system/scripts/train_td3.py +515
-   
+
    # Change:
    action = self.env.action_space.sample()
-   
+
    # To:
    action = np.array([
        np.random.uniform(-1, 1),   # Steering
@@ -329,7 +329,7 @@ Vehicle max speed: 0.0 km/h
    ```bash
    # Edit train_td3.py lines 177-189
    vim av_td3_system/scripts/train_td3.py +177
-   
+
    # Add weight initialization method
    # Change .eval() to .train()
    # Add CNN optimizer
@@ -340,7 +340,7 @@ Vehicle max speed: 0.0 km/h
    ```bash
    # Run short test (1000 steps)
    python3 scripts/train_td3.py --scenario 0 --max-timesteps 1000 --device cpu
-   
+
    # Check:
    # - Vehicle moves forward (speed > 0 km/h)
    # - CNN gradients are computed

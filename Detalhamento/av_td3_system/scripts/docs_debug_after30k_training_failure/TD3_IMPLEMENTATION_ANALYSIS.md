@@ -1,7 +1,7 @@
 # TD3 Implementation Analysis: Original vs Our Implementation
 
-**Date**: 2025-01-23  
-**Purpose**: Systematically compare original TD3 implementation with our autonomous driving version to identify bugs causing 0% training success rate  
+**Date**: 2025-01-23
+**Purpose**: Systematically compare original TD3 implementation with our autonomous driving version to identify bugs causing 0% training success rate
 **Training Failure Context**: After 30k steps, 1094 episodes, -52,741 mean reward, 0% success rate
 
 ---
@@ -81,20 +81,20 @@ def __init__(
     self.policy_freq = 2
     self.actor_lr = 3e-4
     self.critic_lr = 3e-4
-    
+
     # Initialize actor
     self.actor = Actor(state_dim, action_dim, max_action, hidden_size=256).to(self.device)
     self.actor_target = copy.deepcopy(self.actor)
     self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.actor_lr)
-    
+
     # Initialize twin critic
     self.critic = TwinCritic(state_dim, action_dim, hidden_size=256).to(self.device)
     self.critic_target = copy.deepcopy(self.critic)
     self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=self.critic_lr)
-    
+
     # Initialize replay buffer
     self.replay_buffer = ReplayBuffer(state_dim, action_dim, max_size=1e6, device=self.device)
-    
+
     self.total_it = 0
 ```
 
@@ -128,18 +128,18 @@ def select_action(
 ) -> np.ndarray:
     # Convert state to tensor
     state = torch.FloatTensor(state.reshape(1, -1)).to(self.device)
-    
+
     # Get deterministic action from actor
     with torch.no_grad():
         action = self.actor(state).cpu().numpy().flatten()
-    
+
     # Add exploration noise if specified
     if noise is not None and noise > 0:
         noise_sample = np.random.normal(0, noise, size=self.action_dim)
         action = action + noise_sample
         # Clip to valid action range
         action = np.clip(action, -self.max_action, self.max_action)
-    
+
     return action
 ```
 
@@ -160,7 +160,7 @@ def select_action(
 def train(self, replay_buffer, batch_size=256):
     self.total_it += 1
 
-    # Sample replay buffer 
+    # Sample replay buffer
     state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
 
     with torch.no_grad():
@@ -168,7 +168,7 @@ def train(self, replay_buffer, batch_size=256):
         noise = (
             torch.randn_like(action) * self.policy_noise
         ).clamp(-self.noise_clip, self.noise_clip)
-        
+
         next_action = (
             self.actor_target(next_state) + noise
         ).clamp(-self.max_action, self.max_action)
@@ -193,8 +193,8 @@ def train(self, replay_buffer, batch_size=256):
     if self.total_it % self.policy_freq == 0:
         # Compute actor loss
         actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
-        
-        # Optimize the actor 
+
+        # Optimize the actor
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
         self.actor_optimizer.step()
@@ -324,7 +324,7 @@ def train(self, batch_size: Optional[int] = None) -> Dict[str, float]:
    # Both implementations:
    for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
        target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-   
+
    for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
        target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
    ```
@@ -466,7 +466,7 @@ class Actor(nn.Module):
         self.l1 = nn.Linear(state_dim, 256)
         self.l2 = nn.Linear(256, 256)
         self.l3 = nn.Linear(256, action_dim)
-        
+
         self.max_action = max_action
 
     def forward(self, state):
@@ -490,7 +490,7 @@ class Actor(nn.Module):
         self.fc1 = nn.Linear(state_dim, hidden_size)  # 256
         self.fc2 = nn.Linear(hidden_size, hidden_size)  # 256
         self.fc3 = nn.Linear(hidden_size, action_dim)
-        
+
         self.max_action = max_action
         self.relu = nn.ReLU()
         self.tanh = nn.Tanh()
@@ -651,7 +651,7 @@ for t in range(int(args.max_timesteps)):
         ).clip(-max_action, max_action)
 
     # Perform action
-    next_state, reward, done, _ = env.step(action) 
+    next_state, reward, done, _ = env.step(action)
     done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
 
     # Store data in replay buffer
@@ -680,7 +680,7 @@ while t < max_timesteps:
     # Environment step
     next_obs, reward, done, truncated, info = self.env.step(action)
     next_state = self.flatten_dict_obs(next_obs)
-    
+
     done_bool = float(done) if episode_timesteps < max_ep_len else 0.0
 
     # Store transition
@@ -725,20 +725,20 @@ Since TD3 implementation is **100% correct**, the training failure (0% success r
 #### **HIGH PROBABILITY BUGS** (To Investigate Next):
 
 1. **Environment Wrapper** (`CarlaGymEnv`):
-   - ❓ **Reward Function**: Incorrect calculation? Wrong sign? Wrong scaling?
-   - ❓ **Termination Conditions**: Premature episode ending? Wrong `done` logic?
-   - ❓ **Action Execution**: CARLA vehicle not receiving commands correctly?
-   - ❓ **Observation Processing**: Sensor data not synchronized?
+   -  **Reward Function**: Incorrect calculation? Wrong sign? Wrong scaling?
+   -  **Termination Conditions**: Premature episode ending? Wrong `done` logic?
+   -  **Action Execution**: CARLA vehicle not receiving commands correctly?
+   -  **Observation Processing**: Sensor data not synchronized?
 
 2. **State Processing** (`flatten_dict_obs`, CNN):
-   - ❓ **CNN Feature Extraction**: Features not informative? Bug #2 fix incomplete?
-   - ❓ **Normalization**: State values out of range? Need standardization?
-   - ❓ **Waypoint Processing**: Relative waypoints calculated wrong?
+   -  **CNN Feature Extraction**: Features not informative? Bug #2 fix incomplete?
+   -  **Normalization**: State values out of range? Need standardization?
+   -  **Waypoint Processing**: Relative waypoints calculated wrong?
 
 3. **CARLA Integration**:
-   - ❓ **Synchronous Mode**: Timing issues causing stale observations?
-   - ❓ **Sensor Callbacks**: Camera data not matching current state?
-   - ❓ **Physics**: Vehicle dynamics unrealistic?
+   -  **Synchronous Mode**: Timing issues causing stale observations?
+   -  **Sensor Callbacks**: Camera data not matching current state?
+   -  **Physics**: Vehicle dynamics unrealistic?
 
 ### 📋 **NEXT STEPS** (Prioritized):
 

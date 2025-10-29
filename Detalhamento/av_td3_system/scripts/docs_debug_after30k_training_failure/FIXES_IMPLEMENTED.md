@@ -1,6 +1,6 @@
 # ✅ BUG FIXES IMPLEMENTED - Ready for Testing
 
-**Date**: 2025-01-28  
+**Date**: 2025-01-28
 **Status**: **BOTH CRITICAL BUGS FIXED** ✅
 
 ---
@@ -18,7 +18,7 @@ I've successfully implemented fixes for **both critical bugs** that caused the c
 
 #### ✅ **Bug #2**: CNN Never Trained (Lines 177-207)
 - **Problem**: CNN frozen in `.eval()` mode with random weights
-- **Fix**: 
+- **Fix**:
   - Added Kaiming weight initialization
   - Changed to `.train()` mode
   - Added CNN optimizer
@@ -40,8 +40,8 @@ def _initialize_cnn_weights(self):
     for module in self.cnn_extractor.modules():
         if isinstance(module, nn.Conv2d):
             nn.init.kaiming_normal_(
-                module.weight, 
-                mode='fan_out', 
+                module.weight,
+                mode='fan_out',
                 nonlinearity='relu'
             )
             if module.bias is not None:

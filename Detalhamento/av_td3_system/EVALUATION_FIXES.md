@@ -1,7 +1,7 @@
 # Evaluation Environment Fixes - Complete Analysis
 
-**Date**: October 26, 2025  
-**Issue**: Training crashed at step 6,001 during environment reset after evaluation  
+**Date**: October 26, 2025
+**Issue**: Training crashed at step 6,001 during environment reset after evaluation
 **Root Cause**: Two critical bugs in episode timeout logic
 
 ---
@@ -213,7 +213,7 @@ parser.add_argument("--eval_freq", default=5e3, type=int)  # Every 5k steps
 def eval_policy(policy, env_name, seed, eval_episodes=10):
     eval_env = gym.make(env_name)  # ← SEPARATE ENVIRONMENT!
     eval_env.seed(seed + 100)       # ← DIFFERENT SEED!
-    
+
     avg_reward = 0.
     for _ in range(eval_episodes):
         state, done = eval_env.reset(), False
@@ -221,7 +221,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
             action = policy.select_action(np.array(state))  # ← NO NOISE!
             state, reward, done, _ = eval_env.step(action)
             avg_reward += reward
-    
+
     return avg_reward / eval_episodes
 ```
 

@@ -28,7 +28,7 @@ Conv1: 32 filters, 8×8 kernel, stride 4, ReLU
     → Output: (batch_size, 32, 20, 20)
     → Calculation: (84 - 8) / 4 + 1 = 20
 
-Conv2: 64 filters, 4×4 kernel, stride 2, ReLU  
+Conv2: 64 filters, 4×4 kernel, stride 2, ReLU
     → Output: (batch_size, 64, 9, 9)
     → Calculation: (20 - 4) / 2 + 1 = 9
 
@@ -48,7 +48,7 @@ FC: 3136 → 512, ReLU
 class NatureCNN(nn.Module):
     def __init__(self, input_channels=4, feature_dim=512):
         super(NatureCNN, self).__init__()
-        
+
         # ✅ CORRECT: Conv1 - 32 filters, 8×8 kernel, stride 4
         self.conv1 = nn.Conv2d(
             in_channels=input_channels,  # 4
@@ -57,7 +57,7 @@ class NatureCNN(nn.Module):
             stride=4,
             padding=0,
         )
-        
+
         # ✅ CORRECT: Conv2 - 64 filters, 4×4 kernel, stride 2
         self.conv2 = nn.Conv2d(
             in_channels=32,
@@ -66,7 +66,7 @@ class NatureCNN(nn.Module):
             stride=2,
             padding=0,
         )
-        
+
         # ✅ CORRECT: Conv3 - 64 filters, 3×3 kernel, stride 1
         self.conv3 = nn.Conv2d(
             in_channels=64,
@@ -75,16 +75,16 @@ class NatureCNN(nn.Module):
             stride=1,
             padding=0,
         )
-        
+
         # Activation function
         self.relu = nn.ReLU()
-        
+
         # Compute flattened size
         self._compute_flat_size()  # Calculates flat_size = 3136
-        
+
         # ✅ CORRECT: FC layer - 3136 → 512
         self.fc = nn.Linear(self.flat_size, feature_dim)
-    
+
     def forward(self, x):
         out = self.relu(self.conv1(x))    # (batch, 32, 20, 20)
         out = self.relu(self.conv2(out))  # (batch, 64, 9, 9)
@@ -179,17 +179,17 @@ From `sensors.py` preprocessing (lines 130-139):
 def _preprocess(self, image: np.ndarray) -> np.ndarray:
     # Convert RGB to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    
+
     # Resize to 84×84
     resized = cv2.resize(gray, (84, 84), interpolation=cv2.INTER_AREA)
-    
+
     # Scale to [0, 1]
     scaled = resized.astype(np.float32) / 255.0
-    
+
     # Normalize to [-1, 1] (zero-centered)
     mean, std = 0.5, 0.5
     normalized = (scaled - mean) / std  # Result: [-1, 1]
-    
+
     return normalized
 ```
 
@@ -202,11 +202,11 @@ def _preprocess(self, image: np.ndarray) -> np.ndarray:
 def forward(self, x: torch.Tensor) -> torch.Tensor:
     """
     Forward pass through CNN.
-    
+
     Args:
         x: Input tensor of shape (batch_size, 4, 84, 84)
            Values should be normalized to [0, 1]  ← ❌ WRONG COMMENT!
-    
+
     Returns:
         Feature vector of shape (batch_size, 512)
     """
@@ -229,11 +229,11 @@ def forward(self, x: torch.Tensor) -> torch.Tensor:
 1. **ReLU behavior**:
    ```
    ReLU(x) = max(0, x)
-   
+
    For x ∈ [-1, 1]:
    - Negative values → 0 (dead)
    - Positive values → pass through
-   
+
    For x ∈ [0, 1]:
    - All values pass through (no dead neurons)
    ```
@@ -265,11 +265,11 @@ def forward(self, x: torch.Tensor) -> torch.Tensor:
        # Validate input shape
        if x.shape[1:] != (self.input_channels, 84, 84):
            raise ValueError(f"Expected input shape (batch, {self.input_channels}, 84, 84), got {x.shape}")
-       
+
        # Optional: Validate input range
        if x.min() < -1.5 or x.max() > 1.5:
            warnings.warn(f"Input range [{x.min():.2f}, {x.max():.2f}] is outside expected [-1, 1]")
-       
+
        # Rest of forward pass...
    ```
 
@@ -306,11 +306,11 @@ self.cnn_extractor = NatureCNN(
 ```python
 def flatten_dict_obs(self, obs_dict):
     image = obs_dict['image']  # (4, 84, 84) numpy array
-    
+
     # Convert to tensor and move to device
     image_tensor = torch.from_numpy(image).unsqueeze(0).float()
     image_tensor = image_tensor.to(self.agent.device)  # ✅ Uses agent's device
-    
+
     with torch.no_grad():
         image_features = self.cnn_extractor(image_tensor)  # (1, 512)
 ```
@@ -332,17 +332,17 @@ def flatten_dict_obs(self, obs_dict):
 ```python
 def flatten_dict_obs(self, obs_dict):
     image = obs_dict['image']
-    
+
     image_tensor = torch.from_numpy(image).unsqueeze(0).float()
     image_tensor = image_tensor.to(self.agent.device)
-    
+
     # Validate device placement (optional sanity check)
     cnn_device = next(self.cnn_extractor.parameters()).device
     if cnn_device != self.agent.device:
         raise RuntimeError(
             f"Device mismatch: CNN on {cnn_device}, Agent on {self.agent.device}"
         )
-    
+
     with torch.no_grad():
         image_features = self.cnn_extractor(image_tensor)
     # ...
@@ -470,7 +470,7 @@ Overall: 5/5 tests passed
 def preprocess_observation(observation):
     """
     Preprocess 210x160x3 Atari frame.
-    
+
     1. Convert to grayscale
     2. Resize to 84x84
     3. Scale to [0, 1]
@@ -552,12 +552,12 @@ class NatureCNN(BaseFeaturesExtractor):
        # Validate shape
        if x.shape[1:] != (self.input_channels, 84, 84):
            raise ValueError(f"Expected input shape (batch, {self.input_channels}, 84, 84), got {x.shape}")
-       
+
        # Validate range (warning only)
        if x.min() < -2 or x.max() > 2:
            import warnings
            warnings.warn(f"Input range [{x.min():.2f}, {x.max():.2f}] is outside expected [-1, 1]")
-       
+
        # Forward pass
        out = self.relu(self.conv1(x))
        # ...
@@ -574,9 +574,9 @@ class NatureCNN(BaseFeaturesExtractor):
            flat_state = self.flatten_dict_obs(obs)
            features = flat_state[:512]  # CNN features
            sample_features.append(features)
-       
+
        sample_features = np.vstack(sample_features)
-       
+
        # Log statistics
        self.writer.add_scalar('debug/cnn_feature_mean', sample_features.mean(), t)
        self.writer.add_scalar('debug/cnn_feature_std', sample_features.std(), t)
@@ -624,6 +624,6 @@ class NatureCNN(BaseFeaturesExtractor):
 
 ---
 
-**Date**: 2025-01-28  
-**Author**: Daniel Terra  
+**Date**: 2025-01-28
+**Author**: Daniel Terra
 **Status**: Analysis Complete - Ready for Validation Testing

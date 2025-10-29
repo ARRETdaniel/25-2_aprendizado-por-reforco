@@ -206,6 +206,9 @@ class DynamicRouteManager:
         """
         Find the index of the next waypoint ahead of the vehicle.
 
+        🔧 FIX: Uses road-following distance instead of Euclidean distance.
+        This prevents selecting wrong waypoints at curves, junctions, and adjacent lanes.
+
         Args:
             vehicle_location: Current vehicle location
             current_index: Last known waypoint index (for optimization)
@@ -213,15 +216,28 @@ class DynamicRouteManager:
         Returns:
             Index of the next waypoint to target
         """
-        # Convert to numpy for distance calculation
-        vehicle_pos = np.array([
-            vehicle_location.x,
-            vehicle_location.y,
-            vehicle_location.z
-        ])
+        # Get vehicle's current waypoint on the road network
+        vehicle_waypoint = self.map.get_waypoint(
+            vehicle_location,
+            project_to_road=True,
+            lane_type=carla.LaneType.Driving
+        )
+
+        if vehicle_waypoint is None:
+            # Vehicle is not on a drivable road, use fallback
+            self.logger.warning(
+                f"Vehicle at ({vehicle_location.x:.2f}, {vehicle_location.y:.2f}) "
+                f"not on drivable road. Using Euclidean fallback."
+            )
+            return self._get_nearest_waypoint_euclidean(vehicle_location, current_index)
+
+        # Get vehicle's road position (s-coordinate: distance along road from start)
+        vehicle_s = vehicle_waypoint.s
+        vehicle_road_id = vehicle_waypoint.road_id
+        vehicle_lane_id = vehicle_waypoint.lane_id
 
         # Search forward from current index
-        min_distance = float('inf')
+        min_s_difference = float('inf')
         best_index = current_index
 
         # Look ahead from current index (optimization)
@@ -229,9 +245,69 @@ class DynamicRouteManager:
         search_end = min(len(self.waypoints), current_index + 20)
 
         for i in range(search_start, search_end):
+            # Get waypoint object for this route point
+            route_waypoint = self.map.get_waypoint(
+                carla.Location(
+                    x=self.waypoints[i][0],
+                    y=self.waypoints[i][1],
+                    z=self.waypoints[i][2]
+                ),
+                project_to_road=True,
+                lane_type=carla.LaneType.Driving
+            )
+
+            if route_waypoint is None:
+                continue
+
+            # Only consider waypoints on the same road and lane
+            # (prevents selecting adjacent lanes or wrong forks)
+            if route_waypoint.road_id != vehicle_road_id:
+                continue
+
+            # Calculate road-following distance using s-coordinate
+            s_difference = route_waypoint.s - vehicle_s
+
+            # Find closest waypoint ahead on the same road
+            # s_difference > 0 means waypoint is ahead of vehicle
+            # Allow small negative values (-2m) to handle quantization
+            if s_difference >= -2.0 and s_difference < min_s_difference and i >= current_index:
+                min_s_difference = s_difference
+                best_index = i
+
+        return best_index
+
+    def _get_nearest_waypoint_euclidean(
+        self,
+        vehicle_location: carla.Location,
+        current_index: int = 0
+    ) -> int:
+        """
+        Fallback method using Euclidean distance.
+
+        Used when vehicle is off-road or road network lookup fails.
+
+        Args:
+            vehicle_location: Current vehicle location
+            current_index: Last known waypoint index
+
+        Returns:
+            Index of nearest waypoint (Euclidean)
+        """
+        vehicle_pos = np.array([
+            vehicle_location.x,
+            vehicle_location.y,
+            vehicle_location.z
+        ])
+
+        min_distance = float('inf')
+        best_index = current_index
+
+        search_start = max(0, current_index - 5)
+        search_end = min(len(self.waypoints), current_index + 20)
+
+        for i in range(search_start, search_end):
             distance = np.linalg.norm(self.waypoints[i] - vehicle_pos)
 
-            # Find closest waypoint ahead
             if distance < min_distance and i >= current_index:
                 min_distance = distance
                 best_index = i

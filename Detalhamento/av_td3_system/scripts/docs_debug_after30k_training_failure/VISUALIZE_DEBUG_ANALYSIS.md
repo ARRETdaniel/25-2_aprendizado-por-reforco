@@ -1,6 +1,6 @@
 # 🖼️ `_visualize_debug()` Function Analysis
 
-**Date**: 2025-01-28  
+**Date**: 2025-01-28
 **Status**: ✅ **NO CRITICAL BUGS FOUND**
 
 ---
@@ -227,7 +227,7 @@ def _visualize_debug(self, obs_dict, action, reward, info, t):
     # Only visualize every N steps
     if t % 10 != 0:  # Visualize every 10 steps
         return
-    
+
     # ... rest of function
 ```
 
@@ -401,7 +401,7 @@ train() (main loop)
 - Visualization adds ~5-10% overhead when enabled
 - Recommendation: Only use for debugging, disable for production training
 
-**Recommendation**: 
+**Recommendation**:
 - ✅ **NO CHANGES REQUIRED**
 - Optional: Add frame skip for performance (every 10 steps)
 - Optional: Define color constants for consistency

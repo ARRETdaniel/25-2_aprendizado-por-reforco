@@ -4,10 +4,10 @@
 
 **VERDICT: ✅ BOTH FUNCTIONS VALIDATED AS CORRECT**
 
-**Analysis Completion Date:** 2025-01-XX  
-**Confidence Level:** 100%  
-**Functions Analyzed:** `save_final_results()` (lines 913-932), `close()` (lines 934-943)  
-**Bugs Found:** NONE  
+**Analysis Completion Date:** 2025-01-XX
+**Confidence Level:** 100%
+**Functions Analyzed:** `save_final_results()` (lines 913-932), `close()` (lines 934-943)
+**Bugs Found:** NONE
 
 ### Key Findings
 
@@ -47,11 +47,11 @@ def save_final_results(self):
         'final_eval_mean_reward': float(np.mean(self.eval_rewards[-5:])) if len(self.eval_rewards) > 0 else 0,
         'final_eval_success_rate': float(np.mean(self.eval_success_rates[-5:])) if len(self.eval_success_rates) > 0 else 0
     }
-    
+
     results_path = self.log_path / "results.json"
     with open(results_path, 'w') as f:
         json.dump(results, f, indent=2)
-    
+
     print(f"[RESULTS] Saved to {results_path}")
 ```
 
@@ -64,12 +64,12 @@ def save_final_results(self):
 evaluations = []
 for t in range(int(args.max_timesteps)):
     # ... training code ...
-    
+
     # Evaluate and save periodically
     if (t + 1) % args.eval_freq == 0:
         evaluations.append(eval_policy(policy, args.env, args.seed))
         np.save(f"./results/{file_name}", evaluations)  # Simple numpy save
-        if args.save_model: 
+        if args.save_model:
             policy.save(f"./models/{file_name}")
 ```
 
@@ -113,7 +113,7 @@ results = {
 
 ✅ **Evaluation Metrics**: `eval_rewards` list is constructed by evaluate() function with float values, JSON-safe.
 
-✅ **Type Safety**: 
+✅ **Type Safety**:
 - Lines 921-922: Explicit `float(x)` conversion for success rates and collisions
 - **Reason**: These might be numpy scalars (numpy.float64), which can cause JSON serialization issues
 - **Best Practice**: Always convert numpy types to Python primitives before JSON serialization
@@ -149,9 +149,9 @@ with open(results_path, 'w') as f:             # ✅ Context manager (auto-close
 - Negligible size overhead
 - Industry standard practice
 
-✅ **Error Handling**: 
+✅ **Error Handling**:
 - **Current**: No explicit error handling
-- **Acceptable Because**: 
+- **Acceptable Because**:
   - Called at end of training (graceful failure acceptable)
   - Context manager ensures file cleanup on error
   - Error would be caught by calling code (close() function)
@@ -531,26 +531,26 @@ def close(self):
             print(f"[DEBUG] OpenCV windows closed")
     except Exception as e:
         print(f"[WARNING] OpenCV cleanup failed: {e}")
-    
+
     try:
         self.save_final_results()
     except Exception as e:
         print(f"[WARNING] Result saving failed: {e}")
-    
+
     try:
         self.env.close()
     except Exception as e:
         print(f"[WARNING] Environment cleanup failed: {e}")
-    
+
     try:
         self.writer.close()
     except Exception as e:
         print(f"[WARNING] TensorBoard cleanup failed: {e}")
-    
+
     print(f"[CLEANUP] Environment closed, logging finalized")
 ```
 
-**Current Assessment:** 
+**Current Assessment:**
 - ⚠️ No error handling is a **minor weakness**
 - ✅ BUT acceptable for end-of-training utility function
 - ✅ Data is redundantly stored in TensorBoard
@@ -795,7 +795,7 @@ class TD3Trainer:
     def save_final_results(self) -> None:
         """Save final training results to JSON."""
         pass
-    
+
     def close(self) -> None:
         """Clean up resources."""
         pass
@@ -804,7 +804,7 @@ class CARLANavigationEnv(Env):
     def _cleanup_episode(self) -> None:
         """Clean up vehicles and sensors from previous episode."""
         pass
-    
+
     def close(self) -> None:
         """Shut down environment and disconnect from CARLA."""
         pass
@@ -861,8 +861,8 @@ close() called:
 
 **End of Analysis**
 
-**Report Generated:** 2025-01-XX  
-**Analyzer:** GitHub Copilot  
-**Confidence Level:** 100%  
-**Status:** ✅ VALIDATED - NO BUGS FOUND  
+**Report Generated:** 2025-01-XX
+**Analyzer:** GitHub Copilot
+**Confidence Level:** 100%
+**Status:** ✅ VALIDATED - NO BUGS FOUND
 **Training Failure Source:** NOT in these functions → Continue to CarlaGymEnv analysis

@@ -33,7 +33,7 @@ action = np.array([
 
 **Fixes Applied**:
 1. Added Kaiming weight initialization for ReLU networks
-2. Changed `.eval()` to `.train()` mode  
+2. Changed `.eval()` to `.train()` mode
 3. Added CNN optimizer (Adam, lr=1e-4)
 
 **Implementation Decision - Simplified CNN Training**:
@@ -56,7 +56,7 @@ Keep CNN fixed with good initialization. Since:
 - PyTorch's default Kaiming init is already good for ReLU
 - NatureCNN architecture is proven (Nature DQN)
 - Main issue was `.eval()` preventing any potential fine-tuning
-  
+
 With proper initialization and `.train()` mode, CNN should provide reasonable features.
 
 **Alternative - Option B (Full Fix, for future work)**:
@@ -102,7 +102,7 @@ If results are still poor, can add temporal consistency training as future work.
 
 3. **Ablation study** (optional):
    - Only Bug #1 fixed
-   - Only Bug #2 fixed  
+   - Only Bug #2 fixed
    - Both fixed (expected best)
 
 ---

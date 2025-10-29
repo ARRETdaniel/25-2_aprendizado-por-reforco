@@ -717,8 +717,23 @@ class TD3TrainingPipeline:
             self.episode_collision_count += info.get('collision_count', 0)
             self.episode_steps_since_collision = info.get('steps_since_collision', 0)
 
+            # ✅ FIX BUG #12: Use ONLY terminated for TD3 bootstrapping
+            # Per official TD3 implementation (main.py line 133):
+            #   done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
+            #
+            # With Gymnasium API (v0.26+), the environment already provides:
+            #   - terminated: Natural MDP termination (collision, goal) → V(s')=0
+            #   - truncated: Time limit → V(s')≠0
+            #
+            # WRONG (previous): done_bool = float(done or truncated) if self.episode_timesteps < 300 else True
+            # CORRECT (now): done_bool = float(terminated)
+            #
+            # This ensures TD3 learns correct Q-values:
+            #   - If terminated=True: target_Q = reward + 0 (no future value)
+            #   - If truncated=True: target_Q = reward + gamma*V(next_state) (has future value)
+            done_bool = float(terminated)
+
             # Store transition in replay buffer (use flat states)
-            done_bool = float(done or truncated) if self.episode_timesteps < 300 else True  # 300s timeout
             self.agent.replay_buffer.add(
                 state,
                 action,
