@@ -38,6 +38,12 @@ algorithm:
 
 # Network architecture (matching official TD3 implementation)
 networks:
+  # CNN Feature Extractor (visual input processing)
+  cnn:
+    learning_rate: 0.0001  # Conservative 1e-4 for CNN (lower than actor/critic 3e-4)
+    # Rationale: Visual features require more stable learning than policy/value
+    # Lower LR prevents catastrophic forgetting of learned visual representations
+
   # Actor network (deterministic policy μ_φ(s))
   actor:
     hidden_layers: [256, 256]  # Two hidden layers with 256 neurons each

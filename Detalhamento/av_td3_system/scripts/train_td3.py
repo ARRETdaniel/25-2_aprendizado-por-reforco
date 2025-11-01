@@ -169,15 +169,39 @@ class TD3TrainingPipeline:
 
         if agent_device == 'cpu':
             print(f"[AGENT] Running on CPU to reserve GPU memory for CARLA simulator")
+
+        # Initialize CNN feature extractor BEFORE TD3Agent (needed for end-to-end training)
+        print(f"[AGENT] Initializing NatureCNN feature extractor...")
+        self.cnn_extractor = NatureCNN(
+            input_channels=4,  # 4 stacked frames
+            num_frames=4,
+            feature_dim=512    # Output 512-dim features
+        ).to(agent_device)
+
+        # BUG FIX (2025-01-28): CRITICAL - CNN must be trained, not frozen!
+        # Initialize weights properly and set to TRAIN mode
+        self._initialize_cnn_weights()  # Kaiming init for ReLU networks
+        self.cnn_extractor.train()  # Enable training mode (NOT eval()!)
+
+        print(f"[AGENT] CNN extractor initialized on {agent_device}")
+        print(f"[AGENT] CNN architecture: 4×84×84 → Conv layers → 512 features")
+        print(f"[AGENT] CNN training mode: ENABLED (weights will be updated during training)")
+
+        # Initialize TD3Agent WITH CNN for end-to-end training (Bug #13 fix)
         self.agent = TD3Agent(
             state_dim=535,
             action_dim=2,
             max_action=1.0,
+            cnn_extractor=self.cnn_extractor,  # ← Pass CNN to agent!
+            use_dict_buffer=True,               # ← Enable DictReplayBuffer!
             config=self.agent_config,
             device=agent_device
         )
 
-        # Initialize CNN feature extractor for visual observations
+        print(f"[AGENT] CNN passed to TD3Agent for end-to-end training")
+        print(f"[AGENT] DictReplayBuffer enabled for gradient flow")
+
+        # NOTE: CNN optimizer is now managed by TD3Agent (not here)
         print(f"[AGENT] Initializing NatureCNN feature extractor...")
         self.cnn_extractor = NatureCNN(
             input_channels=4,  # 4 stacked frames
@@ -195,16 +219,10 @@ class TD3TrainingPipeline:
         self.cnn_extractor.train()  # Enable training mode (NOT eval()!)
 
         print(f"[AGENT] CNN extractor initialized on {agent_device}")
-        print(f"[AGENT] CNN architecture: 4×84×84 → Conv layers → 512 features")
-        print(f"[AGENT] CNN training mode: ENABLED (weights will be updated during training)")
+        print(f"[AGENT] CNN passed to TD3Agent for end-to-end training")
+        print(f"[AGENT] DictReplayBuffer enabled for gradient flow")
 
-        # Initialize CNN optimizer (separate from TD3 networks for modular training)
-        # Lower learning rate (1e-4) compared to TD3 networks (3e-4) for stable visual learning
-        self.cnn_optimizer = torch.optim.Adam(
-            self.cnn_extractor.parameters(),
-            lr=1e-4  # Lower LR for vision network
-        )
-        print(f"[AGENT] CNN optimizer: Adam(lr=1e-4) - will train jointly with TD3 Critic")
+        # NOTE: CNN optimizer is now managed by TD3Agent (not here)
 
         # Initialize logging
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -717,29 +735,31 @@ class TD3TrainingPipeline:
             self.episode_collision_count += info.get('collision_count', 0)
             self.episode_steps_since_collision = info.get('steps_since_collision', 0)
 
-            # ✅ FIX BUG #12: Use ONLY terminated for TD3 bootstrapping
+            # ✅ FIX BUG #12: Use ONLY done (terminated) for TD3 bootstrapping
             # Per official TD3 implementation (main.py line 133):
             #   done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
             #
-            # With Gymnasium API (v0.26+), the environment already provides:
-            #   - terminated: Natural MDP termination (collision, goal) → V(s')=0
+            # With Gymnasium API (v0.26+), the environment provides:
+            #   - done: Natural MDP termination (collision, goal) → V(s')=0
             #   - truncated: Time limit → V(s')≠0
             #
             # WRONG (previous): done_bool = float(done or truncated) if self.episode_timesteps < 300 else True
-            # CORRECT (now): done_bool = float(terminated)
+            # CORRECT (now): done_bool = float(done)
             #
             # This ensures TD3 learns correct Q-values:
-            #   - If terminated=True: target_Q = reward + 0 (no future value)
+            #   - If done=True: target_Q = reward + 0 (no future value)
             #   - If truncated=True: target_Q = reward + gamma*V(next_state) (has future value)
-            done_bool = float(terminated)
+            done_bool = float(done)
 
-            # Store transition in replay buffer (use flat states)
+            # Store Dict observation directly in replay buffer (Bug #13 fix)
+            # This enables gradient flow through CNN during training
+            # CRITICAL: Store raw Dict observations (NOT flattened states!)
             self.agent.replay_buffer.add(
-                state,
-                action,
-                next_state,
-                reward,
-                done_bool
+                obs_dict=obs_dict,        # Current Dict observation {'image': (4,84,84), 'vector': (23,)}
+                action=action,
+                next_obs_dict=next_obs_dict,  # Next Dict observation
+                reward=reward,
+                done=done_bool
             )
 
             # Update state for next iteration (both representations)

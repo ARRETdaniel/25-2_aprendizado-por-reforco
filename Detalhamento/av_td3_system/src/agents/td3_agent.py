@@ -26,6 +26,7 @@ import yaml
 from src.networks.actor import Actor
 from src.networks.critic import TwinCritic
 from src.utils.replay_buffer import ReplayBuffer
+from src.utils.dict_replay_buffer import DictReplayBuffer
 
 
 class TD3Agent:
@@ -49,6 +50,8 @@ class TD3Agent:
         state_dim: int = 535,
         action_dim: int = 2,
         max_action: float = 1.0,
+        cnn_extractor: Optional[torch.nn.Module] = None,  # ADD CNN for end-to-end training
+        use_dict_buffer: bool = True,  # Use DictReplayBuffer for gradient-enabled training
         config: Optional[Dict] = None,
         config_path: Optional[str] = None,
         device: Optional[str] = None
@@ -62,6 +65,10 @@ class TD3Agent:
             action_dim: Dimension of action space (default: 2)
                        = [steering, throttle/brake]
             max_action: Maximum absolute value of actions (default: 1.0)
+            cnn_extractor: CNN feature extractor for end-to-end training (optional)
+                          If provided, enables gradient-based CNN learning
+            use_dict_buffer: If True, use DictReplayBuffer for gradient flow
+                            If False, use standard ReplayBuffer (no CNN training)
             config: Dictionary with TD3 hyperparameters (if None, loads from file)
             config_path: Path to YAML config file (default: config/td3_config.yaml)
             device: Device to use ('cpu' or 'cuda'). If None, auto-detect.
@@ -144,13 +151,48 @@ class TD3Agent:
             lr=self.critic_lr
         )
 
-        # Initialize replay buffer
-        self.replay_buffer = ReplayBuffer(
-            state_dim=state_dim,
-            action_dim=action_dim,
-            max_size=self.buffer_size,
-            device=self.device
-        )
+        # Initialize CNN for end-to-end training (Bug #13 fix)
+        self.cnn_extractor = cnn_extractor
+        self.use_dict_buffer = use_dict_buffer
+
+        if self.cnn_extractor is not None:
+            # CNN should be in training mode (NOT eval!)
+            self.cnn_extractor.train()
+
+            # Create CNN optimizer with lower learning rate
+            cnn_config = config.get('networks', {}).get('cnn', {})
+            cnn_lr = cnn_config.get('learning_rate', 1e-4)  # Conservative 1e-4 for CNN
+            self.cnn_optimizer = torch.optim.Adam(
+                self.cnn_extractor.parameters(),
+                lr=cnn_lr
+            )
+            print(f"  CNN optimizer initialized with lr={cnn_lr}")
+            print(f"  CNN mode: training (gradients enabled)")
+        else:
+            self.cnn_optimizer = None
+            if use_dict_buffer:
+                print("  WARNING: DictReplayBuffer enabled but no CNN provided!")
+
+        # Initialize replay buffer (Dict or standard based on flag)
+        if use_dict_buffer and self.cnn_extractor is not None:
+            # Use DictReplayBuffer for end-to-end CNN training
+            self.replay_buffer = DictReplayBuffer(
+                image_shape=(4, 84, 84),
+                vector_dim=23,  # velocity(1) + lateral_dev(1) + heading_err(1) + waypoints(20)
+                action_dim=action_dim,
+                max_size=self.buffer_size,
+                device=self.device
+            )
+            print(f"  Using DictReplayBuffer for end-to-end CNN training")
+        else:
+            # Use standard ReplayBuffer (no CNN training)
+            self.replay_buffer = ReplayBuffer(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                max_size=self.buffer_size,
+                device=self.device
+            )
+            print(f"  Using standard ReplayBuffer (CNN not trained)")
 
         # Training iteration counter for delayed updates
         self.total_it = 0
@@ -198,15 +240,62 @@ class TD3Agent:
 
         return action
 
+    def extract_features(
+        self,
+        obs_dict: Dict[str, torch.Tensor],
+        enable_grad: bool = True
+    ) -> torch.Tensor:
+        """
+        Extract features from Dict observation with gradient support.
+
+        This method combines CNN visual features with kinematic vector features.
+        When enable_grad=True (training), gradients flow through CNN for end-to-end learning.
+        When enable_grad=False (inference), CNN runs in no_grad mode for efficiency.
+
+        Args:
+            obs_dict: Dict with 'image' (B,4,84,84) and 'vector' (B,23) tensors
+            enable_grad: If True, compute gradients for CNN (training mode)
+                        If False, use torch.no_grad() for inference
+
+        Returns:
+            state: Flattened state tensor (B, 535) with gradient tracking if enabled
+                  = 512 (CNN features) + 23 (kinematic features)
+
+        Note:
+            This is the KEY method for Bug #13 fix. By extracting features WITH gradients
+            during training, we enable backpropagation through the CNN, allowing it to learn
+            optimal visual representations for the driving task.
+        """
+        if self.cnn_extractor is None:
+            # No CNN provided - use zeros for image features (fallback, shouldn't happen)
+            batch_size = obs_dict['vector'].shape[0]
+            image_features = torch.zeros(batch_size, 512, device=self.device)
+            print("WARNING: extract_features called but no CNN available!")
+        elif enable_grad:
+            # Training mode: Extract features WITH gradients
+            # Gradients will flow: loss → actor/critic → state → CNN
+            image_features = self.cnn_extractor(obs_dict['image'])  # (B, 512)
+        else:
+            # Inference mode: Extract features without gradients (more efficient)
+            with torch.no_grad():
+                image_features = self.cnn_extractor(obs_dict['image'])  # (B, 512)
+
+        # Concatenate visual features with vector state
+        # Result: (B, 535) = (B, 512) + (B, 23)
+        state = torch.cat([image_features, obs_dict['vector']], dim=1)
+
+        return state
+
     def train(self, batch_size: Optional[int] = None) -> Dict[str, float]:
         """
-        Perform one TD3 training iteration.
+        Perform one TD3 training iteration with end-to-end CNN training.
 
-        Implements the complete TD3 algorithm:
-        1. Sample mini-batch from replay buffer
-        2. Compute target Q-value with twin minimum and target smoothing
-        3. Update both critic networks to minimize TD error
-        4. (Every policy_freq steps) Update actor and target networks
+        Implements the complete TD3 algorithm with gradient flow through CNN:
+        1. Sample mini-batch from replay buffer (Dict or standard)
+        2. Extract features WITH gradients if using DictReplayBuffer
+        3. Compute target Q-value with twin minimum and target smoothing
+        4. Update both critic networks (gradients flow to CNN!)
+        5. (Every policy_freq steps) Update actor and target networks
 
         Args:
             batch_size: Size of mini-batch to sample. If None, uses self.batch_size
@@ -224,9 +313,25 @@ class TD3Agent:
             batch_size = self.batch_size
 
         # Sample replay buffer
-        state, action, next_state, reward, not_done = self.replay_buffer.sample(batch_size)
+        if self.use_dict_buffer and self.cnn_extractor is not None:
+            # DictReplayBuffer returns: (obs_dict, action, next_obs_dict, reward, not_done)
+            obs_dict, action, next_obs_dict, reward, not_done = self.replay_buffer.sample(batch_size)
+
+            # Extract state features WITH gradients for training
+            # This is the KEY to Bug #13 fix: gradients flow through CNN!
+            state = self.extract_features(obs_dict, enable_grad=True)  # (B, 535)
+        else:
+            # Standard ReplayBuffer returns: (state, action, next_state, reward, not_done)
+            state, action, next_state, reward, not_done = self.replay_buffer.sample(batch_size)
+            # next_state will be used in target computation below
 
         with torch.no_grad():
+            # Compute next_state for target Q-value calculation
+            if self.use_dict_buffer and self.cnn_extractor is not None:
+                # Extract next state features (no gradients for target computation)
+                next_state = self.extract_features(next_obs_dict, enable_grad=False)
+            # else: next_state already computed above from standard buffer
+
             # Select action according to target policy with added smoothing noise
             noise = torch.randn_like(action) * self.policy_noise
             noise = noise.clamp(-self.noise_clip, self.noise_clip)
@@ -245,10 +350,16 @@ class TD3Agent:
         # Compute critic loss (MSE on both Q-networks)
         critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
 
-        # Optimize critics
+        # Optimize critics (gradients flow through state → CNN if using DictReplayBuffer!)
         self.critic_optimizer.zero_grad()
-        critic_loss.backward()
+        if self.cnn_optimizer is not None:
+            self.cnn_optimizer.zero_grad()  # Zero CNN gradients before backprop
+
+        critic_loss.backward()  # Gradients flow: critic_loss → state → CNN!
+
         self.critic_optimizer.step()
+        if self.cnn_optimizer is not None:
+            self.cnn_optimizer.step()  # UPDATE CNN WEIGHTS!
 
         # Prepare metrics
         metrics = {
@@ -259,13 +370,25 @@ class TD3Agent:
 
         # Delayed policy updates
         if self.total_it % self.policy_freq == 0:
-            # Compute actor loss: -Q1(s, μ_φ(s))
-            actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
+            # Re-extract features for actor update (need fresh computational graph)
+            if self.use_dict_buffer and self.cnn_extractor is not None:
+                state_for_actor = self.extract_features(obs_dict, enable_grad=True)
+            else:
+                state_for_actor = state  # Use same state from standard buffer
 
-            # Optimize actor
+            # Compute actor loss: -Q1(s, μ_φ(s))
+            actor_loss = -self.critic.Q1(state_for_actor, self.actor(state_for_actor)).mean()
+
+            # Optimize actor (gradients flow through state_for_actor → CNN!)
             self.actor_optimizer.zero_grad()
-            actor_loss.backward()
+            if self.cnn_optimizer is not None:
+                self.cnn_optimizer.zero_grad()
+
+            actor_loss.backward()  # Gradients flow: actor_loss → state → CNN!
+
             self.actor_optimizer.step()
+            if self.cnn_optimizer is not None:
+                self.cnn_optimizer.step()  # UPDATE CNN WEIGHTS AGAIN!
 
             # Soft update target networks: θ' ← τθ + (1-τ)θ'
             for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
@@ -286,7 +409,7 @@ class TD3Agent:
         """
         Save agent checkpoint to disk.
 
-        Saves actor, critic networks and their optimizers in a single file.
+        Saves actor, critic, CNN networks and their optimizers in a single file.
 
         Args:
             filepath: Path to save checkpoint (e.g., 'checkpoints/td3_100k.pth')
@@ -299,18 +422,27 @@ class TD3Agent:
             'critic_state_dict': self.critic.state_dict(),
             'actor_optimizer_state_dict': self.actor_optimizer.state_dict(),
             'critic_optimizer_state_dict': self.critic_optimizer.state_dict(),
-            'config': self.config
+            'config': self.config,
+            'use_dict_buffer': self.use_dict_buffer
         }
+
+        # Add CNN state if available (Bug #13 fix)
+        if self.cnn_extractor is not None:
+            checkpoint['cnn_state_dict'] = self.cnn_extractor.state_dict()
+            if self.cnn_optimizer is not None:
+                checkpoint['cnn_optimizer_state_dict'] = self.cnn_optimizer.state_dict()
 
         torch.save(checkpoint, filepath)
         print(f"Checkpoint saved to {filepath}")
+        if self.cnn_extractor is not None:
+            print(f"  Includes CNN state for end-to-end training")
 
     def load_checkpoint(self, filepath: str) -> None:
         """
         Load agent checkpoint from disk.
 
         Restores networks, optimizers, and training state. Also recreates
-        target networks from loaded weights.
+        target networks from loaded weights. Includes CNN state if available.
 
         Args:
             filepath: Path to checkpoint file
@@ -334,6 +466,13 @@ class TD3Agent:
         # Restore optimizers
         self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
         self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
+
+        # Restore CNN state if available (Bug #13 fix)
+        if 'cnn_state_dict' in checkpoint and self.cnn_extractor is not None:
+            self.cnn_extractor.load_state_dict(checkpoint['cnn_state_dict'])
+            if 'cnn_optimizer_state_dict' in checkpoint and self.cnn_optimizer is not None:
+                self.cnn_optimizer.load_state_dict(checkpoint['cnn_optimizer_state_dict'])
+            print(f"  CNN state restored")
 
         # Restore training state
         self.total_it = checkpoint['total_it']
