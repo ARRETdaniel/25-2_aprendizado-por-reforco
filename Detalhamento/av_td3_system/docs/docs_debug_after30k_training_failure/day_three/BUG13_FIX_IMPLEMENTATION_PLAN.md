@@ -1,8 +1,8 @@
 # Bug #13 Fix Implementation Plan
 ## End-to-End CNN Training for TD3 Multi-Modal Architecture
 
-**Date:** 2025-11-01  
-**Status:** 🔴 **IMPLEMENTING SOLUTION A** (Modify Replay Buffer for Dict Observations)  
+**Date:** 2025-11-01
+**Status:** 🔴 **IMPLEMENTING SOLUTION A** (Modify Replay Buffer for Dict Observations)
 **Priority:** P0 - CRITICAL (Primary cause of training failure)
 
 ---
@@ -101,24 +101,24 @@ CNN learns optimal features for control task
 ```python
 def flatten_dict_obs(self, obs_dict, enable_grad=False):
     """Flatten Dict observation to 1D array for TD3 agent using CNN feature extraction."""
-    
+
     # Extract image and convert to PyTorch tensor
     image = obs_dict['image']  # (4, 84, 84)
     image_tensor = torch.from_numpy(image).unsqueeze(0).float().to(self.agent.device)
-    
+
     # ❌ BUG #13: Extract features WITHOUT gradients
     with torch.no_grad():  # ← BLOCKS GRADIENTS!
         image_features = self.cnn_extractor(image_tensor)  # (1, 512)
-    
+
     # ❌ BUG #13: Convert to numpy (breaks gradient chain)
     image_features = image_features.cpu().numpy().squeeze()  # ← NO GRADIENTS!
-    
+
     # Extract vector state
     vector = obs_dict['vector']  # (23,)
-    
+
     # ❌ BUG #13: Concatenate numpy arrays (no gradient info)
     flat_state = np.concatenate([image_features, vector]).astype(np.float32)
-    
+
     return flat_state  # Shape: (535,) - numpy array with NO gradients
 ```
 
@@ -137,11 +137,11 @@ class ReplayBuffer:
         self.state = np.zeros((max_size, state_dim))  # ← Stores 535-dim numpy
         self.next_state = np.zeros((max_size, state_dim))
         # ...
-    
+
     def add(self, state, action, next_state, reward, done):
         self.state[self.ptr] = state  # ← state is numpy array (no gradients)
         # ...
-    
+
     def sample(self, batch_size):
         # Returns numpy arrays converted to tensors
         return (
@@ -164,25 +164,25 @@ class TD3Agent:
     def __init__(self, ...):
         # ✅ Has actor optimizer
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-4)
-        
+
         # ✅ Has critic optimizer
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
-        
+
         # ❌ NO CNN optimizer!
         # self.cnn_optimizer = ???  # MISSING!
-    
+
     def train(self, batch_size):
         # Sample returns flattened states (numpy → tensor, no gradients)
         state, action, next_state, reward, not_done = self.replay_buffer.sample(batch_size)
-        
+
         # Train critics
         critic_loss.backward()  # ← Gradients flow to critic params only
         self.critic_optimizer.step()
-        
+
         # Train actor
         actor_loss.backward()  # ← Gradients flow to actor params only
         self.actor_optimizer.step()
-        
+
         # ❌ NO CNN training!
         # Gradients never computed for CNN (state has no gradient history)
 ```
@@ -230,10 +230,10 @@ def __init__(
     device: Optional[str] = None
 ):
     # ... existing code ...
-    
+
     # Store CNN reference for gradient-enabled feature extraction
     self.cnn_extractor = cnn_extractor
-    
+
     # Create CNN optimizer if CNN is provided
     if self.cnn_extractor is not None:
         cnn_config = config.get('networks', {}).get('cnn', {})
@@ -245,7 +245,7 @@ def __init__(
         print(f"  CNN optimizer initialized with lr={cnn_lr}")
     else:
         self.cnn_optimizer = None
-    
+
     # Use DictReplayBuffer instead of standard ReplayBuffer
     from src.utils.dict_replay_buffer import DictReplayBuffer
     self.replay_buffer = DictReplayBuffer(
@@ -267,14 +267,14 @@ def extract_features(
 ) -> torch.Tensor:
     """
     Extract features from Dict observation with gradient support.
-    
+
     Combines CNN visual features with kinematic vector features.
-    
+
     Args:
         obs_dict: Dict with 'image' (B,4,84,84) and 'vector' (B,23) tensors
         enable_grad: If True, compute gradients for CNN (training mode)
                      If False, use torch.no_grad() for inference
-    
+
     Returns:
         state: Flattened state tensor (B, 535) with gradient tracking
     """
@@ -290,10 +290,10 @@ def extract_features(
                 # Fallback: use zeros if no CNN (shouldn't happen)
                 batch_size = obs_dict['vector'].shape[0]
                 image_features = torch.zeros(batch_size, 512, device=self.device)
-    
+
     # Concatenate visual features with vector state
     state = torch.cat([image_features, obs_dict['vector']], dim=1)  # (B, 535)
-    
+
     return state
 ```
 
@@ -303,95 +303,95 @@ def extract_features(
 def train(self, batch_size: Optional[int] = None) -> Dict[str, float]:
     """
     Perform one TD3 training iteration with end-to-end CNN training.
-    
+
     Key Changes from Original:
     - Sample returns Dict observations (not flattened states)
     - Extract features WITH gradients during training
     - Backprop updates CNN parameters along with actor/critic
     """
     self.total_it += 1
-    
+
     if batch_size is None:
         batch_size = self.batch_size
-    
+
     # Sample replay buffer - NOW RETURNS DICT OBSERVATIONS!
     obs_dict, action, next_obs_dict, reward, not_done = self.replay_buffer.sample(batch_size)
-    
+
     # Extract state features WITH gradients for training
     state = self.extract_features(obs_dict, enable_grad=True)  # (B, 535)
-    
+
     with torch.no_grad():
         # Extract next state features for target computation
         next_state = self.extract_features(next_obs_dict, enable_grad=False)
-        
+
         # Select action according to target policy with added smoothing noise
         noise = torch.randn_like(action) * self.policy_noise
         noise = noise.clamp(-self.noise_clip, self.noise_clip)
-        
+
         next_action = self.actor_target(next_state) + noise
         next_action = next_action.clamp(-self.max_action, self.max_action)
-        
+
         # Compute target Q-value
         target_Q1, target_Q2 = self.critic_target(next_state, next_action)
         target_Q = torch.min(target_Q1, target_Q2)
         target_Q = reward + not_done * self.discount * target_Q
-    
+
     # Get current Q estimates
     current_Q1, current_Q2 = self.critic(state, action)
-    
+
     # Compute critic loss
     critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
-    
+
     # Optimize critics (gradients flow through state → CNN!)
     self.critic_optimizer.zero_grad()
     if self.cnn_optimizer is not None:
         self.cnn_optimizer.zero_grad()  # ← IMPORTANT: Zero CNN gradients too
-    
+
     critic_loss.backward()  # ← Gradients flow: critic → state → CNN!
-    
+
     self.critic_optimizer.step()
     if self.cnn_optimizer is not None:
         self.cnn_optimizer.step()  # ← UPDATE CNN WEIGHTS!
-    
+
     # Prepare metrics
     metrics = {
         'critic_loss': critic_loss.item(),
         'q1_value': current_Q1.mean().item(),
         'q2_value': current_Q2.mean().item()
     }
-    
+
     # Delayed policy updates
     if self.total_it % self.policy_freq == 0:
         # Re-extract features for actor update (need fresh gradients)
         state_for_actor = self.extract_features(obs_dict, enable_grad=True)
-        
+
         # Compute actor loss
         actor_loss = -self.critic.Q1(state_for_actor, self.actor(state_for_actor)).mean()
-        
+
         # Optimize actor (gradients flow through state_for_actor → CNN!)
         self.actor_optimizer.zero_grad()
         if self.cnn_optimizer is not None:
             self.cnn_optimizer.zero_grad()
-        
+
         actor_loss.backward()  # ← Gradients flow: actor → state → CNN!
-        
+
         self.actor_optimizer.step()
         if self.cnn_optimizer is not None:
             self.cnn_optimizer.step()  # ← UPDATE CNN WEIGHTS AGAIN!
-        
+
         # Soft update target networks
         for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
             target_param.data.copy_(
                 self.tau * param.data + (1 - self.tau) * target_param.data
             )
-        
+
         for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
             target_param.data.copy_(
                 self.tau * param.data + (1 - self.tau) * target_param.data
             )
-        
+
         metrics['actor_loss'] = actor_loss.item()
-    
+
     return metrics
 ```
 
@@ -410,13 +410,13 @@ def __init__(self, ...):
         input_channels=4,
         feature_dim=512
     ).to(agent_device)
-    
+
     # Initialize weights properly
     self._initialize_cnn_weights()
-    
+
     # Put CNN in training mode (NOT eval!)
     self.cnn_extractor.train()
-    
+
     # Initialize agent WITH CNN
     self.agent = TD3Agent(
         state_dim=535,
@@ -433,7 +433,7 @@ def __init__(self, ...):
 ```python
 def train(self):
     obs = self.env.reset()  # Returns Dict observation
-    
+
     for t in range(self.max_timesteps):
         # Select action
         if t < self.agent.start_timesteps:
@@ -446,10 +446,10 @@ def train(self):
             # Flatten ONLY for action selection (not for storage)
             flat_state = self.flatten_dict_obs(obs, enable_grad=False)
             action = self.agent.select_action(flat_state, noise=self.agent.expl_noise)
-        
+
         # Step environment
         next_obs, reward, done, truncated, info = self.env.step(action)
-        
+
         # Store Dict observation in buffer (NOT flattened!)
         self.agent.replay_buffer.add(
             obs_dict=obs,           # ← Dict observation!
@@ -458,14 +458,14 @@ def train(self):
             reward=reward,
             done=done or truncated
         )
-        
+
         # Train agent (CNN will be updated inside)
         if t >= self.agent.start_timesteps:
             metrics = self.agent.train()
             # Log metrics...
-        
+
         obs = next_obs
-        
+
         if done or truncated:
             obs = self.env.reset()
 ```
@@ -476,21 +476,21 @@ def train(self):
 def flatten_dict_obs(self, obs_dict, enable_grad=False):
     """
     Flatten Dict observation for action selection.
-    
+
     NOTE: This is now ONLY used for inference (action selection), NOT for storage!
     The replay buffer stores raw Dict observations for gradient-enabled training.
     """
     image = obs_dict['image']
     image_tensor = torch.from_numpy(image).unsqueeze(0).float().to(self.agent.device)
-    
+
     # For inference, we don't need gradients
     with torch.no_grad():
         image_features = self.cnn_extractor(image_tensor)
-    
+
     image_features = image_features.cpu().numpy().squeeze()
     vector = obs_dict['vector']
     flat_state = np.concatenate([image_features, vector]).astype(np.float32)
-    
+
     return flat_state
 ```
 
@@ -621,6 +621,6 @@ If implementation causes issues:
 
 ---
 
-**Author:** GitHub Copilot  
-**Date:** 2025-11-01  
+**Author:** GitHub Copilot
+**Date:** 2025-11-01
 **Status:** Implementation in progress (Phase 1 complete, Phase 2 next)

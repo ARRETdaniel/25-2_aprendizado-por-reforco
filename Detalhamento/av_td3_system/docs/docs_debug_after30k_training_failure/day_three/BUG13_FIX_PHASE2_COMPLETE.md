@@ -1,8 +1,8 @@
 # Bug #13 Fix - Phase 2 Implementation Complete ✅
 ## TD3Agent Modified for End-to-End CNN Training
 
-**Date:** 2025-11-01  
-**Status:** ✅ **PHASE 2 COMPLETE** - TD3Agent now supports Dict observations and CNN training  
+**Date:** 2025-11-01
+**Status:** ✅ **PHASE 2 COMPLETE** - TD3Agent now supports Dict observations and CNN training
 **Next:** Phase 3 - Modify Training Loop (train_td3.py)
 
 ---
@@ -15,7 +15,7 @@
    - New replay buffer for Dict observations
    - Stores raw images (4×84×84) + vectors (23-dim) separately
    - Returns PyTorch tensors (not numpy) for gradient flow
-   
+
 2. **`src/agents/td3_agent.py`** ✅ **MODIFIED** (Phase 2)
    - Added CNN parameter to `__init__()`
    - Added `use_dict_buffer` flag for buffer selection
@@ -70,7 +70,7 @@ self.use_dict_buffer = use_dict_buffer
 if self.cnn_extractor is not None:
     # CNN should be in training mode (NOT eval!)
     self.cnn_extractor.train()
-    
+
     # Create CNN optimizer with lower learning rate
     cnn_config = config.get('networks', {}).get('cnn', {})
     cnn_lr = cnn_config.get('learning_rate', 1e-4)  # Conservative 1e-4 for CNN
@@ -134,20 +134,20 @@ def extract_features(
 ) -> torch.Tensor:
     """
     Extract features from Dict observation with gradient support.
-    
+
     This method combines CNN visual features with kinematic vector features.
     When enable_grad=True (training), gradients flow through CNN for end-to-end learning.
     When enable_grad=False (inference), CNN runs in no_grad mode for efficiency.
-    
+
     Args:
         obs_dict: Dict with 'image' (B,4,84,84) and 'vector' (B,23) tensors
         enable_grad: If True, compute gradients for CNN (training mode)
                     If False, use torch.no_grad() for inference
-    
+
     Returns:
         state: Flattened state tensor (B, 535) with gradient tracking if enabled
               = 512 (CNN features) + 23 (kinematic features)
-    
+
     Note:
         This is the KEY method for Bug #13 fix. By extracting features WITH gradients
         during training, we enable backpropagation through the CNN, allowing it to learn
@@ -166,11 +166,11 @@ def extract_features(
         # Inference mode: Extract features without gradients (more efficient)
         with torch.no_grad():
             image_features = self.cnn_extractor(obs_dict['image'])  # (B, 512)
-    
+
     # Concatenate visual features with vector state
     # Result: (B, 535) = (B, 512) + (B, 23)
     state = torch.cat([image_features, obs_dict['vector']], dim=1)
-    
+
     return state
 ```
 
@@ -193,7 +193,7 @@ def extract_features(
 if self.use_dict_buffer and self.cnn_extractor is not None:
     # DictReplayBuffer returns: (obs_dict, action, next_obs_dict, reward, not_done)
     obs_dict, action, next_obs_dict, reward, not_done = self.replay_buffer.sample(batch_size)
-    
+
     # Extract state features WITH gradients for training
     # This is the KEY to Bug #13 fix: gradients flow through CNN!
     state = self.extract_features(obs_dict, enable_grad=True)  # (B, 535)
@@ -211,7 +211,7 @@ with torch.no_grad():
         # Extract next state features (no gradients for target computation)
         next_state = self.extract_features(next_obs_dict, enable_grad=False)
     # else: next_state already computed above from standard buffer
-    
+
     # ... target computation continues ...
 ```
 
@@ -245,7 +245,7 @@ if self.total_it % self.policy_freq == 0:
         state_for_actor = self.extract_features(obs_dict, enable_grad=True)
     else:
         state_for_actor = state  # Use same state from standard buffer
-    
+
     # Compute actor loss: -Q1(s, μ_φ(s))
     actor_loss = -self.critic.Q1(state_for_actor, self.actor(state_for_actor)).mean()
 
@@ -253,13 +253,13 @@ if self.total_it % self.policy_freq == 0:
     self.actor_optimizer.zero_grad()
     if self.cnn_optimizer is not None:
         self.cnn_optimizer.zero_grad()
-    
+
     actor_loss.backward()  # Gradients flow: actor_loss → state → CNN!
-    
+
     self.actor_optimizer.step()
     if self.cnn_optimizer is not None:
         self.cnn_optimizer.step()  # UPDATE CNN WEIGHTS AGAIN!
-    
+
     # ... target network updates ...
 ```
 
@@ -508,6 +508,6 @@ networks:
 
 ---
 
-**Author:** GitHub Copilot  
-**Date:** 2025-11-01  
+**Author:** GitHub Copilot
+**Date:** 2025-11-01
 **Status:** Phase 2 COMPLETE ✅ | Phase 3 READY TO START ⏳

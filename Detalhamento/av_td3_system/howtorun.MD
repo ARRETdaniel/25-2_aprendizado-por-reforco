@@ -1,4 +1,5 @@
 
+read: QUICKSTART.md
 # NEED TO CHECK MAY HAVE CHANGED:
 docker run -d \
     --name carla-server \

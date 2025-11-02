@@ -198,16 +198,16 @@ class TD3TrainingPipeline:
             device=agent_device
         )
 
-        print(f"[AGENT] CNN passed to TD3Agent for end-to-end training")
-        print(f"[AGENT] DictReplayBuffer enabled for gradient flow")
+        #print(f"[AGENT] CNN passed to TD3Agent for end-to-end training")
+        #print(f"[AGENT] DictReplayBuffer enabled for gradient flow")
 
         # NOTE: CNN optimizer is now managed by TD3Agent (not here)
-        print(f"[AGENT] Initializing NatureCNN feature extractor...")
-        self.cnn_extractor = NatureCNN(
-            input_channels=4,  # 4 stacked frames
-            num_frames=4,
-            feature_dim=512    # Output 512-dim features
-        ).to(agent_device)
+        #print(f"[AGENT] Initializing NatureCNN feature extractor...")
+        #self.cnn_extractor = NatureCNN(
+        #    input_channels=4,  # 4 stacked frames
+        #    num_frames=4,
+        #    feature_dim=512    # Output 512-dim features
+        #).to(agent_device)
 
         # BUG FIX (2025-01-28): CRITICAL - CNN must be trained, not frozen!
         # PREVIOUS BUG: self.cnn_extractor.eval() froze CNN in evaluation mode
@@ -215,8 +215,8 @@ class TD3TrainingPipeline:
         # meaningless features. TD3 agent trained on random noise, not learned visual representations.
         #
         # FIX: Initialize weights properly and set to TRAIN mode
-        self._initialize_cnn_weights()  # Kaiming init for ReLU networks
-        self.cnn_extractor.train()  # Enable training mode (NOT eval()!)
+        #self._initialize_cnn_weights()  # Kaiming init for ReLU networks
+        #self.cnn_extractor.train()  # Enable training mode (NOT eval()!)
 
         print(f"[AGENT] CNN extractor initialized on {agent_device}")
         print(f"[AGENT] CNN passed to TD3Agent for end-to-end training")

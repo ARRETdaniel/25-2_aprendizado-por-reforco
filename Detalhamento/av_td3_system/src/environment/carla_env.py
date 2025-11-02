@@ -101,6 +101,16 @@ class CARLANavigationEnv(Env):
         self.logger.info(f"Loading map: {map_name}")
         self.world = self.client.load_world(map_name)
 
+        # Store original world settings BEFORE any modifications
+        # Reference: CLOSE_ANALYSIS.md - Optional Improvement #2
+        # Enables full settings restoration in close() for persistent CARLA servers
+        self._original_settings = self.world.get_settings()
+        self.logger.debug(
+            f"Stored original world settings: "
+            f"sync={self._original_settings.synchronous_mode}, "
+            f"delta={self._original_settings.fixed_delta_seconds}"
+        )
+
         # Synchronous mode setup
         settings = self.world.get_settings()
         settings.synchronous_mode = True
@@ -108,6 +118,7 @@ class CARLANavigationEnv(Env):
             1.0 / self.carla_config.get("simulation", {}).get("fps", 20)
         )
         self.world.apply_settings(settings)
+        self.logger.info(f"Synchronous mode enabled: delta={settings.fixed_delta_seconds}s")
 
         # Disable rendering if headless
         if headless:
@@ -204,6 +215,11 @@ class CARLANavigationEnv(Env):
 
         # Action/observation spaces
         self._setup_spaces()
+
+        # Closed state flag for idempotency
+        # Reference: CLOSE_ANALYSIS.md - Optional Improvement #1
+        # Provides explicit closed state tracking per Gymnasium best practices
+        self._closed = False
 
         self.logger.info(
             f"CARLA environment initialized: {map_name}, {self.max_episode_steps} steps/episode"
@@ -588,6 +604,7 @@ class CARLANavigationEnv(Env):
             distance_to_goal=distance_to_goal,
             waypoint_reached=waypoint_reached,
             goal_reached=goal_reached,
+            lane_half_width=vehicle_state["lane_half_width"],  # NEW: CARLA lane width
         )
 
         reward = reward_dict["total"]
@@ -773,6 +790,7 @@ class CARLANavigationEnv(Env):
             - lateral_deviation: m from route
             - heading_error: rad from route heading
             - wrong_way: bool if driving backwards
+            - lane_half_width: half of current lane width from CARLA (m)
         """
         # Get velocity
         velocity_vec = self.vehicle.get_velocity()
@@ -787,8 +805,10 @@ class CARLANavigationEnv(Env):
         )
 
         # Get angular velocity (for lateral acceleration)
+        # CARLA returns angular velocity in deg/s, but centripetal acceleration formula requires rad/s
         angular_vel = self.vehicle.get_angular_velocity()
-        acceleration_lateral = abs(velocity * angular_vel.z) if velocity > 0.1 else 0.0
+        omega_z_rad = np.radians(angular_vel.z)  # Convert deg/s → rad/s
+        acceleration_lateral = abs(velocity * omega_z_rad) if velocity > 0.1 else 0.0
 
         # Get location and heading
         location = self.vehicle.get_location()
@@ -801,6 +821,22 @@ class CARLANavigationEnv(Env):
             np.sin(np.radians(heading) - target_heading),
             np.cos(np.radians(heading) - target_heading),
         )
+
+        # ENHANCEMENT: Get lane width from CARLA waypoint API
+        # This enables dynamic normalization instead of fixed config tolerance
+        carla_map = self.world.get_map()
+        waypoint = carla_map.get_waypoint(
+            location,
+            project_to_road=True,
+            lane_type=carla.LaneType.Driving
+        )
+
+        if waypoint is not None:
+            # Use actual lane geometry from CARLA (e.g., 2.5m urban, 3.5m highway)
+            lane_half_width = waypoint.lane_width / 2.0
+        else:
+            # Fallback to config value if vehicle is off-road or waypoint not found
+            lane_half_width = self.reward_calculator.lateral_tolerance
 
         # Check if going backwards (wrong way)
         forward_vec = self.vehicle.get_transform().get_forward_vector()
@@ -826,6 +862,7 @@ class CARLANavigationEnv(Env):
             "lateral_deviation": lateral_deviation,
             "heading_error": float(heading_error),
             "wrong_way": wrong_way,
+            "lane_half_width": lane_half_width,  # NEW: CARLA lane width
         }
 
     def _check_termination(self, vehicle_state: Dict) -> Tuple[bool, str]:
@@ -921,65 +958,202 @@ class CARLANavigationEnv(Env):
             self.traffic_manager = self.client.get_trafficmanager()
             self.traffic_manager.set_synchronous_mode(True)
 
+            # CRITICAL FIX: Set deterministic seed for reproducibility
+            # Reference: CARLA Traffic Manager Documentation
+            # https://carla.readthedocs.io/en/latest/adv_traffic_manager/
+            seed = self.training_config.get("seed", 42)
+            self.traffic_manager.set_random_device_seed(seed)
+            tm_port = self.traffic_manager.get_port()
+            self.logger.info(f"Traffic Manager configured: synchronous=True, seed={seed}, port={tm_port}")
+
             # Spawn NPCs
             vehicle_bp = self.world.get_blueprint_library().filter("vehicle")
             spawn_points = np.random.choice(
                 self.spawn_points, min(npc_count, len(self.spawn_points)), replace=False
             )
 
+            spawn_attempts = 0
+            spawn_successes = 0
+            ego_location = self.vehicle.get_location()
+
             for spawn_point in spawn_points:
-                # Avoid spawning at same point as ego vehicle
-                if spawn_point.location.distance(self.vehicle.get_location()) < 10.0:
+                # IMPROVED: Increased safety distance from 10.0m to 20.0m
+                # Reference: NPC_TRAFFIC_SPAWNING_ANALYSIS.md Section 8.3
+                if spawn_point.location.distance(ego_location) < 20.0:
                     continue
 
+                spawn_attempts += 1
                 try:
                     npc = self.world.spawn_actor(
                         np.random.choice(vehicle_bp), spawn_point
                     )
+
+                    # CRITICAL FIX: Activate autopilot - NPCs must be registered with Traffic Manager
+                    # Without this, NPCs spawn but never move (stationary obstacles)
+                    # Reference: CARLA Traffic Manager Documentation
+                    # https://carla.readthedocs.io/en/latest/adv_traffic_manager/
+                    npc.set_autopilot(True, tm_port)
+
+                    # Configure behavior
                     self.traffic_manager.update_vehicle_lights(npc, True)
                     self.traffic_manager.auto_lane_change(npc, True)
                     self.npcs.append(npc)
-                except Exception as e:
-                    self.logger.debug(f"Failed to spawn NPC: {e}")
+                    spawn_successes += 1
 
-            self.logger.info(f"Successfully spawned {len(self.npcs)} NPCs")
+                except RuntimeError as e:
+                    # IMPROVED: Better error handling with specific collision detection
+                    if "collision" in str(e).lower():
+                        self.logger.debug(f"Spawn collision at ({spawn_point.location.x:.1f}, {spawn_point.location.y:.1f})")
+                    else:
+                        self.logger.warning(f"NPC spawn failed: {e}")
+
+            # IMPROVED: Validate spawn success rate
+            success_rate = spawn_successes / spawn_attempts if spawn_attempts > 0 else 0
+            self.logger.info(f"NPC spawning complete: {spawn_successes}/{spawn_attempts} successful ({success_rate*100:.1f}%)")
+
+            if success_rate < 0.8 and spawn_attempts > 0:
+                self.logger.warning(f"Low NPC spawn success rate: {success_rate*100:.1f}% (target: 80%)")
 
         except Exception as e:
             self.logger.warning(f"NPC traffic spawning failed: {e}")
 
     def _cleanup_episode(self):
-        """Clean up vehicles and sensors from previous episode."""
-        if self.vehicle:
-            self.vehicle.destroy()
-            self.vehicle = None
+        """
+        Clean up vehicles and sensors from previous episode.
 
+        Cleanup order follows CARLA best practices:
+        1. Sensors (children) before vehicle (parent)
+        2. NPCs (independent actors) last
+
+        Reference: CARLA 0.9.16 Actor Destruction Best Practices
+        https://carla.readthedocs.io/en/latest/core_actors/
+        """
+        cleanup_errors = []
+
+        # STEP 1: Destroy sensors first (children before parent)
+        # Sensors are attached to vehicle, destroy children first per CARLA docs
         if self.sensors:
-            self.sensors.destroy()
-            self.sensors = None
-
-        for npc in self.npcs:
             try:
-                npc.destroy()
-            except:
-                pass
+                self.logger.debug("Destroying sensor suite...")
+                success = self.sensors.destroy()
+                # Note: SensorSuite.destroy() returns None, handles its own logging
+                self.sensors = None
+                self.logger.debug("Sensor suite destroyed successfully")
+
+            except Exception as e:
+                cleanup_errors.append(f"Sensor cleanup error: {e}")
+                self.logger.error(f"Error during sensor cleanup: {e}", exc_info=True)
+                self.sensors = None  # Clear reference anyway
+
+        # STEP 2: Destroy ego vehicle (parent after children)
+        if self.vehicle:
+            try:
+                self.logger.debug("Destroying ego vehicle...")
+                success = self.vehicle.destroy()
+                if success:
+                    self.logger.debug("Ego vehicle destroyed successfully")
+                else:
+                    cleanup_errors.append("Ego vehicle destruction returned False")
+                    self.logger.warning("Ego vehicle destruction failed")
+                self.vehicle = None
+
+            except Exception as e:
+                cleanup_errors.append(f"Vehicle cleanup error: {e}")
+                self.logger.error(f"Error during vehicle cleanup: {e}", exc_info=True)
+                self.vehicle = None  # Clear reference anyway
+
+        # STEP 3: Destroy NPCs (independent actors, non-critical)
+        npc_failures = 0
+        for i, npc in enumerate(self.npcs):
+            try:
+                success = npc.destroy()
+                if not success:
+                    npc_failures += 1
+                    self.logger.debug(f"NPC {i} destruction returned False")
+            except Exception as e:
+                npc_failures += 1
+                self.logger.debug(f"Failed to destroy NPC {i}: {e}")
+
+        if npc_failures > 0:
+            self.logger.debug(f"{npc_failures}/{len(self.npcs)} NPCs failed to destroy")
+
         self.npcs = []
 
+        # Report accumulated critical errors
+        if cleanup_errors:
+            error_msg = f"Critical cleanup issues encountered: {cleanup_errors}"
+            self.logger.warning(error_msg)
+        else:
+            self.logger.debug("Episode cleanup completed successfully")
+
     def close(self):
-        """Shut down environment and disconnect from CARLA."""
+        """
+        Shut down environment and disconnect from CARLA.
+
+        Cleanup sequence:
+        1. Destroy actors (sensors, vehicle, NPCs)
+        2. Disable Traffic Manager synchronous mode
+        3. Restore original world settings
+        4. Clear client reference
+
+        Idempotent: Safe to call multiple times.
+
+        References:
+        - CLOSE_ANALYSIS.md - Complete analysis with documentation backing
+        - CARLA Traffic Manager: https://carla.readthedocs.io/en/latest/adv_traffic_manager/
+        - Gymnasium Env.close(): https://gymnasium.farama.org/api/env/#gymnasium.Env.close
+        """
+        # Idempotency guard - Optional Improvement #1
+        # Prevents duplicate cleanup and provides explicit state tracking
+        if getattr(self, '_closed', False):
+            self.logger.debug("Environment already closed, skipping cleanup")
+            return
+
         self.logger.info("Closing CARLA environment...")
 
+        # Phase 1: Destroy actors (sensors, vehicle, NPCs)
         self._cleanup_episode()
 
-        if self.world:
-            # Restore async mode
-            settings = self.world.get_settings()
-            settings.synchronous_mode = False
-            self.world.apply_settings(settings)
+        # Phase 2: Disable Traffic Manager synchronous mode
+        # CRITICAL: Must be done BEFORE world sync mode per CARLA docs
+        # Reference: https://carla.readthedocs.io/en/latest/adv_traffic_manager/
+        if self.traffic_manager:
+            try:
+                self.traffic_manager.set_synchronous_mode(False)
+                self.logger.debug("Traffic Manager synchronous mode disabled")
+            except Exception as e:
+                self.logger.warning(f"Failed to disable TM sync mode: {e}")
+            finally:
+                self.traffic_manager = None
 
+        # Phase 3: Restore original world settings - Optional Improvement #2
+        # Restores all settings (not just sync mode) for persistent CARLA servers
+        if self.world and hasattr(self, '_original_settings'):
+            try:
+                self.world.apply_settings(self._original_settings)
+                self.logger.debug("World settings restored to original state")
+            except Exception as e:
+                self.logger.warning(f"Failed to restore world settings: {e}")
+
+        # Phase 4: Clear client reference
         if self.client:
             self.client = None
 
+        # Mark as closed
+        self._closed = True
         self.logger.info("CARLA environment closed")
+
+    @property
+    def is_closed(self):
+        """
+        Check if environment is closed.
+
+        Returns:
+            bool: True if environment is closed, False otherwise.
+
+        Reference: CLOSE_ANALYSIS.md - Optional Improvement #1
+        """
+        return getattr(self, '_closed', False)
 
     def render(self, mode: str = "human"):
         """Not implemented (CARLA runs headless for efficiency)."""

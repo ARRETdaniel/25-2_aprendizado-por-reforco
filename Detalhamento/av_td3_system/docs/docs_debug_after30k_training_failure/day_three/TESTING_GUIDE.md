@@ -1,6 +1,6 @@
 # Bug #13 Fix - Testing Instructions
 
-**Date:** 2025-11-01  
+**Date:** 2025-11-01
 **Status:** ✅ Phase 3 Complete - Ready for Testing
 
 ---
@@ -18,7 +18,7 @@ docker start carla-server && sleep 10
 python scripts/train_td3.py --scenario 0 --max-timesteps 1000 --debug --device cpu
 ```
 
-**Duration:** ~15 minutes  
+**Duration:** ~15 minutes
 **Expected:** Vehicle moves, rewards vary, CNN weights update
 
 ---
@@ -110,7 +110,7 @@ After diagnostic test passes:
 python scripts/train_td3.py --scenario 0 --max-timesteps 30000 --seed 42 --device cpu
 ```
 
-**Duration:** 2-4 hours  
+**Duration:** 2-4 hours
 **Expected:** Vehicle speed > 5 km/h, rewards > -30,000, success rate > 5%
 
 ---

@@ -174,6 +174,12 @@ class CARLACameraManager:
         """Clean up camera sensor."""
         if self.camera_sensor:
             try:
+                # Stop listening before destruction (CARLA best practice)
+                # Reference: https://carla.readthedocs.io/en/latest/core_sensors/
+                if self.camera_sensor.is_listening:
+                    self.camera_sensor.stop()
+                    self.logger.debug("Camera sensor stopped listening")
+
                 self.camera_sensor.destroy()
                 self.logger.info("Camera sensor destroyed")
             except RuntimeError as e:
@@ -339,6 +345,12 @@ class CollisionDetector:
         """Clean up collision sensor."""
         if self.collision_sensor:
             try:
+                # Stop listening before destruction (CARLA best practice)
+                # Reference: https://carla.readthedocs.io/en/latest/core_sensors/
+                if self.collision_sensor.is_listening:
+                    self.collision_sensor.stop()
+                    self.logger.debug("Collision sensor stopped listening")
+
                 self.collision_sensor.destroy()
                 self.logger.info("Collision sensor destroyed")
             except RuntimeError as e:
@@ -416,6 +428,12 @@ class LaneInvasionDetector:
         """Clean up lane invasion sensor."""
         if self.lane_sensor:
             try:
+                # Stop listening before destruction (CARLA best practice)
+                # Reference: https://carla.readthedocs.io/en/latest/core_sensors/
+                if self.lane_sensor.is_listening:
+                    self.lane_sensor.stop()
+                    self.logger.debug("Lane invasion sensor stopped listening")
+
                 self.lane_sensor.destroy()
                 self.logger.info("Lane invasion sensor destroyed")
             except RuntimeError as e:

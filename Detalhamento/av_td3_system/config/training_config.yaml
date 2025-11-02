@@ -36,12 +36,13 @@ episode:
 # Multi-component reward function for autonomous driving
 reward:
   # Component weights (carefully tuned to encourage movement)
+  # 🔧 FIXED: Weights must match validated reward fixes (FIXES_COMPLETED.md)
   weights:
-    efficiency: 3.0      # INCREASED from 1.0 to strongly encourage movement
-    lane_keeping: 1.0    # REDUCED from 2.0 to balance with efficiency
+    efficiency: 1.0      # Base weight (forward velocity reward, Fix #1)
+    lane_keeping: 2.0    # Lane centering
     comfort: 0.5         # Smooth driving
-    safety: 100.0        # FIXED: POSITIVE multiplier (penalties already negative in reward function)
-    progress: 10.0       # DOUBLED from 5.0 - strong incentive for forward progress (FIX #6)
+    safety: 1.0          # 🔧 CRITICAL FIX: 1.0 weight (penalties are already negative!)
+    progress: 5.0        # Strong incentive for forward progress (with Fix #3: 10x distance_scale)
 
   # Efficiency reward parameters (target speed tracking)
   efficiency:
@@ -59,16 +60,30 @@ reward:
     jerk_threshold: 2.0  # m/s³
 
   # Safety penalty (collisions, off-road)
+  # 🔧 FIXED: Collision penalty reduced from -1000 to -100 (High Priority Fix #4)
+  # Rationale: TD3's pessimistic clipped double-Q amplifies negative memories.
+  # -100 allows learning from mistakes. Validated by successful implementations
+  # (Ben Elallid et al. 2023, Pérez-Gil et al. 2022).
   safety:
-    collision_penalty: -200.0  # Large negative reward
-    off_road_penalty: -100.0
-    wrong_way_penalty: -50.0
+    collision_penalty: -100.0    # 🔧 FIXED: -100 (was -1000, then -200)
+    off_road_penalty: -100.0     # Off-road events
+    wrong_way_penalty: -50.0     # Wrong direction
 
   # Progress reward parameters (goal-directed navigation)
+  # 🔧 FIXED: distance_scale increased from 0.1 to 1.0 (High Priority Fix #3)
+  # Rationale: Moving 1m now gives +1.0 progress (weighted: +5.0 total), which can
+  # offset efficiency penalties during acceleration. Previous 0.1 scale gave only
+  # +0.5 weighted reward, insufficient to overcome -1.0 efficiency penalty at low speeds.
   progress:
-    waypoint_bonus: 1.0      # FIXED: Reduced from 10.0 (→ 10.0 after weighting with 10.0x)
-    distance_scale: 0.1      # Scale for distance-based dense reward
-    goal_reached_bonus: 10.0  # FIXED: Reduced from 100.0 (→ 100.0 after weighting with 10.0x)
+    waypoint_bonus: 10.0         # Bonus for reaching waypoints
+    distance_scale: 1.0          # 🔧 FIXED: 1.0 (was 0.1) - 10x stronger signal
+    goal_reached_bonus: 100.0    # Bonus for reaching final goal
+
+  # 🔧 NEW: PBRS (Potential-Based Reward Shaping) parameter (Medium Priority Fix #6)
+  # Gamma for potential-based reward shaping: F(s,s') = γΦ(s') - Φ(s)
+  # where Φ(s) = -distance_to_goal. Ng et al. (1999) theorem guarantees
+  # policy optimality preservation while providing denser learning signal.
+  gamma: 0.99  # Discount factor for PBRS (matches TD3 discount)
 
   max_duration: 300.0  # Maximum duration in seconds (5 minutes)
   max_distance: 1000.0  # Maximum distance in meters
