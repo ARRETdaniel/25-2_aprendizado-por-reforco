@@ -102,9 +102,11 @@ def test_3_2_state_composition():
             host='localhost',
             port=2000
         )
-        state = env.reset()
+        # Gymnasium v0.25+ compliance: reset() returns (observation, info) tuple
+        state, info = env.reset()
 
         print(f"✅ Environment reset")
+        print(f"   Episode: {info.get('episode', 1)}, Route: {info.get('route_length_m', 0):.0f}m")
         print(f"   State type: {type(state)}")
         print(f"   State keys: {state.keys() if isinstance(state, dict) else 'Not a dict'}")
 
@@ -226,9 +228,10 @@ def test_3_3_environment_step():
             host='localhost',
             port=2000
         )
-        state = env.reset()
+        # Gymnasium v0.25+ compliance: reset() returns (observation, info) tuple
+        state, info = env.reset()
 
-        print(f"✅ Environment ready")
+        print(f"✅ Environment ready (Episode {info.get('episode', 1)})")
         if isinstance(state, dict):
             print(f"   State type: Dict")
             print(f"   Image shape: {state['image'].shape}")

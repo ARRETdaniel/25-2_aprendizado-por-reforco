@@ -56,27 +56,59 @@ reward:
     heading_tolerance: 0.1  # radians (~5.7 degrees)
 
   # Comfort penalty (minimize jerk)
+  # 🔧 FIXED: Updated jerk_threshold to correct units (m/s³) after implementing
+  # time division in jerk computation. Previously was dimensionless (3.0).
+  # Typical values for passenger comfort:
+  # - 2-3 m/s³: Comfortable driving
+  # - 3-5 m/s³: Noticeable but acceptable
+  # - 5-8 m/s³: Uncomfortable, max tolerable
+  # - >10 m/s³: Severe discomfort
+  # Reference: ISO 2631 (human vibration exposure), arxiv:2408.10215v1
   comfort:
-    jerk_threshold: 2.0  # m/s³
+    jerk_threshold: 5.0  # m/s³ (physically correct units)
 
   # Safety penalty (collisions, off-road)
-  # 🔧 FIXED: Collision penalty reduced from -1000 to -100 (High Priority Fix #4)
-  # Rationale: TD3's pessimistic clipped double-Q amplifies negative memories.
-  # -100 allows learning from mistakes. Validated by successful implementations
-  # (Ben Elallid et al. 2023, Pérez-Gil et al. 2022).
+  # 🔧 PRIORITY 2 FIX: Magnitude Rebalancing (CRITICAL)
+  # Analysis document Issue #2: Reward Magnitude Imbalance
+  #
+  # OLD VALUES (caused training failure):
+  # - collision_penalty: -100.0 → Required 400 perfect steps to offset
+  # - offroad_penalty: -100.0 → Dominated entire training signal
+  # - wrong_way_penalty: -50.0 → Imbalanced vs other objectives
+  #
+  # NEW VALUES (enable balanced multi-objective learning):
+  # - collision_penalty: -5.0 → Severe but recoverable (20 perfect steps)
+  # - offroad_penalty: -5.0 → Balanced with progress rewards
+  # - wrong_way_penalty: -2.0 → Proportional violation severity
+  #
+  # Rationale: With increased progress rewards (+50.0 per meter via distance_scale),
+  # agent can now learn that "some exploration risk" is acceptable for efficiency.
+  # Previous magnitude blocked ALL learning by overwhelming non-safety objectives.
+  #
+  # References:
+  # - Analysis document Section 4.2 (Reward Magnitude Imbalance)
+  # - TD3 CARLA 2023 paper: Successfully uses binary penalties with strong progress
+  # - arXiv:2408.10215v1: "Reward magnitude balance critical for multi-objective RL"
   safety:
-    collision_penalty: -100.0    # 🔧 FIXED: -100 (was -1000, then -200)
-    off_road_penalty: -100.0     # Off-road events
-    wrong_way_penalty: -50.0     # Wrong direction
+    collision_penalty: -5.0      # 🔧 FIXED: -5.0 (was -100.0, originally -1000.0)
+    off_road_penalty: -5.0       # 🔧 FIXED: -5.0 (was -100.0)
+    wrong_way_penalty: -2.0      # 🔧 FIXED: -2.0 (was -50.0)
 
   # Progress reward parameters (goal-directed navigation)
-  # 🔧 FIXED: distance_scale increased from 0.1 to 1.0 (High Priority Fix #3)
-  # Rationale: Moving 1m now gives +1.0 progress (weighted: +5.0 total), which can
-  # offset efficiency penalties during acceleration. Previous 0.1 scale gave only
-  # +0.5 weighted reward, insufficient to overcome -1.0 efficiency penalty at low speeds.
+  # 🔧 PRIORITY 2 FIX: Increased distance_scale for stronger progress signal
+  # OLD: distance_scale = 1.0 (moving 1m = +1.0 reward, weighted +5.0 total)
+  # NEW: distance_scale = 50.0 (moving 1m = +50.0 reward, weighted +250.0 total!)
+  #
+  # This 50x increase enables agent to offset collision penalties through good driving:
+  # - Collision: -5.0 penalty
+  # - Good driving (0.1m progress): +5.0 reward
+  # - Break-even: 0.1 meters of progress = reasonable exploration cost
+  #
+  # Rationale: Strong progress signal encourages forward movement and efficient
+  # navigation while still respecting safety constraints via PBRS proximity guidance.
   progress:
     waypoint_bonus: 10.0         # Bonus for reaching waypoints
-    distance_scale: 1.0          # 🔧 FIXED: 1.0 (was 0.1) - 10x stronger signal
+    distance_scale: 50.0         # 🔧 FIXED: 50.0 (was 1.0, originally 0.1) - 50x signal
     goal_reached_bonus: 100.0    # Bonus for reaching final goal
 
   # 🔧 NEW: PBRS (Potential-Based Reward Shaping) parameter (Medium Priority Fix #6)

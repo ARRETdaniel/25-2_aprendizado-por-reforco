@@ -118,6 +118,10 @@ class CARLANavigationEnv(Env):
             1.0 / self.carla_config.get("simulation", {}).get("fps", 20)
         )
         self.world.apply_settings(settings)
+
+        # Store fixed_delta_seconds for jerk computation (Critical Fix: Comfort Reward)
+        self.fixed_delta_seconds = settings.fixed_delta_seconds
+
         self.logger.info(f"Synchronous mode enabled: delta={settings.fixed_delta_seconds}s")
 
         # Disable rendering if headless
@@ -209,6 +213,7 @@ class CARLANavigationEnv(Env):
         # Episode state
         self.current_step = 0
         self.episode_start_time = None
+        self.episode_count = 0  # Track episode number for diagnostics
         # 🔧 FIX: Read max_time_steps from config (not max_duration_seconds)
         # Config has episode.max_time_steps (5000) directly in steps
         self.max_episode_steps = self.carla_config.get("episode", {}).get("max_time_steps", 1000)
@@ -403,7 +408,11 @@ class CARLANavigationEnv(Env):
             f"Action space: {self.action_space}"
         )
 
-    def reset(self) -> Dict[str, np.ndarray]:
+    def reset(
+        self,
+        seed: Optional[int] = None,
+        options: Optional[Dict[str, Any]] = None
+    ) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
         """
         Reset environment for new episode.
 
@@ -415,13 +424,26 @@ class CARLANavigationEnv(Env):
         5. Initialize state
         6. Return initial observation
 
+        Args:
+            seed: Random seed for reproducibility (optional, currently not used)
+            options: Additional reset configuration (optional, currently not used)
+
         Returns:
-            Initial observation dict with 'image' and 'vector'
+            observation: Initial observation dict with 'image' and 'vector'
+            info: Diagnostic information dict with:
+                - episode: Episode number
+                - route_length_m: Total route length in meters
+                - npc_count: Number of NPC vehicles spawned
+                - spawn_location: Vehicle spawn coordinates and heading
+                - observation_shapes: Observation tensor shapes
 
         Raises:
             RuntimeError: If spawn/setup fails
         """
-        self.logger.info("Resetting environment...")
+        # Increment episode counter
+        self.episode_count += 1
+
+        self.logger.info(f"Resetting environment (episode {self.episode_count})...")
 
         # Clean up previous episode
         self._cleanup_episode()
@@ -543,11 +565,33 @@ class CARLANavigationEnv(Env):
         # Get initial observation
         observation = self._get_observation()
 
-        self.logger.info(f"Episode reset. Initial observation shapes: "
-                        f"image {observation['image'].shape}, "
-                        f"vector {observation['vector'].shape}")
+        # Build info dict with diagnostic data (Gymnasium v0.25+ compliance)
+        # Reference: RESET_FUNCTION_ANALYSIS.md - Fix 2 (Full Compliance with Info Dict)
+        info = {
+            "episode": self.episode_count,
+            "route_length_m": self.waypoint_manager.get_total_distance() if hasattr(self.waypoint_manager, 'get_total_distance') else len(self.waypoint_manager.waypoints) * 2.0,
+            "npc_count": len(self.npcs),
+            "spawn_location": {
+                "x": spawn_point.location.x,
+                "y": spawn_point.location.y,
+                "z": spawn_point.location.z,
+                "yaw": spawn_point.rotation.yaw,
+            },
+            "observation_shapes": {
+                "image": list(observation['image'].shape),
+                "vector": list(observation['vector'].shape),
+            },
+        }
 
-        return observation
+        self.logger.info(
+            f"Episode {info['episode']} reset. "
+            f"Route: {info['route_length_m']:.0f}m, "
+            f"NPCs: {info['npc_count']}, "
+            f"Obs shapes: image {tuple(info['observation_shapes']['image'])}, "
+            f"vector {tuple(info['observation_shapes']['vector'])}"
+        )
+
+        return observation, info
 
     def step(self, action: np.ndarray) -> Tuple[Dict, float, bool, bool, Dict]:
         """
@@ -591,7 +635,26 @@ class CARLANavigationEnv(Env):
         waypoint_reached = self.waypoint_manager.check_waypoint_reached()
         goal_reached = self.waypoint_manager.check_goal_reached(vehicle_location)
 
-        # Calculate reward
+        # ========================================================================
+        # PRIORITY 1 & 3: Get dense safety metrics for PBRS guidance
+        # ========================================================================
+        # Get distance to nearest obstacle from obstacle detector sensor
+        distance_to_nearest_obstacle = self.sensors.get_distance_to_nearest_obstacle()
+
+        # Calculate time-to-collision (TTC)
+        # TTC = distance / velocity (undefined if not moving or no obstacle)
+        time_to_collision = None
+        if (distance_to_nearest_obstacle < float('inf') and
+            vehicle_state["velocity"] > 0.1):  # Moving threshold
+            time_to_collision = distance_to_nearest_obstacle / vehicle_state["velocity"]
+
+        # Get collision impulse magnitude for graduated penalties
+        collision_info = self.sensors.get_collision_info()
+        collision_impulse = None
+        if collision_info is not None and "impulse" in collision_info:
+            collision_impulse = collision_info["impulse"]
+
+        # Calculate reward with new dense safety guidance
         reward_dict = self.reward_calculator.calculate(
             velocity=vehicle_state["velocity"],
             lateral_deviation=vehicle_state["lateral_deviation"],
@@ -604,7 +667,12 @@ class CARLANavigationEnv(Env):
             distance_to_goal=distance_to_goal,
             waypoint_reached=waypoint_reached,
             goal_reached=goal_reached,
-            lane_half_width=vehicle_state["lane_half_width"],  # NEW: CARLA lane width
+            lane_half_width=vehicle_state["lane_half_width"],
+            dt=vehicle_state["dt"],
+            # NEW: Dense safety metrics (Priority 1 & 3 fixes)
+            distance_to_nearest_obstacle=distance_to_nearest_obstacle,
+            time_to_collision=time_to_collision,
+            collision_impulse=collision_impulse,
         )
 
         reward = reward_dict["total"]
@@ -628,12 +696,16 @@ class CARLANavigationEnv(Env):
             "reward_breakdown": reward_dict["breakdown"],
             "termination_reason": termination_reason,
             "vehicle_state": vehicle_state,
-            "collision_info": self.sensors.get_collision_info(),
+            "collision_info": collision_info,  # Already retrieved above
             "distance_to_goal": distance_to_goal,
             "progress_percentage": self.waypoint_manager.get_progress_percentage(),
             "current_waypoint_idx": self.waypoint_manager.get_current_waypoint_index(),
             "waypoint_reached": waypoint_reached,
             "goal_reached": goal_reached,
+            # NEW: Dense safety metrics for analysis
+            "distance_to_nearest_obstacle": distance_to_nearest_obstacle,
+            "time_to_collision": time_to_collision,
+            "collision_impulse": collision_impulse,
         }
 
         if terminated or truncated:
@@ -791,6 +863,7 @@ class CARLANavigationEnv(Env):
             - heading_error: rad from route heading
             - wrong_way: bool if driving backwards
             - lane_half_width: half of current lane width from CARLA (m)
+            - dt: time step since last measurement (seconds) [NEW]
         """
         # Get velocity
         velocity_vec = self.vehicle.get_velocity()
@@ -863,6 +936,7 @@ class CARLANavigationEnv(Env):
             "heading_error": float(heading_error),
             "wrong_way": wrong_way,
             "lane_half_width": lane_half_width,  # NEW: CARLA lane width
+            "dt": self.fixed_delta_seconds,  # NEW: Time step for jerk computation
         }
 
     def _check_termination(self, vehicle_state: Dict) -> Tuple[bool, str]:

@@ -523,10 +523,12 @@ class TD3TrainingPipeline:
         start_reset = time.time()
 
         # Get initial observation (Dict) and flatten for agent
-        obs_dict = self.env.reset()
+        # Gymnasium v0.25+ compliance: reset() returns (observation, info) tuple
+        obs_dict, reset_info = self.env.reset()
 
         reset_duration = time.time() - start_reset
         print(f"[TRAINING] Environment initialized successfully in {reset_duration:.1f} seconds!")
+        print(f"[TRAINING] Episode {reset_info.get('episode', 1)}: Route {reset_info.get('route_length_m', 0):.0f}m, NPCs {reset_info.get('npc_count', 0)}")
         print(f"[TRAINING] Actors spawned, sensors ready")
         print(f"[TRAINING] Beginning training from timestep 1 to {self.max_timesteps:,}")
 
@@ -834,7 +836,8 @@ class TD3TrainingPipeline:
                     )
 
                 # Reset episode (get Dict and flatten)
-                obs_dict = self.env.reset()
+                # Gymnasium v0.25+ compliance: reset() returns (observation, info) tuple
+                obs_dict, _ = self.env.reset()
                 state = self.flatten_dict_obs(obs_dict)
                 self.episode_num += 1
                 self.episode_reward = 0
@@ -904,7 +907,8 @@ class TD3TrainingPipeline:
         max_eval_steps = self.agent_config.get("training", {}).get("max_episode_steps", 1000)
 
         for episode in range(self.num_eval_episodes):
-            obs_dict = eval_env.reset()  # Use eval_env, not self.env
+            # Gymnasium v0.25+ compliance: reset() returns (observation, info) tuple
+            obs_dict, _ = eval_env.reset()  # Use eval_env, not self.env
             state = self.flatten_dict_obs(obs_dict)  # Flatten Dict → flat array
             episode_reward = 0
             episode_length = 0

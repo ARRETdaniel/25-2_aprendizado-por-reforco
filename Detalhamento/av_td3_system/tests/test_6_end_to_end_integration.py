@@ -101,7 +101,8 @@ def test_6_1_end_to_end_integration():
         print(f"🎬 EPISODE START")
         print(f"="*80)
 
-        obs_dict = env.reset()
+        # Gymnasium v0.25+ compliance: reset() returns (observation, info) tuple
+        obs_dict, _ = env.reset()
         state = flatten_dict_obs(obs_dict)  # Flatten dict to 535-dim array
         episode_reward = 0
         episode_timesteps = 0

@@ -442,11 +442,136 @@ class LaneInvasionDetector:
                 self.logger.error(f"Error destroying lane invasion sensor: {e}")
 
 
+class ObstacleDetector:
+    """
+    Detects obstacles ahead of the vehicle using CARLA's obstacle detector sensor.
+
+    Blueprint: sensor.other.obstacle
+    Reference: https://carla.readthedocs.io/en/latest/ref_sensors/#obstacle-detector
+
+    Provides distance to nearest obstacle for dense PBRS safety guidance.
+    """
+
+    def __init__(self, vehicle: carla.Actor, world: carla.World):
+        """
+        Initialize obstacle detector.
+
+        Args:
+            vehicle: CARLA vehicle actor to attach sensor to
+            world: CARLA world object
+        """
+        self.vehicle = vehicle
+        self.world = world
+        self.logger = logging.getLogger(__name__)
+
+        # Obstacle detection state
+        self.distance_to_obstacle = float('inf')  # Distance in meters
+        self.other_actor = None  # Actor detected as obstacle
+        self.obstacle_lock = threading.Lock()
+
+        # Obstacle sensor setup
+        self.obstacle_sensor = None
+        self._setup_obstacle_sensor()
+
+    def _setup_obstacle_sensor(self):
+        """
+        Attach obstacle sensor to vehicle.
+
+        Configuration (from CARLA docs):
+        - distance: Maximum trace distance (5m default, 10m for highway)
+        - hit_radius: Radius of trace capsule (0.5m default)
+        - only_dynamics: Only detect dynamic objects (False = detect all)
+        - debug_linetrace: Visualize trace (False for performance)
+        """
+        obstacle_bp = self.world.get_blueprint_library().find("sensor.other.obstacle")
+
+        # Configure sensor attributes (CARLA 0.9.16 documentation)
+        obstacle_bp.set_attribute("distance", "10.0")  # 10m lookahead for anticipation
+        obstacle_bp.set_attribute("hit_radius", "0.5")  # Standard vehicle width
+        obstacle_bp.set_attribute("only_dynamics", "False")  # Detect all obstacles
+        obstacle_bp.set_attribute("debug_linetrace", "False")  # No visualization
+        obstacle_bp.set_attribute("sensor_tick", "0.0")  # Capture every frame
+
+        # Spawn sensor attached to vehicle (forward-facing)
+        spawn_point = carla.Transform(carla.Location(x=2.5, z=0.7))  # Front bumper
+
+        self.obstacle_sensor = self.world.spawn_actor(
+            obstacle_bp, spawn_point, attach_to=self.vehicle
+        )
+        self.obstacle_sensor.listen(self._on_obstacle_detection)
+        self.logger.info("Obstacle detector initialized (distance=10m, hit_radius=0.5m)")
+
+    def _on_obstacle_detection(self, event: carla.ObstacleDetectionEvent):
+        """
+        Callback when obstacle detected.
+
+        Args:
+            event: CARLA ObstacleDetectionEvent with obstacle details
+                - distance: float (meters to obstacle)
+                - other_actor: carla.Actor (what was detected)
+        """
+        with self.obstacle_lock:
+            self.distance_to_obstacle = event.distance
+            self.other_actor = event.other_actor
+
+        # Log only significant changes (avoid spam)
+        if event.distance < 5.0:
+            self.logger.debug(
+                f"Obstacle detected: {event.other_actor.type_id} at {event.distance:.2f}m"
+            )
+
+    def get_distance_to_nearest_obstacle(self) -> float:
+        """
+        Get distance to nearest detected obstacle.
+
+        Returns:
+            Distance in meters (float('inf') if no obstacle within range)
+        """
+        with self.obstacle_lock:
+            return self.distance_to_obstacle
+
+    def get_obstacle_info(self) -> Optional[Dict]:
+        """
+        Get detailed obstacle information.
+
+        Returns:
+            Dict with obstacle details or None
+        """
+        with self.obstacle_lock:
+            if self.distance_to_obstacle < float('inf') and self.other_actor:
+                return {
+                    "distance": self.distance_to_obstacle,
+                    "actor_type": str(self.other_actor.type_id),
+                }
+            return None
+
+    def reset(self):
+        """Reset obstacle detection state for new episode."""
+        with self.obstacle_lock:
+            self.distance_to_obstacle = float('inf')
+            self.other_actor = None
+
+    def destroy(self):
+        """Clean up obstacle sensor."""
+        if self.obstacle_sensor:
+            try:
+                if self.obstacle_sensor.is_listening:
+                    self.obstacle_sensor.stop()
+                    self.logger.debug("Obstacle sensor stopped listening")
+
+                self.obstacle_sensor.destroy()
+                self.logger.info("Obstacle sensor destroyed")
+            except RuntimeError as e:
+                self.logger.warning(f"Obstacle sensor already destroyed or invalid: {e}")
+            except Exception as e:
+                self.logger.error(f"Error destroying obstacle sensor: {e}")
+
+
 class SensorSuite:
     """
     Aggregates all sensors and provides unified interface.
 
-    Manages camera, collision, lane invasion detectors.
+    Manages camera, collision, lane invasion, and obstacle detectors.
     Provides synchronized access to all sensor data.
     """
 
@@ -475,6 +600,7 @@ class SensorSuite:
         self.camera = CARLACameraManager(vehicle, camera_config, world)
         self.collision_detector = CollisionDetector(vehicle, world)
         self.lane_invasion_detector = LaneInvasionDetector(vehicle, world)
+        self.obstacle_detector = ObstacleDetector(vehicle, world)  # NEW: Obstacle detection
 
         # Initialize frame stacking
         self.image_stack = ImageStack(
@@ -527,11 +653,25 @@ class SensorSuite:
         """Get collision details if any."""
         return self.collision_detector.get_collision_info()
 
+    def get_distance_to_nearest_obstacle(self) -> float:
+        """
+        Get distance to nearest detected obstacle.
+
+        Returns:
+            Distance in meters (float('inf') if no obstacle within range)
+        """
+        return self.obstacle_detector.get_distance_to_nearest_obstacle()
+
+    def get_obstacle_info(self) -> Optional[Dict]:
+        """Get detailed obstacle information."""
+        return self.obstacle_detector.get_obstacle_info()
+
     def reset(self):
         """Reset all sensors for new episode."""
         self.image_stack.reset()
         self.collision_detector.reset()
         self.lane_invasion_detector.reset()
+        self.obstacle_detector.reset()
         self.logger.info("All sensors reset")
 
     def destroy(self):
@@ -558,6 +698,13 @@ class SensorSuite:
         except Exception as e:
             errors.append(f"Lane: {e}")
             self.logger.warning(f"Error destroying lane invasion detector: {e}")
+
+        # Destroy obstacle detector
+        try:
+            self.obstacle_detector.destroy()
+        except Exception as e:
+            errors.append(f"Obstacle: {e}")
+            self.logger.warning(f"Error destroying obstacle detector: {e}")
 
         if errors:
             self.logger.warning(f"Sensor cleanup completed with {len(errors)} error(s)")
