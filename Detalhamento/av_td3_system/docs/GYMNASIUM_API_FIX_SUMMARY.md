@@ -1,8 +1,8 @@
 # Gymnasium API Compliance Fix - Implementation Summary
 
-**Date:** 2025-01-XX  
-**Status:** ✅ IMPLEMENTED (95% Complete - Testing Pending)  
-**Severity:** HIGH - Training Breaking Bug  
+**Date:** 2025-01-XX
+**Status:** ✅ IMPLEMENTED (95% Complete - Testing Pending)
+**Severity:** HIGH - Training Breaking Bug
 **Reference:** RESET_FUNCTION_ANALYSIS.md
 
 ---
@@ -51,9 +51,9 @@ obs, info = env.reset()  # ValueError!
 **Correct API:**
 ```python
 def reset(
-    self, 
-    *, 
-    seed: int | None = None, 
+    self,
+    *,
+    seed: int | None = None,
     options: dict[str, Any] | None = None
 ) → tuple[ObsType, dict[str, Any]]:
     """Returns: (observation, info)"""
@@ -77,17 +77,17 @@ def __init__(self, ...):
 **Change 2: Updated Method Signature (Line ~410-443)**
 ```python
 def reset(
-    self, 
-    seed: Optional[int] = None, 
+    self,
+    seed: Optional[int] = None,
     options: Optional[Dict[str, Any]] = None
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
     """
     Reset the environment for a new episode.
-    
+
     Args:
         seed: Random seed for environment (currently unused, for Gymnasium compatibility)
         options: Additional options (currently unused, for Gymnasium compatibility)
-    
+
     Returns:
         observation: Initial observation dict with 'image' and 'vector' keys
         info: Diagnostic information dict containing:
@@ -106,7 +106,7 @@ def reset(
 ```python
     # Get initial observation
     observation = self._get_observation()
-    
+
     # Construct info dict with diagnostic data (Gymnasium v0.25+ requirement)
     info = {
         "episode": self.episode_count,
@@ -123,13 +123,13 @@ def reset(
             "vector": list(observation['vector'].shape),  # Should be [535]
         },
     }
-    
+
     self.logger.info(
         f"Reset complete (episode {self.episode_count}): "
         f"Route {info['route_length_m']:.0f}m, {info['npc_count']} NPCs, "
         f"Spawn ({info['spawn_location']['x']:.1f}, {info['spawn_location']['y']:.1f}) @ {info['spawn_location']['yaw']:.0f}°"
     )
-    
+
     # Return tuple (observation, info) as required by Gymnasium v0.25+
     return observation, info
 ```
@@ -476,8 +476,8 @@ The Gymnasium API compliance fix is **95% complete** and ready for testing. The 
 
 ---
 
-**Status:** ✅ READY FOR TESTING  
-**Confidence:** HIGH (clean implementation, comprehensive tests)  
+**Status:** ✅ READY FOR TESTING
+**Confidence:** HIGH (clean implementation, comprehensive tests)
 **Risk:** LOW (minimal invasive changes, backward compatible)
 
 ---

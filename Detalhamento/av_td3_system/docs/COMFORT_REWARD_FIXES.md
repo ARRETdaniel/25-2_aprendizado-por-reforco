@@ -1,7 +1,7 @@
 # Comfort Reward Function - Comprehensive Fixes
 
-**Date**: November 2, 2025  
-**Status**: ✅ IMPLEMENTED  
+**Date**: November 2, 2025
+**Status**: ✅ IMPLEMENTED
 **Impact**: CRITICAL - Training Stability & Physical Correctness
 
 ---
@@ -304,7 +304,7 @@ def _calculate_comfort_reward(
     Calculate comfort reward (penalize high jerk) with physically correct computation.
 
     COMPREHENSIVE FIX - Addresses all critical issues from analysis:
-    
+
     ✅ FIX #1: Added dt division for correct jerk units (m/s³)
     ✅ FIX #2: Removed abs() for TD3 differentiability
     ✅ FIX #3: Improved velocity scaling with sqrt for smoother transition
@@ -382,15 +382,15 @@ Create `tests/test_comfort_reward.py` with the following test cases:
 def test_jerk_computation_units():
     """Verify jerk has correct units (m/s³)."""
     reward_calc = RewardCalculator(config)
-    
+
     # Simulate: acceleration change of 2 m/s² over 0.1 seconds
     accel1 = 0.0  # m/s²
     accel2 = 2.0  # m/s²
     dt = 0.1  # seconds
-    
+
     # Expected jerk: (2.0 - 0.0) / 0.1 = 20 m/s³
     # This should trigger penalty (threshold = 5.0 m/s³)
-    
+
     # First call (initialize state)
     reward1 = reward_calc._calculate_comfort_reward(
         acceleration=accel1,
@@ -398,7 +398,7 @@ def test_jerk_computation_units():
         velocity=5.0,
         dt=dt
     )
-    
+
     # Second call (compute jerk)
     reward2 = reward_calc._calculate_comfort_reward(
         acceleration=accel2,
@@ -406,7 +406,7 @@ def test_jerk_computation_units():
         velocity=5.0,
         dt=dt
     )
-    
+
     assert reward2 < 0, "High jerk (20 m/s³) should be penalized"
     assert reward2 > -1.0, "Penalty should be bounded"
 ```
@@ -417,17 +417,17 @@ def test_reward_differentiability():
     """Verify reward is differentiable at zero jerk."""
     reward_calc = RewardCalculator(config)
     dt = 0.05
-    
+
     # Initialize
     reward_calc._calculate_comfort_reward(0.0, 0.0, 5.0, dt)
-    
+
     # Test small positive jerk
     reward_pos = reward_calc._calculate_comfort_reward(0.1 * dt, 0.0, 5.0, dt)
-    
+
     # Reset and test small negative jerk
     reward_calc._calculate_comfort_reward(0.0, 0.0, 5.0, dt)
     reward_neg = reward_calc._calculate_comfort_reward(-0.1 * dt, 0.0, 5.0, dt)
-    
+
     # Both should be similar (smooth at zero)
     assert abs(reward_pos - reward_neg) < 0.01, "Reward should be smooth at zero jerk"
 ```
@@ -438,14 +438,14 @@ def test_bounded_penalties():
     """Verify penalties are bounded even for extreme jerk."""
     reward_calc = RewardCalculator(config)
     dt = 0.05
-    
+
     # Initialize
     reward_calc._calculate_comfort_reward(0.0, 0.0, 5.0, dt)
-    
+
     # Extreme jerk: 100 m/s³ (20x threshold)
     extreme_accel = 100.0 * dt
     reward = reward_calc._calculate_comfort_reward(extreme_accel, 0.0, 5.0, dt)
-    
+
     assert reward >= -1.0, f"Penalty should be bounded: {reward} >= -1.0"
     assert reward <= 0.3, f"Reward should be bounded: {reward} <= 0.3"
 ```
@@ -456,19 +456,19 @@ def test_velocity_scaling():
     """Verify velocity scaling provides gradual transition."""
     reward_calc = RewardCalculator(config)
     dt = 0.05
-    
+
     # Fixed jerk (moderate)
     accel1 = 0.0
     accel2 = 1.0 * dt  # 1.0 m/s³ jerk
-    
+
     velocities = [0.05, 0.1, 0.5, 1.0, 2.0, 3.0, 5.0]
     rewards = []
-    
+
     for v in velocities:
         reward_calc._calculate_comfort_reward(accel1, 0.0, v, dt)
         reward = reward_calc._calculate_comfort_reward(accel2, 0.0, v, dt)
         rewards.append(reward)
-    
+
     # Verify increasing penalties with velocity
     assert rewards[0] == 0.0, "Below 0.1 m/s should be gated"
     assert rewards[1] == 0.0, "At 0.1 m/s should be gated"
@@ -494,45 +494,45 @@ from av_td3_system.src.environment.carla_env import CARLANavigationEnv
 
 def test_comfort_reward_integration():
     """Test comfort reward in full environment loop."""
-    
+
     # Load configs
     with open("config/training_config.yaml") as f:
         config = yaml.safe_load(f)
-    
+
     # Create environment
     env = CARLANavigationEnv(
         carla_config_path="config/carla_config.yaml",
         td3_config_path="config/td3_config.yaml",
         training_config_path="config/training_config.yaml"
     )
-    
+
     # Run 100 steps
     obs, info = env.reset()
     comfort_rewards = []
-    
+
     for step in range(100):
         action = env.action_space.sample()  # Random actions
         obs, reward, terminated, truncated, info = env.step(action)
-        
+
         # Extract comfort reward
         comfort = info["reward_breakdown"]["comfort"][1]  # (weight, value, weighted)
         comfort_rewards.append(comfort)
-        
+
         if terminated or truncated:
             break
-    
+
     # Verify properties
     assert len(comfort_rewards) > 0, "Should have comfort rewards"
     assert all(-1.0 <= r <= 0.3 for r in comfort_rewards), "All rewards should be bounded"
     assert not any(np.isnan(r) for r in comfort_rewards), "No NaN values"
     assert not any(np.isinf(r) for r in comfort_rewards), "No Inf values"
-    
+
     print(f"✅ Integration test passed!")
     print(f"   Steps: {len(comfort_rewards)}")
     print(f"   Mean comfort: {np.mean(comfort_rewards):.4f}")
     print(f"   Min comfort: {min(comfort_rewards):.4f}")
     print(f"   Max comfort: {max(comfort_rewards):.4f}")
-    
+
     env.close()
 
 if __name__ == "__main__":
@@ -707,9 +707,9 @@ rms_jerk = np.sqrt(np.mean([j**2 for j in self.jerk_history]))
 
 ## Contact
 
-**Author**: Daniel Terra Gomes  
-**Institution**: Federal University of Minas Gerais (UFMG)  
-**Advisor**: Luiz Chaimowicz  
+**Author**: Daniel Terra Gomes
+**Institution**: Federal University of Minas Gerais (UFMG)
+**Advisor**: Luiz Chaimowicz
 **Date**: November 2, 2025
 
 For questions about these fixes, see:

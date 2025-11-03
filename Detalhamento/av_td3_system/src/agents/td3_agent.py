@@ -16,7 +16,7 @@ Date: 2024
 
 import copy
 import os
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -50,7 +50,9 @@ class TD3Agent:
         state_dim: int = 535,
         action_dim: int = 2,
         max_action: float = 1.0,
-        cnn_extractor: Optional[torch.nn.Module] = None,  # ADD CNN for end-to-end training
+        cnn_extractor: Optional[torch.nn.Module] = None,  # DEPRECATED: Use actor_cnn/critic_cnn instead
+        actor_cnn: Optional[torch.nn.Module] = None,  # 🔧 FIX: Separate CNN for actor
+        critic_cnn: Optional[torch.nn.Module] = None,  # 🔧 FIX: Separate CNN for critic
         use_dict_buffer: bool = True,  # Use DictReplayBuffer for gradient-enabled training
         config: Optional[Dict] = None,
         config_path: Optional[str] = None,
@@ -65,13 +67,21 @@ class TD3Agent:
             action_dim: Dimension of action space (default: 2)
                        = [steering, throttle/brake]
             max_action: Maximum absolute value of actions (default: 1.0)
-            cnn_extractor: CNN feature extractor for end-to-end training (optional)
-                          If provided, enables gradient-based CNN learning
+            cnn_extractor: DEPRECATED - Use actor_cnn/critic_cnn for separate CNNs
+            actor_cnn: CNN feature extractor for actor network (end-to-end training)
+                      🔧 FIX: Separate CNN prevents gradient interference
+            critic_cnn: CNN feature extractor for critic network (end-to-end training)
+                       🔧 FIX: Actor and critic optimize their own CNNs independently
             use_dict_buffer: If True, use DictReplayBuffer for gradient flow
                             If False, use standard ReplayBuffer (no CNN training)
             config: Dictionary with TD3 hyperparameters (if None, loads from file)
             config_path: Path to YAML config file (default: config/td3_config.yaml)
             device: Device to use ('cpu' or 'cuda'). If None, auto-detect.
+
+        Note:
+            🔧 CRITICAL FIX: TD3 now uses SEPARATE CNNs for actor and critic.
+            This prevents gradient interference that was causing training failure.
+            Reference: Stable-Baselines3 TD3 uses share_features_extractor=False
         """
         # Load configuration
         if config is None:
@@ -103,6 +113,8 @@ class TD3Agent:
         self.start_timesteps = training_config.get('start_timesteps', training_config.get('learning_starts', 25000))
 
         # Exploration config (handle both nested and flat structures)
+        # NOTE: expl_noise stored for reference but not used in select_action
+        # Noise is passed explicitly by training loop with exponential decay schedule
         exploration_config = config.get('exploration', {})
         self.expl_noise = exploration_config.get('expl_noise', algo_config.get('exploration_noise', 0.1))
 
@@ -151,30 +163,75 @@ class TD3Agent:
             lr=self.critic_lr
         )
 
-        # Initialize CNN for end-to-end training (Bug #13 fix)
-        self.cnn_extractor = cnn_extractor
+        # Initialize CNN for end-to-end training (Bug #13 fix + CRITICAL gradient interference fix)
+        # 🔧 FIX: Support backward compatibility with cnn_extractor parameter
+        if cnn_extractor is not None and (actor_cnn is None or critic_cnn is None):
+            print("  WARNING: cnn_extractor parameter is DEPRECATED!")
+            print("  Using cnn_extractor for both actor and critic (NOT RECOMMENDED)")
+            print("  This can cause gradient interference. Use actor_cnn/critic_cnn instead.")
+            if actor_cnn is None:
+                actor_cnn = cnn_extractor
+            if critic_cnn is None:
+                critic_cnn = cnn_extractor
+
+        self.actor_cnn = actor_cnn
+        self.critic_cnn = critic_cnn
         self.use_dict_buffer = use_dict_buffer
 
-        if self.cnn_extractor is not None:
-            # CNN should be in training mode (NOT eval!)
-            self.cnn_extractor.train()
+        # Initialize CNN optimizers (separate for actor and critic)
+        if self.actor_cnn is not None:
+            # Actor CNN should be in training mode
+            self.actor_cnn.train()
 
-            # Create CNN optimizer with lower learning rate
+            # Create actor CNN optimizer
             cnn_config = config.get('networks', {}).get('cnn', {})
             cnn_lr = cnn_config.get('learning_rate', 1e-4)  # Conservative 1e-4 for CNN
-            self.cnn_optimizer = torch.optim.Adam(
-                self.cnn_extractor.parameters(),
+            self.actor_cnn_optimizer = torch.optim.Adam(
+                self.actor_cnn.parameters(),
                 lr=cnn_lr
             )
-            print(f"  CNN optimizer initialized with lr={cnn_lr}")
-            print(f"  CNN mode: training (gradients enabled)")
+            print(f"  Actor CNN optimizer initialized with lr={cnn_lr}")
+            print(f"  Actor CNN mode: training (gradients enabled)")
         else:
-            self.cnn_optimizer = None
-            if use_dict_buffer:
-                print("  WARNING: DictReplayBuffer enabled but no CNN provided!")
+            self.actor_cnn_optimizer = None
+
+        if self.critic_cnn is not None:
+            # Critic CNN should be in training mode
+            self.critic_cnn.train()
+
+            # Create critic CNN optimizer (may share same CNN config)
+            cnn_config = config.get('networks', {}).get('cnn', {})
+            cnn_lr = cnn_config.get('learning_rate', 1e-4)
+            self.critic_cnn_optimizer = torch.optim.Adam(
+                self.critic_cnn.parameters(),
+                lr=cnn_lr
+            )
+            print(f"  Critic CNN optimizer initialized with lr={cnn_lr}")
+            print(f"  Critic CNN mode: training (gradients enabled)")
+        else:
+            self.critic_cnn_optimizer = None
+
+        # Validation checks
+        if use_dict_buffer and (self.actor_cnn is None or self.critic_cnn is None):
+            print("  ⚠️  WARNING: DictReplayBuffer enabled but CNN(s) missing!")
+            if self.actor_cnn is None:
+                print("      actor_cnn is None - actor will use zero features")
+            if self.critic_cnn is None:
+                print("      critic_cnn is None - critic will use zero features")
+
+        # Check if same CNN instance is shared (not recommended)
+        if self.actor_cnn is not None and self.critic_cnn is not None:
+            if id(self.actor_cnn) == id(self.critic_cnn):
+                print("  ⚠️  CRITICAL WARNING: Actor and critic share the SAME CNN instance!")
+                print("      This causes gradient interference and training instability.")
+                print("      Create separate CNN instances: actor_cnn = CNN(), critic_cnn = CNN()")
+            else:
+                print(f"  ✅ Actor and critic use SEPARATE CNN instances (recommended)")
+                print(f"     Actor CNN id: {id(self.actor_cnn)}")
+                print(f"     Critic CNN id: {id(self.critic_cnn)}")
 
         # Initialize replay buffer (Dict or standard based on flag)
-        if use_dict_buffer and self.cnn_extractor is not None:
+        if use_dict_buffer and (self.actor_cnn is not None or self.critic_cnn is not None):
             # Use DictReplayBuffer for end-to-end CNN training
             self.replay_buffer = DictReplayBuffer(
                 image_shape=(4, 84, 84),
@@ -197,6 +254,9 @@ class TD3Agent:
         # Training iteration counter for delayed updates
         self.total_it = 0
 
+        # CNN diagnostics tracker (optional, for debugging)
+        self.cnn_diagnostics = None
+
         print(f"TD3Agent initialized with:")
         print(f"  State dim: {state_dim}, Action dim: {action_dim}")
         print(f"  Actor hidden size: {network_config.get('hidden_sizes', network_config.get('hidden_layers', [256, 256]))}")
@@ -208,31 +268,62 @@ class TD3Agent:
 
     def select_action(
         self,
-        state: np.ndarray,
-        noise: Optional[float] = None
+        state: Union[np.ndarray, Dict[str, np.ndarray]],
+        noise: Optional[float] = None,
+        deterministic: bool = False
     ) -> np.ndarray:
         """
         Select action from current policy with optional exploration noise.
 
-        During training, Gaussian noise is added for exploration. During evaluation,
-        the deterministic policy is used (noise=0).
+        Supports both flat state arrays (for backward compatibility) and Dict observations
+        (for end-to-end CNN training). During training, Gaussian noise is added for
+        exploration. During evaluation, use deterministic=True for noise-free actions.
 
         Args:
-            state: Current state observation (535-dim numpy array)
-            noise: Std dev of Gaussian exploration noise. If None, uses self.expl_noise
+            state: Current state observation.
+                   - Dict: {'image': (4,84,84), 'vector': (23,)} for end-to-end CNN
+                   - np.ndarray: (535,) flattened state for compatibility
+            noise: Std dev of Gaussian exploration noise. Ignored if deterministic=True.
+            deterministic: If True, return noise-free action (evaluation mode)
 
         Returns:
             action: 2-dim numpy array [steering, throttle/brake] ∈ [-1, 1]²
+
+        Note:
+            This method implements TD3's exploration strategy:
+            - Training: a = clip(μ_θ(s) + ε, -1, 1) where ε ~ N(0, noise)
+            - Evaluation: a = μ_θ(s) (deterministic policy)
+
+        Reference:
+            "Addressing Function Approximation Error in Actor-Critic Methods"
+            (Fujimoto et al. 2018) - Section 4: Exploration vs Exploitation
         """
-        # Convert state to tensor
-        state = torch.FloatTensor(state.reshape(1, -1)).to(self.device)
+        # Handle Dict observations (for end-to-end CNN training)
+        if isinstance(state, dict):
+            # Convert Dict observation to tensors
+            obs_dict_tensor = {
+                'image': torch.FloatTensor(state['image']).unsqueeze(0).to(self.device),  # (1, 4, 84, 84)
+                'vector': torch.FloatTensor(state['vector']).unsqueeze(0).to(self.device)  # (1, 23)
+            }
+
+            # Extract features using CNN (no gradients for action selection)
+            # 🔧 FIX: Use actor's CNN for action selection
+            with torch.no_grad():
+                state_tensor = self.extract_features(
+                    obs_dict_tensor,
+                    enable_grad=False,  # ✅ Inference mode (no gradients)
+                    use_actor_cnn=True  # ✅ Use actor's CNN
+                )  # (1, 535)
+        else:
+            # Handle flat numpy array (backward compatibility)
+            state_tensor = torch.FloatTensor(state.reshape(1, -1)).to(self.device)
 
         # Get deterministic action from actor
         with torch.no_grad():
-            action = self.actor(state).cpu().numpy().flatten()
+            action = self.actor(state_tensor).cpu().numpy().flatten()
 
-        # Add exploration noise if specified
-        if noise is not None and noise > 0:
+        # Add exploration noise if not in deterministic mode
+        if not deterministic and noise is not None and noise > 0:
             noise_sample = np.random.normal(0, noise, size=self.action_dim)
             action = action + noise_sample
             # Clip to valid action range
@@ -243,10 +334,14 @@ class TD3Agent:
     def extract_features(
         self,
         obs_dict: Dict[str, torch.Tensor],
-        enable_grad: bool = True
+        enable_grad: bool = True,
+        use_actor_cnn: bool = True
     ) -> torch.Tensor:
         """
         Extract features from Dict observation with gradient support.
+
+        🔧 CRITICAL FIX: Now uses SEPARATE CNNs for actor and critic to prevent
+        gradient interference that was causing training failure (-52k rewards).
 
         This method combines CNN visual features with kinematic vector features.
         When enable_grad=True (training), gradients flow through CNN for end-to-end learning.
@@ -256,35 +351,94 @@ class TD3Agent:
             obs_dict: Dict with 'image' (B,4,84,84) and 'vector' (B,23) tensors
             enable_grad: If True, compute gradients for CNN (training mode)
                         If False, use torch.no_grad() for inference
+            use_actor_cnn: If True, use actor's CNN; if False, use critic's CNN
+                          🔧 FIX: Prevents gradient interference between actor/critic
 
         Returns:
             state: Flattened state tensor (B, 535) with gradient tracking if enabled
                   = 512 (CNN features) + 23 (kinematic features)
 
         Note:
-            This is the KEY method for Bug #13 fix. By extracting features WITH gradients
+            This is the KEY method for Bug #13 fix AND gradient interference fix.
+            By using separate CNNs for actor/critic and extracting features WITH gradients
             during training, we enable backpropagation through the CNN, allowing it to learn
-            optimal visual representations for the driving task.
+            optimal visual representations without conflicting gradient signals.
+
+        Reference:
+            Stable-Baselines3 TD3: share_features_extractor=False (default)
         """
-        if self.cnn_extractor is None:
-            # No CNN provided - use zeros for image features (fallback, shouldn't happen)
+        # 🔧 FIX: Select correct CNN based on caller (actor or critic)
+        cnn = self.actor_cnn if use_actor_cnn else self.critic_cnn
+
+        if cnn is None:
+            # No CNN provided - use zeros for image features (fallback)
             batch_size = obs_dict['vector'].shape[0]
             image_features = torch.zeros(batch_size, 512, device=self.device)
-            print("WARNING: extract_features called but no CNN available!")
+            print(f"⚠️  WARNING: extract_features called but {'actor' if use_actor_cnn else 'critic'}_cnn is None!")
         elif enable_grad:
             # Training mode: Extract features WITH gradients
             # Gradients will flow: loss → actor/critic → state → CNN
-            image_features = self.cnn_extractor(obs_dict['image'])  # (B, 512)
+            image_features = cnn(obs_dict['image'])  # (B, 512)
         else:
             # Inference mode: Extract features without gradients (more efficient)
             with torch.no_grad():
-                image_features = self.cnn_extractor(obs_dict['image'])  # (B, 512)
+                image_features = cnn(obs_dict['image'])  # (B, 512)
 
         # Concatenate visual features with vector state
         # Result: (B, 535) = (B, 512) + (B, 23)
         state = torch.cat([image_features, obs_dict['vector']], dim=1)
 
         return state
+
+    def enable_diagnostics(self) -> None:
+        """
+        Enable CNN diagnostics tracking for monitoring learning.
+
+        Call this at the start of training to track gradient flow, weight updates,
+        and feature statistics. Diagnostics can be logged to TensorBoard or printed
+        for debugging.
+
+        Usage:
+            agent.enable_diagnostics()
+            # During training, call agent.get_diagnostics_summary() periodically
+        """
+        if self.cnn_extractor is not None:
+            try:
+                from src.utils.cnn_diagnostics import CNNDiagnostics
+                self.cnn_diagnostics = CNNDiagnostics(self.cnn_extractor)
+                print("[CNN DIAGNOSTICS] Enabled CNN diagnostics tracking")
+            except ImportError:
+                print("[CNN DIAGNOSTICS] WARNING: Could not import CNNDiagnostics")
+                self.cnn_diagnostics = None
+        else:
+            print("[CNN DIAGNOSTICS] WARNING: No CNN extractor available")
+            self.cnn_diagnostics = None
+
+    def get_diagnostics_summary(self, last_n: int = 100) -> Optional[Dict]:
+        """
+        Get summary of CNN learning diagnostics.
+
+        Args:
+            last_n: Number of recent captures to average over
+
+        Returns:
+            Dictionary with diagnostics summary, or None if diagnostics not enabled
+        """
+        if self.cnn_diagnostics is not None:
+            return self.cnn_diagnostics.get_summary(last_n=last_n)
+        return None
+
+    def print_diagnostics(self, last_n: int = 100) -> None:
+        """
+        Print human-readable CNN diagnostics summary.
+
+        Args:
+            last_n: Number of recent captures to average over
+        """
+        if self.cnn_diagnostics is not None:
+            self.cnn_diagnostics.print_summary(last_n=last_n)
+        else:
+            print("[CNN DIAGNOSTICS] Not enabled. Call agent.enable_diagnostics() first.")
 
     def train(self, batch_size: Optional[int] = None) -> Dict[str, float]:
         """
@@ -313,13 +467,17 @@ class TD3Agent:
             batch_size = self.batch_size
 
         # Sample replay buffer
-        if self.use_dict_buffer and self.cnn_extractor is not None:
+        if self.use_dict_buffer and (self.actor_cnn is not None or self.critic_cnn is not None):
             # DictReplayBuffer returns: (obs_dict, action, next_obs_dict, reward, not_done)
             obs_dict, action, next_obs_dict, reward, not_done = self.replay_buffer.sample(batch_size)
 
-            # Extract state features WITH gradients for training
-            # This is the KEY to Bug #13 fix: gradients flow through CNN!
-            state = self.extract_features(obs_dict, enable_grad=True)  # (B, 535)
+            # 🔧 FIX: Extract state features WITH gradients using CRITIC'S CNN
+            # Critic loss will backprop through critic_cnn (not actor_cnn)
+            state = self.extract_features(
+                obs_dict,
+                enable_grad=True,  # ✅ Training mode (gradients enabled)
+                use_actor_cnn=False  # ✅ Use critic's CNN for Q-value estimation
+            )  # (B, 535)
         else:
             # Standard ReplayBuffer returns: (state, action, next_state, reward, not_done)
             state, action, next_state, reward, not_done = self.replay_buffer.sample(batch_size)
@@ -327,9 +485,13 @@ class TD3Agent:
 
         with torch.no_grad():
             # Compute next_state for target Q-value calculation
-            if self.use_dict_buffer and self.cnn_extractor is not None:
-                # Extract next state features (no gradients for target computation)
-                next_state = self.extract_features(next_obs_dict, enable_grad=False)
+            if self.use_dict_buffer and (self.actor_cnn is not None or self.critic_cnn is not None):
+                # 🔧 FIX: Extract next state features using CRITIC'S CNN (no gradients for target)
+                next_state = self.extract_features(
+                    next_obs_dict,
+                    enable_grad=False,  # ✅ No gradients for target computation
+                    use_actor_cnn=False  # ✅ Use critic's CNN
+                )
             # else: next_state already computed above from standard buffer
 
             # Select action according to target policy with added smoothing noise
@@ -350,16 +512,30 @@ class TD3Agent:
         # Compute critic loss (MSE on both Q-networks)
         critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
 
-        # Optimize critics (gradients flow through state → CNN if using DictReplayBuffer!)
+        # 🔧 FIX: Optimize critics AND critic's CNN (gradients flow through state → critic_cnn)
         self.critic_optimizer.zero_grad()
-        if self.cnn_optimizer is not None:
-            self.cnn_optimizer.zero_grad()  # Zero CNN gradients before backprop
+        if self.critic_cnn_optimizer is not None:
+            self.critic_cnn_optimizer.zero_grad()  # Zero critic CNN gradients before backprop
 
-        critic_loss.backward()  # Gradients flow: critic_loss → state → CNN!
+        critic_loss.backward()  # Gradients flow: critic_loss → state → critic_cnn!
+
+        # Capture CNN gradients for diagnostics (after backward, before step)
+        if self.cnn_diagnostics is not None:
+            self.cnn_diagnostics.capture_gradients()
+
+        # Capture CNN features for diagnostics
+        if self.cnn_diagnostics is not None and self.use_dict_buffer and self.critic_cnn is not None:
+            with torch.no_grad():
+                sample_features = self.critic_cnn(obs_dict['image'])
+                self.cnn_diagnostics.capture_features(sample_features, name="critic_update")
 
         self.critic_optimizer.step()
-        if self.cnn_optimizer is not None:
-            self.cnn_optimizer.step()  # UPDATE CNN WEIGHTS!
+        if self.critic_cnn_optimizer is not None:
+            self.critic_cnn_optimizer.step()  # UPDATE CRITIC CNN WEIGHTS!
+
+            # Capture weight changes after optimizer step
+            if self.cnn_diagnostics is not None:
+                self.cnn_diagnostics.capture_weights()
 
         # Prepare metrics
         metrics = {
@@ -370,25 +546,44 @@ class TD3Agent:
 
         # Delayed policy updates
         if self.total_it % self.policy_freq == 0:
-            # Re-extract features for actor update (need fresh computational graph)
-            if self.use_dict_buffer and self.cnn_extractor is not None:
-                state_for_actor = self.extract_features(obs_dict, enable_grad=True)
+            # 🔧 FIX: Re-extract features for actor update using ACTOR'S CNN
+            # Actor loss will backprop through actor_cnn (not critic_cnn)
+            if self.use_dict_buffer and (self.actor_cnn is not None or self.critic_cnn is not None):
+                state_for_actor = self.extract_features(
+                    obs_dict,
+                    enable_grad=True,  # ✅ Training mode (gradients enabled)
+                    use_actor_cnn=True  # ✅ Use actor's CNN for policy learning
+                )
             else:
                 state_for_actor = state  # Use same state from standard buffer
 
             # Compute actor loss: -Q1(s, μ_φ(s))
             actor_loss = -self.critic.Q1(state_for_actor, self.actor(state_for_actor)).mean()
 
-            # Optimize actor (gradients flow through state_for_actor → CNN!)
+            # 🔧 FIX: Optimize actor AND actor's CNN (gradients flow through state_for_actor → actor_cnn)
             self.actor_optimizer.zero_grad()
-            if self.cnn_optimizer is not None:
-                self.cnn_optimizer.zero_grad()
+            if self.actor_cnn_optimizer is not None:
+                self.actor_cnn_optimizer.zero_grad()
 
-            actor_loss.backward()  # Gradients flow: actor_loss → state → CNN!
+            actor_loss.backward()  # Gradients flow: actor_loss → state → actor_cnn!
+
+            # Capture CNN gradients for diagnostics (after backward, before step)
+            if self.cnn_diagnostics is not None:
+                self.cnn_diagnostics.capture_gradients()
+
+            # Capture CNN features for diagnostics
+            if self.cnn_diagnostics is not None and self.use_dict_buffer and self.actor_cnn is not None:
+                with torch.no_grad():
+                    sample_features = self.actor_cnn(obs_dict['image'])
+                    self.cnn_diagnostics.capture_features(sample_features, name="actor_update")
 
             self.actor_optimizer.step()
-            if self.cnn_optimizer is not None:
-                self.cnn_optimizer.step()  # UPDATE CNN WEIGHTS AGAIN!
+            if self.actor_cnn_optimizer is not None:
+                self.actor_cnn_optimizer.step()  # UPDATE ACTOR CNN WEIGHTS!
+
+                # Capture weight changes after optimizer step
+                if self.cnn_diagnostics is not None:
+                    self.cnn_diagnostics.capture_weights()
 
             # Soft update target networks: θ' ← τθ + (1-τ)θ'
             for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):

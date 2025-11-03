@@ -1,6 +1,6 @@
 # Safety Reward Function Fixes - Implementation Summary
-**Date:** 2024-11-02  
-**Status:** ✅ **IMPLEMENTED** (Priority 1, 2, 3 fixes complete)  
+**Date:** 2024-11-02
+**Status:** ✅ **IMPLEMENTED** (Priority 1, 2, 3 fixes complete)
 **Reference:** `docs/SAFETY_REWARD_ANALYSIS.md`
 
 ---
@@ -36,14 +36,14 @@ Successfully implemented **all Priority 1, 2, and 3 fixes** from the safety rewa
 class ObstacleDetector:
     """
     Detects obstacles using CARLA's sensor.other.obstacle.
-    
+
     Configuration (CARLA 0.9.16 docs):
     - distance: 10.0m (lookahead for anticipation)
     - hit_radius: 0.5m (standard vehicle width)
     - only_dynamics: False (detect all obstacles)
     - sensor_tick: 0.0 (capture every frame)
     """
-    
+
     def get_distance_to_nearest_obstacle(self) -> float:
         """Returns distance in meters (inf if no obstacle)."""
         ...
@@ -77,7 +77,7 @@ Reward:    -0.2   -0.5   -1.0   -2.0   -5.0
 ```python
 # Calculate TTC
 time_to_collision = None
-if (distance_to_nearest_obstacle < float('inf') and 
+if (distance_to_nearest_obstacle < float('inf') and
     vehicle_state["velocity"] > 0.1):
     time_to_collision = distance_to_nearest_obstacle / vehicle_state["velocity"]
 ```
@@ -429,9 +429,9 @@ distance_scale: 50.0  # 50x increase
 
 ### Key Insights
 > "Sparse rewards + TD3 = training failure"
-> 
+>
 > "PBRS provides density without changing optimal policy (Ng theorem)"
-> 
+>
 > "Multi-objective RL requires balanced magnitude design"
 
 ---
@@ -453,8 +453,8 @@ All Priority 1, 2, and 3 fixes from the analysis document have been successfully
 
 ---
 
-**Implementation Complete:** 2024-11-02  
-**Ready for Validation:** ✅ YES  
+**Implementation Complete:** 2024-11-02
+**Ready for Validation:** ✅ YES
 **Confidence Level:** HIGH (documentation-backed, unit tested, theoretically sound)
 
 ---

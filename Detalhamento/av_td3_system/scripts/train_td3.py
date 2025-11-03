@@ -170,30 +170,44 @@ class TD3TrainingPipeline:
         if agent_device == 'cpu':
             print(f"[AGENT] Running on CPU to reserve GPU memory for CARLA simulator")
 
-        # Initialize CNN feature extractor BEFORE TD3Agent (needed for end-to-end training)
-        print(f"[AGENT] Initializing NatureCNN feature extractor...")
-        self.cnn_extractor = NatureCNN(
+        # 🔧 CRITICAL FIX: Initialize SEPARATE CNN instances for actor and critic
+        # This prevents gradient interference that was causing training failure (-52k rewards)
+        # Reference: Stable-Baselines3 TD3 uses share_features_extractor=False
+        print(f"[AGENT] Initializing SEPARATE NatureCNN feature extractors for actor and critic...")
+
+        self.actor_cnn = NatureCNN(
             input_channels=4,  # 4 stacked frames
             num_frames=4,
             feature_dim=512    # Output 512-dim features
         ).to(agent_device)
 
-        # BUG FIX (2025-01-28): CRITICAL - CNN must be trained, not frozen!
-        # Initialize weights properly and set to TRAIN mode
-        self._initialize_cnn_weights()  # Kaiming init for ReLU networks
-        self.cnn_extractor.train()  # Enable training mode (NOT eval()!)
+        self.critic_cnn = NatureCNN(
+            input_channels=4,  # 4 stacked frames
+            num_frames=4,
+            feature_dim=512    # Output 512-dim features
+        ).to(agent_device)
 
-        print(f"[AGENT] CNN extractor initialized on {agent_device}")
+        # Initialize weights properly and set to TRAIN mode
+        print(f"[AGENT] Initializing CNN weights (Kaiming for ReLU networks)...")
+        self._initialize_cnn_weights()  # Kaiming init for both CNNs
+
+        self.actor_cnn.train()   # Enable training mode for actor CNN
+        self.critic_cnn.train()  # Enable training mode for critic CNN
+
+        print(f"[AGENT] Actor CNN initialized on {agent_device} (id: {id(self.actor_cnn)})")
+        print(f"[AGENT] Critic CNN initialized on {agent_device} (id: {id(self.critic_cnn)})")
+        print(f"[AGENT] CNNs are SEPARATE instances: {id(self.actor_cnn) != id(self.critic_cnn)}")
         print(f"[AGENT] CNN architecture: 4×84×84 → Conv layers → 512 features")
         print(f"[AGENT] CNN training mode: ENABLED (weights will be updated during training)")
 
-        # Initialize TD3Agent WITH CNN for end-to-end training (Bug #13 fix)
+        # Initialize TD3Agent WITH SEPARATE CNNs for end-to-end training
         self.agent = TD3Agent(
             state_dim=535,
             action_dim=2,
             max_action=1.0,
-            cnn_extractor=self.cnn_extractor,  # ← Pass CNN to agent!
-            use_dict_buffer=True,               # ← Enable DictReplayBuffer!
+            actor_cnn=self.actor_cnn,   # ← Separate CNN for actor!
+            critic_cnn=self.critic_cnn,  # ← Separate CNN for critic!
+            use_dict_buffer=True,        # ← Enable DictReplayBuffer!
             config=self.agent_config,
             device=agent_device
         )
@@ -237,8 +251,21 @@ class TD3TrainingPipeline:
 
         # Debug mode setup
         if self.debug:
-            print(f"\n[DEBUG] Visual feedback enabled (OpenCV display)")
+            print(f"\n{'='*70}")
+            print(f"[DEBUG MODE ENABLED]")
+            print(f"{'='*70}")
+            print(f"[DEBUG] Visual feedback enabled (OpenCV display)")
             print(f"[DEBUG] Press 'q' to quit, 'p' to pause/unpause")
+            print(f"\n[DEBUG] CNN diagnostics enabled for training monitoring")
+            print(f"[DEBUG] Tracking: gradient flow, weight updates, feature statistics")
+            print(f"[DEBUG] TensorBoard metrics: cnn_diagnostics/*")
+            print(f"[DEBUG] Console output: Every 1000 steps")
+            print(f"{'='*70}\n")
+
+            # Enable CNN diagnostics
+            self.agent.enable_diagnostics(self.writer)
+
+            # Setup OpenCV window
             self.window_name = "TD3 Training - Debug View"
             cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
             cv2.resizeWindow(self.window_name, 1200, 600)
@@ -266,6 +293,8 @@ class TD3TrainingPipeline:
         """
         Initialize CNN weights with Kaiming initialization for ReLU activations.
 
+        🔧 UPDATED: Now initializes BOTH actor_cnn and critic_cnn separately.
+
         BUG FIX (2025-01-28): Explicit weight initialization ensures reproducibility
         and optimal gradient flow for ReLU-based networks. PyTorch defaults use
         Kaiming uniform, but explicit initialization documents our intent clearly.
@@ -274,7 +303,9 @@ class TD3TrainingPipeline:
         - He et al. (2015): "Delving Deep into Rectifiers"
         - PyTorch nn.init docs: https://pytorch.org/docs/stable/nn.init.html
         """
-        for module in self.cnn_extractor.modules():
+        # Initialize actor CNN
+        print(f"[INIT] Initializing Actor CNN weights...")
+        for module in self.actor_cnn.modules():
             if isinstance(module, nn.Conv2d):
                 # Kaiming normal initialization for Conv2d with ReLU
                 nn.init.kaiming_normal_(
@@ -294,11 +325,37 @@ class TD3TrainingPipeline:
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0)
 
+        # Initialize critic CNN
+        print(f"[INIT] Initializing Critic CNN weights...")
+        for module in self.critic_cnn.modules():
+            if isinstance(module, nn.Conv2d):
+                # Kaiming normal initialization for Conv2d with ReLU
+                nn.init.kaiming_normal_(
+                    module.weight,
+                    mode='fan_out',  # Preserve variance in forward pass
+                    nonlinearity='relu'
+                )
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
+            elif isinstance(module, nn.Linear):
+                # Kaiming normal initialization for Linear layers with ReLU
+                nn.init.kaiming_normal_(
+                    module.weight,
+                    mode='fan_out',
+                    nonlinearity='relu'
+                )
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
+
         print("[AGENT] CNN weights initialized with Kaiming normal (optimized for ReLU)")
 
     def flatten_dict_obs(self, obs_dict, enable_grad=False):
         """
         Flatten Dict observation to 1D array for TD3 agent using CNN feature extraction.
+
+        🔧 UPDATED: Uses actor_cnn for consistency with select_action behavior.
 
         Args:
             obs_dict: Dictionary with 'image' (4, 84, 84) and 'vector' (23,) keys
@@ -316,9 +373,9 @@ class TD3TrainingPipeline:
         image_tensor = torch.from_numpy(image).unsqueeze(0).float()
         image_tensor = image_tensor.to(self.agent.device)
 
-        # Extract features using CNN (no gradient tracking needed)
+        # Extract features using actor's CNN (no gradient tracking needed)
         with torch.no_grad():
-            image_features = self.cnn_extractor(image_tensor)  # Shape: (1, 512)
+            image_features = self.actor_cnn(image_tensor)  # Shape: (1, 512)
 
         # Convert back to numpy and remove batch dimension
         image_features = image_features.cpu().numpy().squeeze()  # Shape: (512,)
@@ -522,7 +579,7 @@ class TD3TrainingPipeline:
         import time
         start_reset = time.time()
 
-        # Get initial observation (Dict) and flatten for agent
+        # Get initial observation (Dict) from environment
         # Gymnasium v0.25+ compliance: reset() returns (observation, info) tuple
         obs_dict, reset_info = self.env.reset()
 
@@ -532,7 +589,7 @@ class TD3TrainingPipeline:
         print(f"[TRAINING] Actors spawned, sensors ready")
         print(f"[TRAINING] Beginning training from timestep 1 to {self.max_timesteps:,}")
 
-        state = self.flatten_dict_obs(obs_dict)
+        # BUG FIX #14: No flattening! Keep Dict observations for gradient flow
         done = False
 
         # DEBUG: Verify CNN → TD3 data flow at initialization
@@ -544,21 +601,17 @@ class TD3TrainingPipeline:
             print(f"   Shape: {obs_dict['image'].shape}")  # (4, 84, 84)
             print(f"   Range: [{obs_dict['image'].min():.3f}, {obs_dict['image'].max():.3f}]")
             print(f"   Mean: {obs_dict['image'].mean():.3f}, Std: {obs_dict['image'].std():.3f}")
-            print(f"\n[DEBUG] CNN Features:")
-            print(f"   Shape: {state[:512].shape}")  # First 512 are CNN features
-            print(f"   Range: [{state[:512].min():.3f}, {state[:512].max():.3f}]")
-            print(f"   Mean: {state[:512].mean():.3f}, Std: {state[:512].std():.3f}")
-            print(f"   L2 Norm: {np.linalg.norm(state[:512]):.3f}")
             print(f"\n[DEBUG] Vector State (Kinematic + Waypoints):")
-            print(f"   Shape: {state[512:].shape}")  # Last 23 are kinematic/waypoints
-            print(f"   Velocity: {state[512]:.3f} m/s")
-            print(f"   Lateral Deviation: {state[513]:.3f} m")
-            print(f"   Heading Error: {state[514]:.3f} rad")
-            print(f"   Waypoints: {state[515:535].shape} (10 waypoints × 2)")
-            print(f"\n[DEBUG] Full State:")
-            print(f"   Shape: {state.shape}")  # (535,)
-            print(f"   Expected: (535,)")
-            print(f"   Match: {state.shape == (535,)}")
+            print(f"   Shape: {obs_dict['vector'].shape}")  # (23,)
+            print(f"   Velocity: {obs_dict['vector'][0]:.3f} m/s")
+            print(f"   Lateral Deviation: {obs_dict['vector'][1]:.3f} m")
+            print(f"   Heading Error: {obs_dict['vector'][2]:.3f} rad")
+            print(f"   Waypoints: {obs_dict['vector'][3:23].shape} (10 waypoints × 2)")
+            print(f"\n[DEBUG] Dict Observation Structure:")
+            print(f"   Type: {type(obs_dict)}")
+            print(f"   Keys: {list(obs_dict.keys())}")
+            print(f"   Image shape: {obs_dict['image'].shape}")
+            print(f"   Vector shape: {obs_dict['vector'].shape}")
             print(f"{'='*70}\n")
 
         start_timesteps = self.agent_config.get('algorithm', {}).get('learning_starts', 25000)
@@ -615,20 +668,28 @@ class TD3TrainingPipeline:
                 if t % 100 == 0:
                     self.writer.add_scalar('train/exploration_noise', current_noise, t)
 
+                # BUG FIX #14: Pass Dict observation directly (no flattening!)
+                # This enables gradient flow through CNN during training
                 action = self.agent.select_action(
-                    state,
-                    noise=current_noise  # Use decayed noise instead of fixed self.agent.expl_noise
+                    obs_dict,  # Dict observation {'image': (4,84,84), 'vector': (23,)}
+                    noise=current_noise,
+                    deterministic=False  # Exploration mode
                 )
 
             # Step environment (get Dict observation)
             next_obs_dict, reward, done, truncated, info = self.env.step(action)
 
-            # Flatten next observation for agent
-            next_state = self.flatten_dict_obs(next_obs_dict)
+            # BUG FIX #14: No flattening! Store Dict observations directly
+            # CNN features will be extracted WITH gradients during training
 
-            # DEBUG: Log CNN features every 100 steps
+            # DEBUG: Log CNN features by extracting them temporarily (only for logging)
             if t % 100 == 0 and self.debug:
-                cnn_features = next_state[:512]
+                # Extract CNN features just for debug logging (with no_grad)
+                # Use actor_cnn for consistency
+                with torch.no_grad():
+                    image_tensor = torch.FloatTensor(next_obs_dict['image']).unsqueeze(0).to(self.agent.device)
+                    cnn_features = self.actor_cnn(image_tensor).cpu().numpy().squeeze()
+
                 print(f"\n[DEBUG][Step {t}] CNN Feature Stats:")
                 print(f"  L2 Norm: {np.linalg.norm(cnn_features):.3f}")
                 print(f"  Mean: {cnn_features.mean():.3f}, Std: {cnn_features.std():.3f}")
@@ -764,8 +825,7 @@ class TD3TrainingPipeline:
                 done=done_bool
             )
 
-            # Update state for next iteration (both representations)
-            state = next_state
+            # Update observation for next iteration (no state variable needed!)
             obs_dict = next_obs_dict
 
             # Train agent (only after exploration phase)
@@ -789,6 +849,18 @@ class TD3TrainingPipeline:
 
                     if 'actor_loss' in metrics:  # Actor updated only on delayed steps
                         self.writer.add_scalar('train/actor_loss', metrics['actor_loss'], t)
+
+                    # Log CNN diagnostics every 100 steps (if debug mode enabled)
+                    if self.debug and self.agent.cnn_diagnostics is not None:
+                        self.agent.cnn_diagnostics.log_to_tensorboard(t)
+
+                        # Print detailed CNN diagnostics every 1000 steps
+                        if t % 1000 == 0:
+                            print(f"\n{'='*70}")
+                            print(f"[CNN DIAGNOSTICS] Step {t:,}")
+                            print(f"{'='*70}")
+                            self.agent.print_diagnostics(max_history=1000)
+                            print(f"{'='*70}\n")
 
             # ALWAYS log progress every 100 steps (not just debug mode)
             if t % 100 == 0:
@@ -835,10 +907,10 @@ class TD3TrainingPipeline:
                         f"Collisions {self.episode_collision_count:2d}"
                     )
 
-                # Reset episode (get Dict and flatten)
+                # Reset episode (get Dict observation)
                 # Gymnasium v0.25+ compliance: reset() returns (observation, info) tuple
+                # BUG FIX #14: No flattening! Keep Dict for gradient flow
                 obs_dict, _ = self.env.reset()
-                state = self.flatten_dict_obs(obs_dict)
                 self.episode_num += 1
                 self.episode_reward = 0
                 self.episode_timesteps = 0
@@ -909,20 +981,22 @@ class TD3TrainingPipeline:
         for episode in range(self.num_eval_episodes):
             # Gymnasium v0.25+ compliance: reset() returns (observation, info) tuple
             obs_dict, _ = eval_env.reset()  # Use eval_env, not self.env
-            state = self.flatten_dict_obs(obs_dict)  # Flatten Dict → flat array
+            # BUG FIX #14: No flattening! Pass Dict directly to select_action
             episode_reward = 0
             episode_length = 0
             done = False
 
             while not done and episode_length < max_eval_steps:
-                # Deterministic action (no noise)
-                action = self.agent.select_action(state, noise=0.0)
+                # Deterministic action (no noise, no exploration)
+                action = self.agent.select_action(
+                    obs_dict,  # Dict observation
+                    deterministic=True  # Evaluation mode
+                )
                 next_obs_dict, reward, done, truncated, info = eval_env.step(action)  # Use eval_env
-                next_state = self.flatten_dict_obs(next_obs_dict)  # Flatten next obs
 
                 episode_reward += reward
                 episode_length += 1
-                state = next_state
+                obs_dict = next_obs_dict
 
                 if truncated:
                     done = True
@@ -1081,7 +1155,7 @@ def main():
     parser.add_argument(
         '--debug',
         action='store_true',
-        help='Enable visual debug mode with OpenCV display (recommended for short runs, e.g., max_timesteps steps)'
+        help='Enable debug mode: OpenCV visualization + CNN diagnostics (gradient flow, weight updates, feature stats). Recommended for short runs to verify learning. TensorBoard: cnn_diagnostics/* metrics. Console: detailed output every 1000 steps.'
     )
     parser.add_argument(
         '--device',
