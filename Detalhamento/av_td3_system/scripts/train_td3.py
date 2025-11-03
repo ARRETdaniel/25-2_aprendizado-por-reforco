@@ -798,7 +798,7 @@ class TD3TrainingPipeline:
             self.episode_collision_count += info.get('collision_count', 0)
             self.episode_steps_since_collision = info.get('steps_since_collision', 0)
 
-            # ✅ FIX BUG #12: Use ONLY done (terminated) for TD3 bootstrapping
+            #  FIX BUG #12: Use ONLY done (terminated) for TD3 bootstrapping
             # Per official TD3 implementation (main.py line 133):
             #   done_bool = float(done) if episode_timesteps < env._max_episode_steps else 0
             #
@@ -861,6 +861,58 @@ class TD3TrainingPipeline:
                             print(f"{'='*70}")
                             self.agent.print_diagnostics(max_history=1000)
                             print(f"{'='*70}\n")
+
+                # ===== LOG AGENT STATISTICS EVERY 1000 STEPS (RECOMMENDATION 4) =====
+                # Following Stable-Baselines3 and OpenAI Spinning Up best practices
+                if t % 1000 == 0:
+                    agent_stats = self.agent.get_stats()
+
+                    # Training progress
+                    self.writer.add_scalar('agent/total_iterations', agent_stats['total_iterations'], t)
+                    self.writer.add_scalar('agent/is_training', int(agent_stats['is_training']), t)
+
+                    # Replay buffer
+                    self.writer.add_scalar('agent/buffer_utilization', agent_stats['buffer_utilization'], t)
+
+                    # Learning rates (CRITICAL - Phase 22 finding would be visible!)
+                    self.writer.add_scalar('agent/actor_lr', agent_stats['actor_lr'], t)
+                    self.writer.add_scalar('agent/critic_lr', agent_stats['critic_lr'], t)
+
+                    # CNN learning rates (if using Dict buffer)
+                    if agent_stats.get('actor_cnn_lr') is not None:
+                        self.writer.add_scalar('agent/actor_cnn_lr', agent_stats['actor_cnn_lr'], t)
+                        self.writer.add_scalar('agent/critic_cnn_lr', agent_stats['critic_cnn_lr'], t)
+
+                    # Network parameter statistics (detect weight explosion/collapse)
+                    self.writer.add_scalar('agent/actor_param_mean', agent_stats['actor_param_mean'], t)
+                    self.writer.add_scalar('agent/actor_param_std', agent_stats['actor_param_std'], t)
+                    self.writer.add_scalar('agent/critic_param_mean', agent_stats['critic_param_mean'], t)
+                    self.writer.add_scalar('agent/critic_param_std', agent_stats['critic_param_std'], t)
+
+                    # CNN parameter statistics (if using Dict buffer)
+                    if agent_stats.get('actor_cnn_param_mean') is not None:
+                        self.writer.add_scalar('agent/actor_cnn_param_mean', agent_stats['actor_cnn_param_mean'], t)
+                        self.writer.add_scalar('agent/actor_cnn_param_std', agent_stats['actor_cnn_param_std'], t)
+                        self.writer.add_scalar('agent/critic_cnn_param_mean', agent_stats['critic_cnn_param_mean'], t)
+                        self.writer.add_scalar('agent/critic_cnn_param_std', agent_stats['critic_cnn_param_std'], t)
+
+                    # Print summary of key statistics
+                    if t % 5000 == 0:  # Print every 5000 steps
+                        print(f"\n{'='*70}")
+                        print(f"[AGENT STATISTICS] Step {t:,}")
+                        print(f"{'='*70}")
+                        print(f"Training Phase: {'LEARNING' if agent_stats['is_training'] else 'EXPLORATION'}")
+                        print(f"Buffer Utilization: {agent_stats['buffer_utilization']:.1%}")
+                        print(f"Learning Rates:")
+                        print(f"  Actor:  {agent_stats['actor_lr']:.6f}")
+                        print(f"  Critic: {agent_stats['critic_lr']:.6f}")
+                        if agent_stats.get('actor_cnn_lr') is not None:
+                            print(f"  Actor CNN:  {agent_stats['actor_cnn_lr']:.6f}")
+                            print(f"  Critic CNN: {agent_stats['critic_cnn_lr']:.6f}")
+                        print(f"Network Stats:")
+                        print(f"  Actor  - mean: {agent_stats['actor_param_mean']:+.6f}, std: {agent_stats['actor_param_std']:.6f}")
+                        print(f"  Critic - mean: {agent_stats['critic_param_mean']:+.6f}, std: {agent_stats['critic_param_std']:.6f}")
+                        print(f"{'='*70}\n")
 
             # ALWAYS log progress every 100 steps (not just debug mode)
             if t % 100 == 0:

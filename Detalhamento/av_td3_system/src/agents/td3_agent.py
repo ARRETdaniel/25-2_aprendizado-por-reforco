@@ -16,7 +16,7 @@ Date: 2024
 
 import copy
 import os
-from typing import Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -69,9 +69,9 @@ class TD3Agent:
             max_action: Maximum absolute value of actions (default: 1.0)
             cnn_extractor: DEPRECATED - Use actor_cnn/critic_cnn for separate CNNs
             actor_cnn: CNN feature extractor for actor network (end-to-end training)
-                      🔧 FIX: Separate CNN prevents gradient interference
+                       FIX: Separate CNN prevents gradient interference
             critic_cnn: CNN feature extractor for critic network (end-to-end training)
-                       🔧 FIX: Actor and critic optimize their own CNNs independently
+                       FIX: Actor and critic optimize their own CNNs independently
             use_dict_buffer: If True, use DictReplayBuffer for gradient flow
                             If False, use standard ReplayBuffer (no CNN training)
             config: Dictionary with TD3 hyperparameters (if None, loads from file)
@@ -79,7 +79,7 @@ class TD3Agent:
             device: Device to use ('cpu' or 'cuda'). If None, auto-detect.
 
         Note:
-            🔧 CRITICAL FIX: TD3 now uses SEPARATE CNNs for actor and critic.
+             CRITICAL FIX: TD3 now uses SEPARATE CNNs for actor and critic.
             This prevents gradient interference that was causing training failure.
             Reference: Stable-Baselines3 TD3 uses share_features_extractor=False
         """
@@ -307,12 +307,12 @@ class TD3Agent:
             }
 
             # Extract features using CNN (no gradients for action selection)
-            # 🔧 FIX: Use actor's CNN for action selection
+            #  FIX: Use actor's CNN for action selection
             with torch.no_grad():
                 state_tensor = self.extract_features(
                     obs_dict_tensor,
-                    enable_grad=False,  # ✅ Inference mode (no gradients)
-                    use_actor_cnn=True  # ✅ Use actor's CNN
+                    enable_grad=False,  #  Inference mode (no gradients)
+                    use_actor_cnn=True  #  Use actor's CNN
                 )  # (1, 535)
         else:
             # Handle flat numpy array (backward compatibility)
@@ -340,7 +340,7 @@ class TD3Agent:
         """
         Extract features from Dict observation with gradient support.
 
-        🔧 CRITICAL FIX: Now uses SEPARATE CNNs for actor and critic to prevent
+        CRITICAL FIX: Now uses SEPARATE CNNs for actor and critic to prevent
         gradient interference that was causing training failure (-52k rewards).
 
         This method combines CNN visual features with kinematic vector features.
@@ -352,7 +352,7 @@ class TD3Agent:
             enable_grad: If True, compute gradients for CNN (training mode)
                         If False, use torch.no_grad() for inference
             use_actor_cnn: If True, use actor's CNN; if False, use critic's CNN
-                          🔧 FIX: Prevents gradient interference between actor/critic
+                          FIX: Prevents gradient interference between actor/critic
 
         Returns:
             state: Flattened state tensor (B, 535) with gradient tracking if enabled
@@ -367,14 +367,14 @@ class TD3Agent:
         Reference:
             Stable-Baselines3 TD3: share_features_extractor=False (default)
         """
-        # 🔧 FIX: Select correct CNN based on caller (actor or critic)
+        # FIX: Select correct CNN based on caller (actor or critic)
         cnn = self.actor_cnn if use_actor_cnn else self.critic_cnn
 
         if cnn is None:
             # No CNN provided - use zeros for image features (fallback)
             batch_size = obs_dict['vector'].shape[0]
             image_features = torch.zeros(batch_size, 512, device=self.device)
-            print(f"⚠️  WARNING: extract_features called but {'actor' if use_actor_cnn else 'critic'}_cnn is None!")
+            print(f"WARNING: extract_features called but {'actor' if use_actor_cnn else 'critic'}_cnn is None!")
         elif enable_grad:
             # Training mode: Extract features WITH gradients
             # Gradients will flow: loss → actor/critic → state → CNN
@@ -471,12 +471,12 @@ class TD3Agent:
             # DictReplayBuffer returns: (obs_dict, action, next_obs_dict, reward, not_done)
             obs_dict, action, next_obs_dict, reward, not_done = self.replay_buffer.sample(batch_size)
 
-            # 🔧 FIX: Extract state features WITH gradients using CRITIC'S CNN
+            #  FIX: Extract state features WITH gradients using CRITIC'S CNN
             # Critic loss will backprop through critic_cnn (not actor_cnn)
             state = self.extract_features(
                 obs_dict,
-                enable_grad=True,  # ✅ Training mode (gradients enabled)
-                use_actor_cnn=False  # ✅ Use critic's CNN for Q-value estimation
+                enable_grad=True,  #  Training mode (gradients enabled)
+                use_actor_cnn=False  #  Use critic's CNN for Q-value estimation
             )  # (B, 535)
         else:
             # Standard ReplayBuffer returns: (state, action, next_state, reward, not_done)
@@ -486,11 +486,11 @@ class TD3Agent:
         with torch.no_grad():
             # Compute next_state for target Q-value calculation
             if self.use_dict_buffer and (self.actor_cnn is not None or self.critic_cnn is not None):
-                # 🔧 FIX: Extract next state features using CRITIC'S CNN (no gradients for target)
+                # FIX: Extract next state features using CRITIC'S CNN (no gradients for target)
                 next_state = self.extract_features(
                     next_obs_dict,
-                    enable_grad=False,  # ✅ No gradients for target computation
-                    use_actor_cnn=False  # ✅ Use critic's CNN
+                    enable_grad=False,  #  No gradients for target computation
+                    use_actor_cnn=False  #  Use critic's CNN
                 )
             # else: next_state already computed above from standard buffer
 
@@ -512,7 +512,7 @@ class TD3Agent:
         # Compute critic loss (MSE on both Q-networks)
         critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
 
-        # 🔧 FIX: Optimize critics AND critic's CNN (gradients flow through state → critic_cnn)
+        # FIX: Optimize critics AND critic's CNN (gradients flow through state → critic_cnn)
         self.critic_optimizer.zero_grad()
         if self.critic_cnn_optimizer is not None:
             self.critic_cnn_optimizer.zero_grad()  # Zero critic CNN gradients before backprop
@@ -546,13 +546,13 @@ class TD3Agent:
 
         # Delayed policy updates
         if self.total_it % self.policy_freq == 0:
-            # 🔧 FIX: Re-extract features for actor update using ACTOR'S CNN
+            # FIX: Re-extract features for actor update using ACTOR'S CNN
             # Actor loss will backprop through actor_cnn (not critic_cnn)
             if self.use_dict_buffer and (self.actor_cnn is not None or self.critic_cnn is not None):
                 state_for_actor = self.extract_features(
                     obs_dict,
-                    enable_grad=True,  # ✅ Training mode (gradients enabled)
-                    use_actor_cnn=True  # ✅ Use actor's CNN for policy learning
+                    enable_grad=True,  # Training mode (gradients enabled)
+                    use_actor_cnn=True  # Use actor's CNN for policy learning
                 )
             else:
                 state_for_actor = state  # Use same state from standard buffer
@@ -560,7 +560,7 @@ class TD3Agent:
             # Compute actor loss: -Q1(s, μ_φ(s))
             actor_loss = -self.critic.Q1(state_for_actor, self.actor(state_for_actor)).mean()
 
-            # 🔧 FIX: Optimize actor AND actor's CNN (gradients flow through state_for_actor → actor_cnn)
+            # FIX: Optimize actor AND actor's CNN (gradients flow through state_for_actor → actor_cnn)
             self.actor_optimizer.zero_grad()
             if self.actor_cnn_optimizer is not None:
                 self.actor_cnn_optimizer.zero_grad()
@@ -605,45 +605,98 @@ class TD3Agent:
         Save agent checkpoint to disk.
 
         Saves actor, critic, CNN networks and their optimizers in a single file.
+        FIXED: Now correctly saves BOTH actor_cnn and critic_cnn separately.
 
         Args:
             filepath: Path to save checkpoint (e.g., 'checkpoints/td3_100k.pth')
+
+        Note:
+            PRIMARY FIX: Saves SEPARATE CNNs (actor_cnn + critic_cnn) and their optimizers.
+            This ensures the Phase 21 architecture fix is properly persisted.
+            Reference: PyTorch best practices - save all state_dicts and optimizers.
         """
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
         checkpoint = {
+            # Training state
             'total_it': self.total_it,
+
+            # Core networks
             'actor_state_dict': self.actor.state_dict(),
             'critic_state_dict': self.critic.state_dict(),
+
+            # Core optimizers
             'actor_optimizer_state_dict': self.actor_optimizer.state_dict(),
             'critic_optimizer_state_dict': self.critic_optimizer.state_dict(),
+
+            # Configuration
             'config': self.config,
-            'use_dict_buffer': self.use_dict_buffer
+            'use_dict_buffer': self.use_dict_buffer,
+
+            # TD3 hyperparameters (for self-contained checkpoint)
+            'discount': self.discount,
+            'tau': self.tau,
+            'policy_freq': self.policy_freq,
+            'policy_noise': self.policy_noise,
+            'noise_clip': self.noise_clip,
+            'max_action': self.max_action,
+            'state_dim': self.state_dim,
+            'action_dim': self.action_dim,
         }
 
-        # Add CNN state if available (Bug #13 fix)
-        if self.cnn_extractor is not None:
-            checkpoint['cnn_state_dict'] = self.cnn_extractor.state_dict()
-            if self.cnn_optimizer is not None:
-                checkpoint['cnn_optimizer_state_dict'] = self.cnn_optimizer.state_dict()
+        # PRIMARY FIX: Save SEPARATE CNNs if using Dict buffer
+        if self.use_dict_buffer:
+            # Save actor CNN
+            if self.actor_cnn is not None:
+                checkpoint['actor_cnn_state_dict'] = self.actor_cnn.state_dict()
+                print(f"  Saving actor CNN state ({len(checkpoint['actor_cnn_state_dict'])} layers)")
+            else:
+                checkpoint['actor_cnn_state_dict'] = None
+
+            # Save critic CNN
+            if self.critic_cnn is not None:
+                checkpoint['critic_cnn_state_dict'] = self.critic_cnn.state_dict()
+                print(f"  Saving critic CNN state ({len(checkpoint['critic_cnn_state_dict'])} layers)")
+            else:
+                checkpoint['critic_cnn_state_dict'] = None
+
+            # Save CNN optimizers
+            if self.actor_cnn_optimizer is not None:
+                checkpoint['actor_cnn_optimizer_state_dict'] = self.actor_cnn_optimizer.state_dict()
+                print(f"  Saving actor CNN optimizer state")
+            else:
+                checkpoint['actor_cnn_optimizer_state_dict'] = None
+
+            if self.critic_cnn_optimizer is not None:
+                checkpoint['critic_cnn_optimizer_state_dict'] = self.critic_cnn_optimizer.state_dict()
+                print(f"  Saving critic CNN optimizer state")
+            else:
+                checkpoint['critic_cnn_optimizer_state_dict'] = None
 
         torch.save(checkpoint, filepath)
         print(f"Checkpoint saved to {filepath}")
-        if self.cnn_extractor is not None:
-            print(f"  Includes CNN state for end-to-end training")
+        if self.use_dict_buffer:
+            print(f"  Includes SEPARATE actor_cnn and critic_cnn states (Phase 21 fix)")
 
     def load_checkpoint(self, filepath: str) -> None:
         """
         Load agent checkpoint from disk.
 
         Restores networks, optimizers, and training state. Also recreates
-        target networks from loaded weights. Includes CNN state if available.
+        target networks from loaded weights.
+        FIXED: Now correctly loads BOTH actor_cnn and critic_cnn separately.
 
         Args:
             filepath: Path to checkpoint file
 
         Raises:
             FileNotFoundError: If checkpoint file doesn't exist
+
+        Note:
+            PRIMARY FIX: Loads SEPARATE CNNs (actor_cnn + critic_cnn) and their optimizers.
+            This ensures the Phase 21 architecture fix is properly restored.
+            Target networks are recreated via deepcopy (TD3 convention).
+            Reference: Original TD3.py - targets are always recreated on load.
         """
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Checkpoint not found: {filepath}")
@@ -654,7 +707,7 @@ class TD3Agent:
         self.actor.load_state_dict(checkpoint['actor_state_dict'])
         self.critic.load_state_dict(checkpoint['critic_state_dict'])
 
-        # Recreate target networks
+        # Recreate target networks (TD3 convention - not saved, always recreated)
         self.actor_target = copy.deepcopy(self.actor)
         self.critic_target = copy.deepcopy(self.critic)
 
@@ -662,32 +715,226 @@ class TD3Agent:
         self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
         self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
 
-        # Restore CNN state if available (Bug #13 fix)
-        if 'cnn_state_dict' in checkpoint and self.cnn_extractor is not None:
-            self.cnn_extractor.load_state_dict(checkpoint['cnn_state_dict'])
-            if 'cnn_optimizer_state_dict' in checkpoint and self.cnn_optimizer is not None:
-                self.cnn_optimizer.load_state_dict(checkpoint['cnn_optimizer_state_dict'])
-            print(f"  CNN state restored")
+        # PRIMARY FIX: Load SEPARATE CNNs if using Dict buffer
+        if checkpoint.get('use_dict_buffer', False):
+            # Load actor CNN
+            if 'actor_cnn_state_dict' in checkpoint and checkpoint['actor_cnn_state_dict'] is not None:
+                if self.actor_cnn is not None:
+                    self.actor_cnn.load_state_dict(checkpoint['actor_cnn_state_dict'])
+                    print(f"Actor CNN state restored ({len(checkpoint['actor_cnn_state_dict'])} layers)")
+                else:
+                    print(f"Actor CNN state in checkpoint but agent.actor_cnn is None")
+            else:
+                print(f"No actor CNN state in checkpoint")
+
+            # Load critic CNN
+            if 'critic_cnn_state_dict' in checkpoint and checkpoint['critic_cnn_state_dict'] is not None:
+                if self.critic_cnn is not None:
+                    self.critic_cnn.load_state_dict(checkpoint['critic_cnn_state_dict'])
+                    print(f"Critic CNN state restored ({len(checkpoint['critic_cnn_state_dict'])} layers)")
+                else:
+                    print(f"Critic CNN state in checkpoint but agent.critic_cnn is None")
+            else:
+                print(f"No critic CNN state in checkpoint")
+
+            # Load CNN optimizers
+            if 'actor_cnn_optimizer_state_dict' in checkpoint and checkpoint['actor_cnn_optimizer_state_dict'] is not None:
+                if self.actor_cnn_optimizer is not None:
+                    self.actor_cnn_optimizer.load_state_dict(checkpoint['actor_cnn_optimizer_state_dict'])
+                    print(f"Actor CNN optimizer restored")
+                else:
+                    print(f"Actor CNN optimizer state in checkpoint but agent.actor_cnn_optimizer is None")
+            else:
+                print(f"No actor CNN optimizer state in checkpoint")
+
+            if 'critic_cnn_optimizer_state_dict' in checkpoint and checkpoint['critic_cnn_optimizer_state_dict'] is not None:
+                if self.critic_cnn_optimizer is not None:
+                    self.critic_cnn_optimizer.load_state_dict(checkpoint['critic_cnn_optimizer_state_dict'])
+                    print(f"Critic CNN optimizer restored")
+                else:
+                    print(f"Critic CNN optimizer state in checkpoint but agent.critic_cnn_optimizer is None")
+            else:
+                print(f"No critic CNN optimizer state in checkpoint")
 
         # Restore training state
         self.total_it = checkpoint['total_it']
 
         print(f"Checkpoint loaded from {filepath}")
         print(f"  Resumed at iteration: {self.total_it}")
+        if checkpoint.get('use_dict_buffer', False):
+            print(f"  SEPARATE CNNs restored (Phase 21 fix)")
 
-    def get_stats(self) -> Dict[str, any]:
+    def get_stats(self) -> Dict[str, Any]:
         """
-        Get current agent statistics.
+        Get comprehensive agent statistics for monitoring and debugging.
+
+        This method provides detailed information about:
+        - Training progress (iterations, phase)
+        - Replay buffer state (size, utilization)
+        - Network parameters (weight statistics)
+        - Learning rates (all optimizers)
+        - TD3 hyperparameters
+        - CNN statistics (if using Dict buffer)
 
         Returns:
-            Dictionary with agent state information
+            Dictionary with comprehensive agent statistics
+
+        Note:
+            Following Stable-Baselines3 and OpenAI Spinning Up best practices
+            for comprehensive RL monitoring and debugging.
         """
-        return {
+        stats = {
+            # ===== TRAINING PROGRESS =====
             'total_iterations': self.total_it,
+            'is_training': self.total_it >= self.start_timesteps,
+            'exploration_phase': self.total_it < self.start_timesteps,
+
+            # ===== REPLAY BUFFER STATS =====
             'replay_buffer_size': len(self.replay_buffer),
             'replay_buffer_full': self.replay_buffer.is_full(),
+            'buffer_utilization': len(self.replay_buffer) / self.replay_buffer.max_size,
+            'buffer_max_size': self.replay_buffer.max_size,
+            'use_dict_buffer': self.use_dict_buffer,
+
+            # ===== LEARNING RATES (CRITICAL FOR DEBUGGING) =====
+            'actor_lr': self.actor_optimizer.param_groups[0]['lr'],
+            'critic_lr': self.critic_optimizer.param_groups[0]['lr'],
+
+            # ===== TD3 HYPERPARAMETERS (REPRODUCIBILITY) =====
+            'discount': self.discount,
+            'tau': self.tau,
+            'policy_freq': self.policy_freq,
+            'policy_noise': self.policy_noise,
+            'noise_clip': self.noise_clip,
+            'max_action': self.max_action,
+            'start_timesteps': self.start_timesteps,
+            'batch_size': self.batch_size,            # ===== NETWORK PARAMETER STATISTICS =====
+            'actor_param_mean': self._get_param_stat(self.actor.parameters(), 'mean'),
+            'actor_param_std': self._get_param_stat(self.actor.parameters(), 'std'),
+            'actor_param_max': self._get_param_stat(self.actor.parameters(), 'max'),
+            'actor_param_min': self._get_param_stat(self.actor.parameters(), 'min'),
+
+            'critic_param_mean': self._get_param_stat(self.critic.parameters(), 'mean'),
+            'critic_param_std': self._get_param_stat(self.critic.parameters(), 'std'),
+            'critic_param_max': self._get_param_stat(self.critic.parameters(), 'max'),
+            'critic_param_min': self._get_param_stat(self.critic.parameters(), 'min'),
+
+            'target_actor_param_mean': self._get_param_stat(self.actor_target.parameters(), 'mean'),
+            'target_critic_param_mean': self._get_param_stat(self.critic_target.parameters(), 'mean'),
+
+            # ===== COMPUTE DEVICE =====
             'device': str(self.device)
         }
+
+        # ===== CNN-SPECIFIC STATS (if using Dict buffer with separate CNNs) =====
+        if self.use_dict_buffer:
+            stats.update({
+                'actor_cnn_lr': self.actor_cnn_optimizer.param_groups[0]['lr'] if self.actor_cnn_optimizer else None,
+                'critic_cnn_lr': self.critic_cnn_optimizer.param_groups[0]['lr'] if self.critic_cnn_optimizer else None,
+
+                'actor_cnn_param_mean': self._get_param_stat(self.actor_cnn.parameters(), 'mean') if self.actor_cnn else None,
+                'actor_cnn_param_std': self._get_param_stat(self.actor_cnn.parameters(), 'std') if self.actor_cnn else None,
+                'actor_cnn_param_max': self._get_param_stat(self.actor_cnn.parameters(), 'max') if self.actor_cnn else None,
+                'actor_cnn_param_min': self._get_param_stat(self.actor_cnn.parameters(), 'min') if self.actor_cnn else None,
+
+                'critic_cnn_param_mean': self._get_param_stat(self.critic_cnn.parameters(), 'mean') if self.critic_cnn else None,
+                'critic_cnn_param_std': self._get_param_stat(self.critic_cnn.parameters(), 'std') if self.critic_cnn else None,
+                'critic_cnn_param_max': self._get_param_stat(self.critic_cnn.parameters(), 'max') if self.critic_cnn else None,
+                'critic_cnn_param_min': self._get_param_stat(self.critic_cnn.parameters(), 'min') if self.critic_cnn else None,
+            })
+
+        return stats
+
+    def _get_param_stat(self, parameters, stat_type: str = 'mean') -> float:
+        """
+        Calculate statistics for network parameters.
+
+        Args:
+            parameters: Iterator of torch parameters
+            stat_type: Type of statistic ('mean', 'std', 'max', 'min')
+
+        Returns:
+            Computed statistic value
+
+        Note:
+            This utility helps detect weight explosion/collapse, NaN issues,
+            and overall network health.
+        """
+        params_flat = torch.cat([p.data.flatten() for p in parameters if p.requires_grad])
+
+        if len(params_flat) == 0:
+            return 0.0
+
+        if stat_type == 'mean':
+            return float(torch.mean(params_flat).item())
+        elif stat_type == 'std':
+            return float(torch.std(params_flat).item())
+        elif stat_type == 'max':
+            return float(torch.max(params_flat).item())
+        elif stat_type == 'min':
+            return float(torch.min(params_flat).item())
+        else:
+            raise ValueError(f"Unknown stat_type: {stat_type}")
+
+    def get_gradient_stats(self) -> Dict[str, float]:
+        """
+        Get gradient statistics for all networks (after backward pass).
+
+        This method should be called AFTER loss.backward() but BEFORE optimizer.step()
+        to capture gradient information for debugging.
+
+        Returns:
+            Dictionary with gradient norm statistics for each network
+
+        Note:
+            Gradient norms are CRITICAL for debugging:
+            - Vanishing gradients: norm << 0.01
+            - Exploding gradients: norm >> 10.0
+            - Healthy learning: norm in [0.01, 10.0]
+
+        Warning:
+            This method requires gradients to be computed. Call after backward()
+            but before optimizer.step() or optimizer.zero_grad().
+        """
+        stats = {
+            'actor_grad_norm': self._get_grad_norm(self.actor.parameters()),
+            'critic_grad_norm': self._get_grad_norm(self.critic.parameters()),
+        }
+
+        # Add CNN gradient norms if using Dict buffer
+        if self.use_dict_buffer:
+            stats.update({
+                'actor_cnn_grad_norm': self._get_grad_norm(self.actor_cnn.parameters()) if self.actor_cnn else 0.0,
+                'critic_cnn_grad_norm': self._get_grad_norm(self.critic_cnn.parameters()) if self.critic_cnn else 0.0,
+            })
+
+        return stats
+
+    def _get_grad_norm(self, parameters) -> float:
+        """
+        Calculate L2 norm of gradients for given parameters.
+
+        Args:
+            parameters: Iterator of torch parameters
+
+        Returns:
+            L2 norm of gradients
+
+        Note:
+            This is the same calculation used by torch.nn.utils.clip_grad_norm_
+            but without the clipping operation.
+        """
+        params_with_grad = [p for p in parameters if p.grad is not None]
+
+        if len(params_with_grad) == 0:
+            return 0.0
+
+        # Calculate L2 norm of all gradients
+        total_norm = torch.norm(
+            torch.stack([torch.norm(p.grad.detach()) for p in params_with_grad])
+        )
+
+        return float(total_norm.item())
 
 
 # Example usage and testing

@@ -284,19 +284,19 @@ FOR each timestep t:
     action = agent.select_action(obs_dict)
     next_obs, reward, done = env.step(action)
     agent.replay_buffer.add(...)
-    
+
     IF t > start_timesteps:
         metrics = agent.train(batch_size)
-        
+
         # Inside agent.train():
         #   critic_loss.backward()
         #   cnn_diagnostics.capture_gradients()
         #   cnn_optimizer.step()
         #   cnn_diagnostics.capture_weights()
-        
+
         IF t % 100 == 0 AND self.debug:
             cnn_diagnostics.log_to_tensorboard(t)
-            
+
             IF t % 1000 == 0:
                 agent.print_diagnostics()
 ```
@@ -454,7 +454,7 @@ python scripts/train_td3.py --steps 1000 --debug --seed 42
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** 2025-01-28  
-**Author:** Daniel Terra  
+**Document Version:** 1.0
+**Last Updated:** 2025-01-28
+**Author:** Daniel Terra
 **Status:** ✅ COMPLETE - Ready for testing

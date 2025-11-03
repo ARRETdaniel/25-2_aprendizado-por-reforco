@@ -26,8 +26,8 @@ setup_cnn_monitoring(agent, writer)  # writer is TensorBoard SummaryWriter
 # In training loop (after agent.train())
 if t % 100 == 0 and t > start_timesteps:
     log_cnn_diagnostics(
-        agent, 
-        writer, 
+        agent,
+        writer,
         step=t,
         print_summary=(t % 1000 == 0)  # Print every 1000 steps
     )
@@ -41,7 +41,7 @@ tensorboard --logdir runs/
 
 Navigate to:
 - **Scalars → cnn_diagnostics/gradients**: Gradient magnitudes per layer
-- **Scalars → cnn_diagnostics/weights**: Weight norms and changes per layer  
+- **Scalars → cnn_diagnostics/weights**: Weight norms and changes per layer
 - **Scalars → cnn_diagnostics/features**: Feature statistics (mean, std, norm)
 - **Scalars → cnn_diagnostics/health**: Overall health metrics
 
@@ -127,7 +127,7 @@ Captures: 950 gradients | 950 weights | 1900 features
    # WRONG
    state = flatten_dict_obs(obs_dict)  # Breaks gradient flow!
    agent.select_action(state, noise=0.2)
-   
+
    # CORRECT
    agent.select_action(obs_dict, noise=0.2)  # Gradients preserved!
    ```
@@ -300,5 +300,5 @@ For issues with CNN diagnostics:
 3. Run standalone script: `python scripts/monitor_cnn_learning.py --checkpoint <path>`
 4. Check TensorBoard logs: `tensorboard --logdir runs/`
 
-**Last Updated:** 2025-01-XX  
+**Last Updated:** 2025-01-XX
 **Author:** Daniel Terra

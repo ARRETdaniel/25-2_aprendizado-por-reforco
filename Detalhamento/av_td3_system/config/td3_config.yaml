@@ -19,7 +19,7 @@ algorithm:
   # Training parameters
   batch_size: 256  # Mini-batch size sampled from replay buffer
   buffer_size: 1000000  # Replay buffer capacity (1M transitions)
-  learning_starts: 10000  # Reduced from 25k based on Elallid et al. 2023 TD3-CARLA paper
+  learning_starts: 25000  # Reduced from 25k based on Elallid et al. 2023 TD3-CARLA paper
   # Rationale: Papers show 10k-25k range sufficient for CARLA environments.
   # CARLA physics is more deterministic than MuJoCo (original TD3 benchmark),
   # so less initial random exploration needed. Shorter warm-up allows agent
@@ -34,7 +34,7 @@ algorithm:
   # - Chen et al., Mnih et al.: Early training needs more exploration to escape local minima
   # Rationale: After learning regression at step 11,600+, agent got stuck in "don't move" local minimum.
   # Higher exploration (0.2) encourages continued movement exploration even after initial success.
-  exploration_noise: 0.2  # Std of Gaussian noise (scaled by max_action) - INCREASED for stability
+  exploration_noise: 0.1  # Std of Gaussian noise (scaled by max_action) - INCREASED for stability
 
 # Network architecture (matching official TD3 implementation)
 networks:
