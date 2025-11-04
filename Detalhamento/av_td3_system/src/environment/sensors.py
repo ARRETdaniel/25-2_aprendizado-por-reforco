@@ -261,6 +261,8 @@ class ImageStack:
 class CollisionDetector:
     """
     Tracks collision events with other vehicles/obstacles.
+
+    Captures collision impulse magnitude for graduated penalties in PBRS reward shaping.
     """
 
     def __init__(self, vehicle: carla.Actor, world: carla.World):
@@ -278,6 +280,8 @@ class CollisionDetector:
         # Collision state
         self.collision_detected = False
         self.collision_event = None
+        self.collision_impulse = 0.0  # NEW: Impulse magnitude in Newton-seconds
+        self.collision_force = 0.0    # NEW: Approximate force in Newtons
         self.collision_lock = threading.Lock()
 
         # Collision sensor setup
@@ -299,15 +303,34 @@ class CollisionDetector:
         """
         Callback when collision occurs.
 
+        Captures collision impulse magnitude for graduated penalties.
+        Collision impulse is the force applied over the collision duration.
+
         Args:
             event: CARLA CollisionEvent with collision details
+                - event.normal_impulse: Vector3D impulse in Newton-seconds (N·s)
+                - event.other_actor: The actor collided with
+
+        Reference: PBRS Implementation Guide (Priority 3 Fix)
         """
         with self.collision_lock:
             self.collision_detected = True
             self.collision_event = event
+
+            # Extract collision impulse magnitude (force in Newton-seconds)
+            # This enables graduated penalties (soft collision vs severe crash)
+            impulse_vector = event.normal_impulse  # Vector3D in N·s
+            self.collision_impulse = impulse_vector.length()  # Magnitude in N·s
+
+            # Approximate collision force (assuming typical collision duration ~0.1s)
+            # This is an approximation: Force = Impulse / Duration
+            # CARLA doesn't provide exact collision duration, so we use typical value
+            collision_duration = 0.1  # seconds (typical for rigid body impacts)
+            self.collision_force = self.collision_impulse / collision_duration  # Newtons
+
         self.logger.warning(
             f"Collision detected with {event.other_actor.type_id} "
-            f"(impulse: {event.normal_impulse.length()})"
+            f"(impulse: {self.collision_impulse:.1f} N·s, force: ~{self.collision_force:.1f} N)"
         )
 
     def is_colliding(self) -> bool:
@@ -325,13 +348,14 @@ class CollisionDetector:
         Get collision details if collision occurred.
 
         Returns:
-            Dict with collision info or None
+            Dict with collision info including impulse magnitude, or None
         """
         with self.collision_lock:
             if self.collision_detected and self.collision_event:
                 return {
                     "other_actor": str(self.collision_event.other_actor.type_id),
-                    "impulse": self.collision_event.normal_impulse.length(),
+                    "impulse": self.collision_impulse,  # N·s (Newton-seconds)
+                    "force": self.collision_force,      # N (Newtons, approximate)
                 }
             return None
 
@@ -340,6 +364,8 @@ class CollisionDetector:
         with self.collision_lock:
             self.collision_detected = False
             self.collision_event = None
+            self.collision_impulse = 0.0
+            self.collision_force = 0.0
 
     def destroy(self):
         """Clean up collision sensor."""

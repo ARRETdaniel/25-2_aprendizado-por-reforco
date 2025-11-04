@@ -1,7 +1,7 @@
 # Checkpoint Saving Fix Summary
 
-**Date:** November 3, 2025  
-**Issue:** Critical bugs in save_checkpoint() method  
+**Date:** November 3, 2025
+**Issue:** Critical bugs in save_checkpoint() method
 **Status:** 🔴 **CRITICAL - FIX REQUIRED IMMEDIATELY**
 
 ---
@@ -38,7 +38,7 @@ self.critic_cnn = ...  # ✅ Exists but NOT SAVED
 ### Critical (P0 - Immediate)
 
 1. ❌ `actor_cnn_state_dict` - Actor CNN weights NOT SAVED
-2. ❌ `critic_cnn_state_dict` - Critic CNN weights NOT SAVED  
+2. ❌ `critic_cnn_state_dict` - Critic CNN weights NOT SAVED
 3. ❌ `actor_cnn_optimizer_state_dict` - Actor CNN optimizer NOT SAVED
 4. ❌ `critic_cnn_optimizer_state_dict` - Critic CNN optimizer NOT SAVED
 
@@ -60,16 +60,16 @@ def save_checkpoint(self, filepath: str) -> None:
         'critic_state_dict': self.critic.state_dict(),
         'actor_optimizer_state_dict': self.actor_optimizer.state_dict(),
         'critic_optimizer_state_dict': self.critic_optimizer.state_dict(),
-        
+
         # Training state
         'total_it': self.total_it,
-        
+
         # 🔧 PRIMARY FIX: Save BOTH CNNs separately
         'actor_cnn_state_dict': self.actor_cnn.state_dict() if self.actor_cnn else None,
         'critic_cnn_state_dict': self.critic_cnn.state_dict() if self.critic_cnn else None,
         'actor_cnn_optimizer_state_dict': self.actor_cnn_optimizer.state_dict() if self.actor_cnn_optimizer else None,
         'critic_cnn_optimizer_state_dict': self.critic_cnn_optimizer.state_dict() if self.critic_cnn_optimizer else None,
-        
+
         # Configuration and hyperparameters
         'config': self.config,
         'use_dict_buffer': self.use_dict_buffer,
@@ -78,7 +78,7 @@ def save_checkpoint(self, filepath: str) -> None:
         'policy_freq': self.policy_freq,
         'max_action': self.max_action,
     }
-    
+
     torch.save(checkpoint, filepath)
 ```
 
@@ -87,32 +87,32 @@ def save_checkpoint(self, filepath: str) -> None:
 ```python
 def load_checkpoint(self, filepath: str) -> None:
     checkpoint = torch.load(filepath, map_location=self.device)
-    
+
     # Restore main networks
     self.actor.load_state_dict(checkpoint['actor_state_dict'])
     self.critic.load_state_dict(checkpoint['critic_state_dict'])
-    
+
     # Recreate targets (TD3 convention)
     self.actor_target = copy.deepcopy(self.actor)
     self.critic_target = copy.deepcopy(self.critic)
-    
+
     # Restore optimizers
     self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
     self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
-    
+
     # 🔧 PRIMARY FIX: Load BOTH CNNs separately
     if 'actor_cnn_state_dict' in checkpoint and self.actor_cnn is not None:
         self.actor_cnn.load_state_dict(checkpoint['actor_cnn_state_dict'])
-    
+
     if 'critic_cnn_state_dict' in checkpoint and self.critic_cnn is not None:
         self.critic_cnn.load_state_dict(checkpoint['critic_cnn_state_dict'])
-    
+
     if 'actor_cnn_optimizer_state_dict' in checkpoint and self.actor_cnn_optimizer is not None:
         self.actor_cnn_optimizer.load_state_dict(checkpoint['actor_cnn_optimizer_state_dict'])
-    
+
     if 'critic_cnn_optimizer_state_dict' in checkpoint and self.critic_cnn_optimizer is not None:
         self.critic_cnn_optimizer.load_state_dict(checkpoint['critic_cnn_optimizer_state_dict'])
-    
+
     # Restore training state
     self.total_it = checkpoint['total_it']
 ```
@@ -238,5 +238,5 @@ This bug makes checkpointing completely non-functional for our architecture. Wit
 
 ---
 
-**Status:** Analysis complete, fix implementation pending  
+**Status:** Analysis complete, fix implementation pending
 **Next Step:** Implement fixes in td3_agent.py

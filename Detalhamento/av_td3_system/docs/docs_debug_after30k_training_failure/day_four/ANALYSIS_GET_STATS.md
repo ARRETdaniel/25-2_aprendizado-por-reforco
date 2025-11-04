@@ -1,9 +1,9 @@
 # Analysis: `get_stats()` Method in TD3Agent
 
-**Date:** November 3, 2025  
-**Phase:** 25 - Systematic Method-by-Method Analysis  
-**Method:** `get_stats()` (lines 767-778)  
-**Status:** ✅ ANALYSIS COMPLETE  
+**Date:** November 3, 2025
+**Phase:** 25 - Systematic Method-by-Method Analysis
+**Method:** `get_stats()` (lines 767-778)
+**Status:** ✅ ANALYSIS COMPLETE
 
 ---
 
@@ -75,8 +75,8 @@ def get_stats(self) -> Dict[str, any]:
     }
 ```
 
-**Location:** `src/agents/td3_agent.py` (lines 767-778)  
-**Called by:** Only in `__main__` test code (line 793), NOT in actual training loop  
+**Location:** `src/agents/td3_agent.py` (lines 767-778)
+**Called by:** Only in `__main__` test code (line 793), NOT in actual training loop
 **Frequency:** Dead code in production
 
 ### Signature Analysis
@@ -98,24 +98,24 @@ From https://stable-baselines3.readthedocs.io/en/master/common/logger.html:
 **Standard Metrics Logged:**
 
 1. **rollout/** - Episode-level metrics
-   - `ep_len_mean`: Mean episode length  
-   - `ep_rew_mean`: Mean episodic reward  
-   - `exploration_rate`: Current exploration rate (for DQN)  
-   - `success_rate`: Mean success rate  
+   - `ep_len_mean`: Mean episode length
+   - `ep_rew_mean`: Mean episodic reward
+   - `exploration_rate`: Current exploration rate (for DQN)
+   - `success_rate`: Mean success rate
 
 2. **time/** - Time-related metrics
-   - `episodes`: Total number of episodes  
-   - `fps`: Frames per second  
-   - `iterations`: Number of iterations  
-   - `time_elapsed`: Time in seconds  
-   - `total_timesteps`: Total timesteps  
+   - `episodes`: Total number of episodes
+   - `fps`: Frames per second
+   - `iterations`: Number of iterations
+   - `time_elapsed`: Time in seconds
+   - `total_timesteps`: Total timesteps
 
 3. **train/** - Training-specific metrics
-   - `actor_loss`: Current actor loss (off-policy)  
-   - `critic_loss`: Current critic loss (off-policy)  
-   - `learning_rate`: Current learning rate  
-   - `n_updates`: Number of gradient updates  
-   - `std`: Policy standard deviation (when applicable)  
+   - `actor_loss`: Current actor loss (off-policy)
+   - `critic_loss`: Current critic loss (off-policy)
+   - `learning_rate`: Current learning rate
+   - `n_updates`: Number of gradient updates
+   - `std`: Policy standard deviation (when applicable)
 
 **Key Insight:** SB3 logs **WAY MORE** than just buffer size!
 
@@ -390,7 +390,7 @@ def get_stats(self) -> Dict[str, Any]:  # capital 'A'
 def get_stats(self) -> Dict[str, Any]:
     """
     Get comprehensive agent statistics for monitoring and debugging.
-    
+
     Returns:
         Dictionary with agent state information including:
         - Training progress (iterations, phase)
@@ -405,22 +405,22 @@ def get_stats(self) -> Dict[str, Any]:
         'total_iterations': self.total_it,
         'is_training': self.total_it >= self.learning_starts,
         'exploration_phase': self.total_it < self.learning_starts,
-        
+
         # ===== Replay Buffer =====
         'replay_buffer_size': len(self.replay_buffer),
         'replay_buffer_full': self.replay_buffer.is_full(),
         'replay_buffer_utilization': len(self.replay_buffer) / self.replay_buffer.max_size,
-        
+
         # ===== Learning Rates =====
         'actor_lr': self.actor_optimizer.param_groups[0]['lr'],
         'critic_lr': self.critic_optimizer.param_groups[0]['lr'],
-        
+
         # ===== Network Statistics =====
         'actor_param_mean': self._get_param_stat(self.actor.parameters(), 'mean'),
         'actor_param_std': self._get_param_stat(self.actor.parameters(), 'std'),
         'critic_param_mean': self._get_param_stat(self.critic.parameters(), 'mean'),
         'critic_param_std': self._get_param_stat(self.critic.parameters(), 'std'),
-        
+
         # ===== TD3 Hyperparameters =====
         'discount': self.discount,
         'tau': self.tau,
@@ -428,11 +428,11 @@ def get_stats(self) -> Dict[str, Any]:
         'policy_noise': self.policy_noise,
         'noise_clip': self.noise_clip,
         'max_action': self.max_action,
-        
+
         # ===== Device =====
         'device': str(self.device),
     }
-    
+
     # Add CNN statistics if using Dict buffer
     if self.use_dict_buffer:
         stats.update({
@@ -443,22 +443,22 @@ def get_stats(self) -> Dict[str, Any]:
             'critic_cnn_param_mean': self._get_param_stat(self.critic_cnn.parameters(), 'mean'),
             'critic_cnn_param_std': self._get_param_stat(self.critic_cnn.parameters(), 'std'),
         })
-    
+
     return stats
 
 def _get_param_stat(self, parameters, stat_type='mean'):
     """
     Compute statistics over network parameters.
-    
+
     Args:
         parameters: Iterator of network parameters
         stat_type: 'mean', 'std', 'min', or 'max'
-    
+
     Returns:
         Computed statistic as float
     """
     params = torch.cat([p.data.flatten() for p in parameters if p.requires_grad])
-    
+
     if stat_type == 'mean':
         return params.mean().item()
     elif stat_type == 'std':
@@ -485,9 +485,9 @@ def _get_param_stat(self, parameters, stat_type='mean'):
 def get_gradient_stats(self) -> Dict[str, float]:
     """
     Get gradient statistics after backward pass.
-    
+
     NOTE: Must be called AFTER loss.backward() but BEFORE optimizer.step()
-    
+
     Returns:
         Dictionary with gradient norms for each network
     """
@@ -501,21 +501,21 @@ def get_gradient_stats(self) -> Dict[str, float]:
 def _get_grad_norm(self, parameters) -> float:
     """
     Compute L2 norm of gradients.
-    
+
     Args:
         parameters: Iterator of network parameters
-    
+
     Returns:
         Gradient norm as float
     """
     grads = [p.grad for p in parameters if p.grad is not None]
     if not grads:
         return 0.0
-    
+
     total_norm = torch.norm(
         torch.stack([torch.norm(g.detach()) for g in grads])
     ).item()
-    
+
     return total_norm
 ```
 
@@ -563,12 +563,12 @@ def get_stats(self) -> Dict[str, Any]:  # ✅ capital 'A'
 # In training loop:
 if t % 1000 == 0:  # Log every 1000 steps
     stats = self.agent.get_stats()
-    
+
     # Log to TensorBoard
     for key, value in stats.items():
         if value is not None:
             self.writer.add_scalar(f'agent/{key}', value, t)
-    
+
     # Log gradient stats after training step
     if t >= self.config['learning_starts']:
         grad_stats = self.agent.get_gradient_stats()
@@ -632,35 +632,35 @@ The `get_stats()` method is **algorithmically correct but functionally incomplet
 
 ## References
 
-1. **Stable-Baselines3 Logger Documentation**  
+1. **Stable-Baselines3 Logger Documentation**
    https://stable-baselines3.readthedocs.io/en/master/common/logger.html
    - Standard RL metrics logging
    - Training/eval/rollout statistics
    - Best practices for monitoring
 
-2. **OpenAI Spinning Up: Logging**  
+2. **OpenAI Spinning Up: Logging**
    https://spinningup.openai.com/en/latest/utils/logger.html
    - Logger utility documentation
    - Recommended metrics to track
    - TensorBoard integration
 
-3. **TD3 Paper (Fujimoto et al. 2018)**  
+3. **TD3 Paper (Fujimoto et al. 2018)**
    https://arxiv.org/abs/1802.09477
    - Algorithm-specific metrics
    - Hyperparameter logging
    - Reproducibility guidelines
 
-4. **PyTorch Gradient Utilities**  
+4. **PyTorch Gradient Utilities**
    https://pytorch.org/docs/stable/generated/torch.nn.utils.clip_grad_norm_.html
    - Gradient norm computation
    - Gradient clipping utilities
 
 ---
 
-**Analysis Complete:** November 3, 2025  
-**Analyst:** Claude (AI Assistant)  
-**Review Status:** Ready for implementation decisions  
-**Priority:** LOW-MEDIUM (not blocking training, but valuable for debugging)  
+**Analysis Complete:** November 3, 2025
+**Analyst:** Claude (AI Assistant)
+**Review Status:** Ready for implementation decisions
+**Priority:** LOW-MEDIUM (not blocking training, but valuable for debugging)
 
 ---
 
@@ -752,7 +752,7 @@ With expanded statistics, we could create a comprehensive monitoring dashboard:
 agent = TD3Agent(state_dim=535, action_dim=2, max_action=1.0)
 stats = agent.get_stats()
 print(stats)
-# Output: {'total_iterations': 0, 'replay_buffer_size': 0, 
+# Output: {'total_iterations': 0, 'replay_buffer_size': 0,
 #          'replay_buffer_full': False, 'device': 'cuda'}
 ```
 
@@ -762,31 +762,31 @@ print(stats)
 # In training loop:
 for t in range(total_timesteps):
     # ... training code ...
-    
+
     if t % 1000 == 0:
         # Get comprehensive stats
         stats = agent.get_stats()
-        
+
         # Log to TensorBoard
         for key, value in stats.items():
             if value is not None:
                 writer.add_scalar(f'agent/{key}', value, t)
-        
+
         # Print summary
         print(f"\n[Step {t}] Agent Statistics:")
         print(f"  Training iterations: {stats['total_iterations']}")
         print(f"  Buffer: {stats['replay_buffer_size']}/{stats['replay_buffer_utilization']:.1%}")
         print(f"  Actor LR: {stats['actor_lr']:.6f}")
         print(f"  Critic LR: {stats['critic_lr']:.6f}")
-        
+
         if agent.use_dict_buffer:
             print(f"  Actor CNN LR: {stats['actor_cnn_lr']:.6f}")
             print(f"  Critic CNN LR: {stats['critic_cnn_lr']:.6f}")
-        
+
         # Check for issues
         if abs(stats['actor_param_mean']) > 10:
             print(f"  ⚠️ WARNING: Large actor weights detected!")
-        
+
         if abs(stats['critic_param_mean']) > 10:
             print(f"  ⚠️ WARNING: Large critic weights detected!")
 ```
