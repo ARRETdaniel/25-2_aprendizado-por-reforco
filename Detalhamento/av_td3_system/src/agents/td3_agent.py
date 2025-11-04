@@ -107,10 +107,15 @@ class TD3Agent:
         self.critic_lr = algo_config.get('critic_lr', algo_config.get('learning_rate', 0.0003))
 
         # Training config
-        training_config = config.get('training', config.get('algorithm', {}))
-        self.batch_size = training_config.get('batch_size', 256)
-        self.buffer_size = training_config.get('buffer_size', 1000000)
-        self.start_timesteps = training_config.get('start_timesteps', training_config.get('learning_starts', 25000))
+        training_config = config.get('training', {})
+        algo_config_training = config.get('algorithm', {})
+
+        # Buffer size can be in either training or algorithm section
+        self.batch_size = training_config.get('batch_size', algo_config_training.get('batch_size', 256))
+        self.buffer_size = training_config.get('buffer_size', algo_config_training.get('buffer_size', 1000000))
+        print(f"[DEBUG] Buffer size from config: {self.buffer_size}")
+        self.start_timesteps = training_config.get('start_timesteps', training_config.get('learning_starts',
+                                                   algo_config_training.get('learning_starts', 25000)))
 
         # Exploration config (handle both nested and flat structures)
         # NOTE: expl_noise stored for reference but not used in select_action
@@ -402,17 +407,28 @@ class TD3Agent:
             agent.enable_diagnostics()
             # During training, call agent.get_diagnostics_summary() periodically
         """
-        if self.cnn_extractor is not None:
+        if self.actor_cnn is not None or self.critic_cnn is not None:
             try:
                 from src.utils.cnn_diagnostics import CNNDiagnostics
-                self.cnn_diagnostics = CNNDiagnostics(self.cnn_extractor)
-                print("[CNN DIAGNOSTICS] Enabled CNN diagnostics tracking")
+                # Track both actor and critic CNNs
+                self.actor_cnn_diagnostics = None
+                self.critic_cnn_diagnostics = None
+
+                if self.actor_cnn is not None:
+                    self.actor_cnn_diagnostics = CNNDiagnostics(self.actor_cnn)
+                    print("[CNN DIAGNOSTICS] Enabled actor CNN diagnostics tracking")
+
+                if self.critic_cnn is not None:
+                    self.critic_cnn_diagnostics = CNNDiagnostics(self.critic_cnn)
+                    print("[CNN DIAGNOSTICS] Enabled critic CNN diagnostics tracking")
             except ImportError:
                 print("[CNN DIAGNOSTICS] WARNING: Could not import CNNDiagnostics")
-                self.cnn_diagnostics = None
+                self.actor_cnn_diagnostics = None
+                self.critic_cnn_diagnostics = None
         else:
-            print("[CNN DIAGNOSTICS] WARNING: No CNN extractor available")
-            self.cnn_diagnostics = None
+            print("[CNN DIAGNOSTICS] WARNING: No CNN extractors available")
+            self.actor_cnn_diagnostics = None
+            self.critic_cnn_diagnostics = None
 
     def get_diagnostics_summary(self, last_n: int = 100) -> Optional[Dict]:
         """
@@ -422,11 +438,18 @@ class TD3Agent:
             last_n: Number of recent captures to average over
 
         Returns:
-            Dictionary with diagnostics summary, or None if diagnostics not enabled
+            Dictionary with diagnostics summary for both actor and critic CNNs,
+            or None if diagnostics not enabled
         """
-        if self.cnn_diagnostics is not None:
-            return self.cnn_diagnostics.get_summary(last_n=last_n)
-        return None
+        summary = {}
+
+        if hasattr(self, 'actor_cnn_diagnostics') and self.actor_cnn_diagnostics is not None:
+            summary['actor'] = self.actor_cnn_diagnostics.get_summary(last_n=last_n)
+
+        if hasattr(self, 'critic_cnn_diagnostics') and self.critic_cnn_diagnostics is not None:
+            summary['critic'] = self.critic_cnn_diagnostics.get_summary(last_n=last_n)
+
+        return summary if summary else None
 
     def print_diagnostics(self, last_n: int = 100) -> None:
         """

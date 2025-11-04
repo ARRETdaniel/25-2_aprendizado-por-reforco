@@ -18,8 +18,8 @@ algorithm:
 
   # Training parameters
   batch_size: 256  # Mini-batch size sampled from replay buffer
-  buffer_size: 1000000  # Replay buffer capacity (1M transitions)
-  learning_starts: 25000  # Reduced from 25k based on Elallid et al. 2023 TD3-CARLA paper
+  buffer_size: 10000  # Replay buffer capacity (10K for debug, 1M for full training)
+  learning_starts: 1000  # Reduced for debug (25000 for full training)
   # Rationale: Papers show 10k-25k range sufficient for CARLA environments.
   # CARLA physics is more deterministic than MuJoCo (original TD3 benchmark),
   # so less initial random exploration needed. Shorter warm-up allows agent

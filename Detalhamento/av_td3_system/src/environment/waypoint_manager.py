@@ -350,8 +350,12 @@ class WaypointManager:
             vehicle_location: Current vehicle location (x, y, z) or carla.Location
 
         Returns:
-            Distance to goal in meters
+            Distance to goal in meters, or None if waypoints not initialized
         """
+        # Safety check: Return None if waypoints not initialized
+        if not self.waypoints or len(self.waypoints) == 0:
+            return None
+
         # Handle both carla.Location and tuple inputs
         if hasattr(vehicle_location, 'x'):
             vx, vy = vehicle_location.x, vehicle_location.y

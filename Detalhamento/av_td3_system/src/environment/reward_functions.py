@@ -1,14 +1,8 @@
 """
-Multi-Component Reward Function for Autonomous Vehicle Navigation
+Reward calculation for autonomous vehicle navigation.
 
-Implements the reward function from the IEEE paper:
-- Efficiency: Maintain target speed
-- Lane Keeping: Minimize lateral deviation and heading error
-- Comfort: Minimize jerk (smooth acceleration)
-- Safety: Large penalty for collisions and off-road events
-
-Paper Reference: "End-to-End Visual Autonomous Navigation with Twin Delayed DDPG"
-Section III.B: Reward Function R(s_t, a_t)
+Implements a multi-component reward function with safety penalties,
+progress incentives, and comfort objectives.
 """
 
 import numpy as np
@@ -239,7 +233,7 @@ class RewardCalculator:
             ),
         }
 
-        # 🔍 DIAGNOSTIC LOGGING: Reward Component Balance
+        #  DIAGNOSTIC LOGGING: Reward Component Balance
         # Added 2025-01-20 for training failure investigation
         # Purpose: Identify which component is dominating and causing -50k mean reward
         self.logger.debug(
@@ -268,7 +262,7 @@ class RewardCalculator:
                 ratio = magnitude / total_magnitude
                 if ratio > 0.8:
                     self.logger.warning(
-                        f"[REWARD] ⚠️ Component '{component}' is dominating: "
+                        f"[REWARD] Component '{component}' is dominating: "
                         f"{ratio*100:.1f}% of total magnitude (threshold: 80%)"
                     )
 
@@ -744,13 +738,19 @@ class RewardCalculator:
         Returns:
             Progress reward (positive for forward progress, includes PBRS term)
         """
-        #  DIAGNOSTIC LOGGING: State Representation & Distance Calculation
-        # Added 2025-01-20 for training failure investigation
-        # Purpose: Verify distance_to_goal is computed correctly and changing over time
+        # Safety check: If distance_to_goal is None, log warning and use default
+        if distance_to_goal is None:
+            self.logger.warning(
+                "[PROGRESS] distance_to_goal is None - waypoint manager may not be initialized properly. "
+                "Using default distance of 0.0 for this step."
+            )
+            distance_to_goal = 0.0
+
+        prev_dist_str = f"{self.prev_distance_to_goal:.2f}" if self.prev_distance_to_goal is not None else "None"
         self.logger.debug(
             f"[PROGRESS] Input: distance_to_goal={distance_to_goal:.2f}m, "
             f"waypoint_reached={waypoint_reached}, goal_reached={goal_reached}, "
-            f"prev_distance={self.prev_distance_to_goal:.2f if self.prev_distance_to_goal is not None else 'None'}m"
+            f"prev_distance={prev_dist_str}m"
         )
 
         progress = 0.0
@@ -827,12 +827,18 @@ class RewardCalculator:
                 f"[PROGRESS]  CLIPPED: raw={progress:.2f} → clipped={clipped_progress:.2f}"
             )
 
+        # Build debug string safely to avoid format errors
+        distance_rew_str = f"{distance_reward:.2f}" if self.prev_distance_to_goal is not None and 'distance_reward' in locals() else "0.00"
+        pbrs_str = f"{pbrs_weighted:.2f}" if self.prev_distance_to_goal is not None and 'pbrs_weighted' in locals() else "0.00"
+        waypoint_str = f"{self.waypoint_bonus:.1f}" if waypoint_reached else "0.0"
+        goal_str = f"{self.goal_reached_bonus:.1f}" if goal_reached else "0.0"
+
         self.logger.debug(
             f"[PROGRESS] Final: progress={clipped_progress:.2f} "
-            f"(distance: {distance_reward:.2f if self.prev_distance_to_goal is not None and 'distance_reward' in locals() else 0.0:.2f}, "
-            f"PBRS: {pbrs_weighted:.2f if self.prev_distance_to_goal is not None and 'pbrs_weighted' in locals() else 0.0:.2f}, "
-            f"waypoint: {self.waypoint_bonus if waypoint_reached else 0.0:.1f}, "
-            f"goal: {self.goal_reached_bonus if goal_reached else 0.0:.1f})"
+            f"(distance: {distance_rew_str}, "
+            f"PBRS: {pbrs_str}, "
+            f"waypoint: {waypoint_str}, "
+            f"goal: {goal_str})"
         )
 
         return clipped_progress

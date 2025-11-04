@@ -263,7 +263,7 @@ class TD3TrainingPipeline:
             print(f"{'='*70}\n")
 
             # Enable CNN diagnostics
-            self.agent.enable_diagnostics(self.writer)
+            self.agent.enable_diagnostics()
 
             # Setup OpenCV window
             self.window_name = "TD3 Training - Debug View"

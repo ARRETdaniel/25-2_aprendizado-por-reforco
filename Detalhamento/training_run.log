@@ -1,0 +1,381 @@
+WARNING:root:Could not import GlobalRoutePlanner from agents.navigation. Ensure CARLA Python API is installed and PythonAPI/carla/agents is in PYTHONPATH.
+
+======================================================================
+TD3 TRAINING PIPELINE - AUTONOMOUS VEHICLE NAVIGATION
+======================================================================
+
+[CONFIG] Loading configurations...
+[CONFIG] CARLA config: config/carla_config.yaml
+[CONFIG] Agent config: config/td3_config.yaml
+[CONFIG] Scenario: 0 (0=20, 1=50, 2=100 NPCs)
+[CONFIG] Set CARLA_SCENARIO_INDEX=0
+[CONFIG] Expected NPC count: 20
+
+[ENVIRONMENT] Initializing CARLA environment...
+WARNING:src.environment.carla_env:Failed to initialize DynamicRouteManager: GlobalRoutePlanner not available. Ensure CARLA agents package is installed.
+Falling back to legacy waypoint manager
+[ENVIRONMENT] State space: Dict('image': Box(-1.0, 1.0, (4, 84, 84), float32), 'vector': Box(-inf, inf, (53,), float32))
+[ENVIRONMENT] Action space: Box(-1.0, 1.0, (2,), float32)
+
+[AGENT] Initializing TD3 agent...
+[AGENT] Device explicitly set to: cpu
+[AGENT] Running on CPU to reserve GPU memory for CARLA simulator
+[AGENT] Initializing SEPARATE NatureCNN feature extractors for actor and critic...
+[AGENT] Initializing CNN weights (Kaiming for ReLU networks)...
+[INIT] Initializing Actor CNN weights...
+[INIT] Initializing Critic CNN weights...
+[AGENT] CNN weights initialized with Kaiming normal (optimized for ReLU)
+[AGENT] Actor CNN initialized on cpu (id: 140188743966992)
+[AGENT] Critic CNN initialized on cpu (id: 140188743972128)
+[AGENT] CNNs are SEPARATE instances: True
+[AGENT] CNN architecture: 4×84×84 → Conv layers → 512 features
+[AGENT] CNN training mode: ENABLED (weights will be updated during training)
+[DEBUG] Buffer size from config: 10000
+TD3Agent initialized on device: cpu (manually specified)
+  Actor CNN optimizer initialized with lr=0.0001
+  Actor CNN mode: training (gradients enabled)
+  Critic CNN optimizer initialized with lr=0.0001
+  Critic CNN mode: training (gradients enabled)
+  ✅ Actor and critic use SEPARATE CNN instances (recommended)
+     Actor CNN id: 140188743966992
+     Critic CNN id: 140188743972128
+DictReplayBuffer initialized:
+  Max size: 10,000
+  Image shape: (4, 84, 84)
+  Vector dim: 23
+  Action dim: 2
+  Device: cpu
+  Estimated memory: 2155.2 MB
+  Using DictReplayBuffer for end-to-end CNN training
+TD3Agent initialized with:
+  State dim: 535, Action dim: 2
+  Actor hidden size: [256, 256]
+  Critic hidden size: [256, 256]
+  Discount γ: 0.99, Tau τ: 0.005
+  Policy freq: 2, Policy noise: 0.2
+  Exploration noise: 0.1
+  Buffer size: 10000, Batch size: 256
+[AGENT] CNN extractor initialized on cpu
+[AGENT] CNN passed to TD3Agent for end-to-end training
+[AGENT] DictReplayBuffer enabled for gradient flow
+[LOGGING] TensorBoard logs: data/logs/TD3_scenario_0_npcs_20_20251104-194955
+
+======================================================================
+[DEBUG MODE ENABLED]
+======================================================================
+[DEBUG] Visual feedback enabled (OpenCV display)
+[DEBUG] Press 'q' to quit, 'p' to pause/unpause
+
+[DEBUG] CNN diagnostics enabled for training monitoring
+[DEBUG] Tracking: gradient flow, weight updates, feature statistics
+[DEBUG] TensorBoard metrics: cnn_diagnostics/*
+[DEBUG] Console output: Every 1000 steps
+======================================================================
+
+[CNN DIAGNOSTICS] Enabled actor CNN diagnostics tracking
+[CNN DIAGNOSTICS] Enabled critic CNN diagnostics tracking
+
+[INIT] Training pipeline ready!
+[INIT] Max timesteps: 1,000
+[INIT] Seed: 42
+======================================================================
+
+[TRAINING] Starting training loop...
+[TRAINING] Initializing CARLA environment (spawning actors)...
+[TRAINING] This may take 1-5 minutes on first reset. Please be patient...
+[TRAINING] Connecting to CARLA server...
+[TRAINING] Environment initialized successfully in 4.2 seconds!
+[TRAINING] Episode 1: Route 172m, NPCs 20
+[TRAINING] Actors spawned, sensors ready
+[TRAINING] Beginning training from timestep 1 to 1,000
+
+======================================================================
+[DEBUG] CNN -> TD3 DATA FLOW VERIFICATION (Initialization)
+======================================================================
+[DEBUG] Camera Input:
+   Shape: (4, 84, 84)
+   Range: [0.000, 0.000]
+   Mean: 0.000, Std: 0.000
+
+[DEBUG] Vector State (Kinematic + Waypoints):
+   Shape: (23,)
+   Velocity: 0.016 m/s
+   Lateral Deviation: 0.000 m
+   Heading Error: -0.837 rad
+   Waypoints: (20,) (10 waypoints × 2)
+
+[DEBUG] Dict Observation Structure:
+   Type: <class 'dict'>
+   Keys: ['image', 'vector']
+   Image shape: (4, 84, 84)
+   Vector shape: (23,)
+======================================================================
+
+
+[TRAINING PHASES]
+  Phase 1 (Steps 1-1,000): EXPLORATION (random actions, filling replay buffer)
+  Phase 2 (Steps 1,001-1,000): LEARNING (policy updates)
+  Evaluation every 500 steps
+  Checkpoints every 10,000 steps
+
+[PROGRESS] Training starting now - logging every 100 steps...
+
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 99.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 88.4% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 85.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 82.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 81.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 90.1% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 90.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 90.7% of total magnitude (threshold: 80%)
+
+[DEBUG Step   10] Act=[steer:-0.389, thr/brk:+0.486] | Rew=  +5.27 | Speed=  0.7 km/h | LatDev=-0.00m | Collisions=0
+   [Reward] Efficiency=+0.02 | Lane=+0.03 | Comfort=-0.03 | Safety=-0.50 | Progress=+5.74
+   [Waypoints] (vehicle frame): WP1=[  +0.1,   +0.0]m (d=  0.1m) | WP2=[  +0.2,   +0.0]m (d=  0.2m) | WP3=[  +0.2,   +0.0]m (d=  0.2m)
+   [Image] shape=(4, 84, 84) | mean=0.130 | std=0.152 | range=[-0.741, 0.624]
+   [State] velocity=0.01 m/s | lat_dev=-0.000m | heading_err=-0.000 rad (-0.0°) | vector_dim=23
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.5% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.1% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.0% of total magnitude (threshold: 80%)
+
+[DEBUG Step   20] Act=[steer:-0.131, thr/brk:+0.350] | Rew= +32.55 | Speed=  7.8 km/h | LatDev=+0.02m | Collisions=0
+   [Reward] Efficiency=+0.26 | Lane=+0.68 | Comfort=+0.03 | Safety=+0.00 | Progress=+31.57
+   [Waypoints] (vehicle frame): WP1=[  +0.1,   -0.0]m (d=  0.1m) | WP2=[  +0.2,   -0.0]m (d=  0.2m) | WP3=[  +0.2,   -0.0]m (d=  0.2m)
+   [Image] shape=(4, 84, 84) | mean=0.132 | std=0.154 | range=[-0.733, 0.655]
+   [State] velocity=0.07 m/s | lat_dev=+0.005m | heading_err=+0.004 rad (+0.2°) | vector_dim=23
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.7% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.1% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.4% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.5% of total magnitude (threshold: 80%)
+
+[DEBUG Step   30] Act=[steer:-0.849, thr/brk:+0.306] | Rew= +50.55 | Speed= 12.9 km/h | LatDev=+0.15m | Collisions=0
+   [Reward] Efficiency=+0.43 | Lane=+0.68 | Comfort=-0.15 | Safety=+0.00 | Progress=+49.59
+   [Waypoints] (vehicle frame): WP1=[  +0.1,   -0.0]m (d=  0.1m) | WP2=[  +0.2,   -0.0]m (d=  0.2m) | WP3=[  +0.3,   -0.0]m (d=  0.3m)
+   [Image] shape=(4, 84, 84) | mean=0.128 | std=0.148 | range=[-0.537, 0.639]
+   [State] velocity=0.12 m/s | lat_dev=+0.042m | heading_err=+0.028 rad (+1.6°) | vector_dim=23
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.5% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.5% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.5% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.4% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.2% of total magnitude (threshold: 80%)
+
+[DEBUG Step   40] Act=[steer:-0.407, thr/brk:+0.420] | Rew= +57.90 | Speed= 15.0 km/h | LatDev=+0.09m | Collisions=0
+   [Reward] Efficiency=+0.50 | Lane=+0.96 | Comfort=-0.15 | Safety=+0.00 | Progress=+56.60
+   [Waypoints] (vehicle frame): WP1=[  +0.1,   +0.0]m (d=  0.1m) | WP2=[  +0.2,   +0.0]m (d=  0.2m) | WP3=[  +0.2,   +0.0]m (d=  0.2m)
+   [Image] shape=(4, 84, 84) | mean=0.130 | std=0.144 | range=[-0.616, 0.616]
+   [State] velocity=0.14 m/s | lat_dev=+0.026m | heading_err=-0.001 rad (-0.1°) | vector_dim=23
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.3% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.5% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.sensors:Lane invasion detected: [<carla.libcarla.LaneMarking object at 0x7f7ff070d690>]
+WARNING:src.environment.reward_functions:[SAFETY-OFFROAD] penalty=-10.0
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 84.1% of total magnitude (threshold: 80%)
+
+[DEBUG Step   50] Act=[steer:+0.721, thr/brk:+0.250] | Rew= +50.36 | Speed= 17.2 km/h | LatDev=-0.45m | Collisions=0
+   [Reward] Efficiency=+0.55 | Lane=+0.54 | Comfort=-0.15 | Safety=-10.00 | Progress=+59.42
+   [Waypoints] (vehicle frame): WP1=[  +0.1,   +0.0]m (d=  0.1m) | WP2=[  +0.2,   +0.1]m (d=  0.2m) | WP3=[  +0.2,   +0.1]m (d=  0.3m)
+   [Image] shape=(4, 84, 84) | mean=0.152 | std=0.143 | range=[-0.624, 0.639]
+   [State] velocity=0.16 m/s | lat_dev=-0.127m | heading_err=-0.096 rad (-5.5°) | vector_dim=23
+[TRAIN] Episode    0 | Timestep      50 | Reward  1897.13 | Avg Reward (10ep)  1897.13 | Collisions  0
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 99.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 88.4% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 85.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 82.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 81.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 90.1% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 90.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 90.7% of total magnitude (threshold: 80%)
+
+[DEBUG Step   60] Act=[steer:+0.072, thr/brk:+0.310] | Rew=  +5.27 | Speed=  0.7 km/h | LatDev=-0.00m | Collisions=0
+   [Reward] Efficiency=+0.02 | Lane=+0.03 | Comfort=-0.03 | Safety=-0.50 | Progress=+5.74
+   [Waypoints] (vehicle frame): WP1=[  +0.1,   +0.0]m (d=  0.1m) | WP2=[  +0.2,   +0.0]m (d=  0.2m) | WP3=[  +0.2,   +0.0]m (d=  0.2m)
+   [Image] shape=(4, 84, 84) | mean=0.128 | std=0.150 | range=[-0.741, 0.600]
+   [State] velocity=0.01 m/s | lat_dev=-0.000m | heading_err=-0.000 rad (-0.0°) | vector_dim=23
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.5% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.5% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.7% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.7% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.7% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.9% of total magnitude (threshold: 80%)
+
+[DEBUG Step   70] Act=[steer:-0.238, thr/brk:+0.970] | Rew= +38.42 | Speed=  9.5 km/h | LatDev=+0.01m | Collisions=0
+   [Reward] Efficiency=+0.32 | Lane=+0.85 | Comfort=-0.01 | Safety=+0.00 | Progress=+37.26
+   [Waypoints] (vehicle frame): WP1=[  +0.1,   -0.0]m (d=  0.1m) | WP2=[  +0.2,   -0.0]m (d=  0.2m) | WP3=[  +0.2,   -0.0]m (d=  0.2m)
+   [Image] shape=(4, 84, 84) | mean=0.130 | std=0.150 | range=[-0.725, 0.576]
+   [State] velocity=0.09 m/s | lat_dev=+0.004m | heading_err=+0.003 rad (+0.2°) | vector_dim=23
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.5% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.5% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.1% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.3% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.3% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.3% of total magnitude (threshold: 80%)
+
+[DEBUG Step   80] Act=[steer:+0.212, thr/brk:+0.229] | Rew= +59.40 | Speed= 15.4 km/h | LatDev=+0.04m | Collisions=0
+   [Reward] Efficiency=+0.51 | Lane=+0.92 | Comfort=-0.15 | Safety=+0.00 | Progress=+58.11
+   [Waypoints] (vehicle frame): WP1=[  +0.1,   -0.0]m (d=  0.1m) | WP2=[  +0.2,   -0.0]m (d=  0.2m) | WP3=[  +0.3,   -0.0]m (d=  0.3m)
+   [Image] shape=(4, 84, 84) | mean=0.128 | std=0.146 | range=[-0.592, 0.647]
+   [State] velocity=0.14 m/s | lat_dev=+0.010m | heading_err=+0.007 rad (+0.4°) | vector_dim=23
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.5% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.7% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.1% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.1% of total magnitude (threshold: 80%)
+
+[DEBUG Step   90] Act=[steer:-0.574, thr/brk:+0.136] | Rew= +71.21 | Speed= 18.4 km/h | LatDev=+0.33m | Collisions=0
+   [Reward] Efficiency=+0.61 | Lane=+0.59 | Comfort=-0.15 | Safety=+0.00 | Progress=+70.16
+   [Waypoints] (vehicle frame): WP1=[  +0.2,   -0.0]m (d=  0.2m) | WP2=[  +0.2,   -0.0]m (d=  0.2m) | WP3=[  +0.3,   -0.0]m (d=  0.3m)
+   [Image] shape=(4, 84, 84) | mean=0.127 | std=0.145 | range=[-0.631, 0.639]
+   [State] velocity=0.17 m/s | lat_dev=+0.093m | heading_err=+0.049 rad (+2.8°) | vector_dim=23
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.1% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.1% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.1% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.1% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.1% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.3% of total magnitude (threshold: 80%)
+[EXPLORATION] Processing step    100/1,000...
+WARNING:src.environment.sensors:Lane invasion detected: [<carla.libcarla.LaneMarking object at 0x7f7ff070dee0>]
+WARNING:src.environment.reward_functions:[SAFETY-OFFROAD] penalty=-10.0
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 86.6% of total magnitude (threshold: 80%)
+
+[DEBUG][Step 100] CNN Feature Stats:
+  L2 Norm: 2.897
+  Mean: -0.001, Std: 0.128
+  Range: [-0.454, 0.384]
+  Action: [0.960, 0.493] (steering, throttle/brake)
+
+[DEBUG Step  100] Act=[steer:+0.960, thr/brk:+0.493] | Rew= +64.10 | Speed= 19.6 km/h | LatDev=+0.60m | Collisions=0
+   [Reward] Efficiency=+0.63 | Lane=+0.49 | Comfort=-0.15 | Safety=-10.00 | Progress=+73.13
+   [Waypoints] (vehicle frame): WP1=[  +0.1,   -0.0]m (d=  0.1m) | WP2=[  +0.2,   -0.0]m (d=  0.2m) | WP3=[  +0.2,   -0.0]m (d=  0.2m)
+   [Image] shape=(4, 84, 84) | mean=0.134 | std=0.140 | range=[-0.537, 0.655]
+   [State] velocity=0.18 m/s | lat_dev=+0.170m | heading_err=+0.087 rad (+5.0°) | vector_dim=23
+[EXPLORATION] Step    100/1,000 | Episode    1 | Ep Step   50 | Reward= +64.10 | Speed= 19.6 km/h | Buffer=    100/10000
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 99.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 88.4% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 85.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 82.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 81.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 90.1% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 90.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 90.7% of total magnitude (threshold: 80%)
+
+[DEBUG Step  110] Act=[steer:+0.654, thr/brk:+0.959] | Rew=  +5.27 | Speed=  0.7 km/h | LatDev=-0.00m | Collisions=0
+   [Reward] Efficiency=+0.02 | Lane=+0.03 | Comfort=-0.03 | Safety=-0.50 | Progress=+5.74
+   [Waypoints] (vehicle frame): WP1=[  +0.1,   +0.0]m (d=  0.1m) | WP2=[  +0.2,   +0.0]m (d=  0.2m) | WP3=[  +0.2,   +0.0]m (d=  0.2m)
+   [Image] shape=(4, 84, 84) | mean=0.128 | std=0.150 | range=[-0.741, 0.624]
+   [State] velocity=0.01 m/s | lat_dev=-0.000m | heading_err=-0.000 rad (-0.0°) | vector_dim=23
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.5% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 91.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 92.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 92.0% of total magnitude (threshold: 80%)
+
+[DEBUG Step  120] Act=[steer:-0.862, thr/brk:+0.077] | Rew=  +5.24 | Speed=  0.0 km/h | LatDev=-0.00m | Collisions=0
+   [Reward] Efficiency=+0.00 | Lane=+0.00 | Comfort=+0.00 | Safety=-0.50 | Progress=+5.74
+   [Waypoints] (vehicle frame): WP1=[  +0.1,   +0.0]m (d=  0.1m) | WP2=[  +0.2,   +0.0]m (d=  0.2m) | WP3=[  +0.2,   +0.0]m (d=  0.2m)
+   [Image] shape=(4, 84, 84) | mean=0.132 | std=0.151 | range=[-0.686, 0.624]
+   [State] velocity=0.00 m/s | lat_dev=-0.000m | heading_err=-0.000 rad (-0.0°) | vector_dim=23
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 92.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.5% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.7% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 96.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.2% of total magnitude (threshold: 80%)
+
+[DEBUG Step  130] Act=[steer:-0.171, thr/brk:+0.864] | Rew= +36.05 | Speed=  9.2 km/h | LatDev=-0.11m | Collisions=0
+   [Reward] Efficiency=+0.31 | Lane=+0.59 | Comfort=-0.14 | Safety=+0.00 | Progress=+35.29
+   [Waypoints] (vehicle frame): WP1=[  +0.1,   +0.0]m (d=  0.1m) | WP2=[  +0.2,   +0.0]m (d=  0.2m) | WP3=[  +0.2,   +0.0]m (d=  0.2m)
+   [Image] shape=(4, 84, 84) | mean=0.135 | std=0.154 | range=[-0.702, 0.671]
+   [State] velocity=0.09 m/s | lat_dev=-0.032m | heading_err=-0.028 rad (-1.6°) | vector_dim=23
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.3% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.7% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.3% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.2% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.3% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.3% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.3% of total magnitude (threshold: 80%)
+
+[DEBUG Step  140] Act=[steer:-0.082, thr/brk:+0.557] | Rew= +47.83 | Speed= 12.2 km/h | LatDev=-0.17m | Collisions=0
+   [Reward] Efficiency=+0.41 | Lane=+0.73 | Comfort=-0.15 | Safety=+0.00 | Progress=+46.84
+   [Waypoints] (vehicle frame): WP1=[  +0.1,   +0.0]m (d=  0.1m) | WP2=[  +0.2,   +0.0]m (d=  0.2m) | WP3=[  +0.3,   +0.0]m (d=  0.3m)
+   [Image] shape=(4, 84, 84) | mean=0.130 | std=0.154 | range=[-0.765, 0.678]
+   [State] velocity=0.11 m/s | lat_dev=-0.049m | heading_err=-0.022 rad (-1.3°) | vector_dim=23
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.4% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.4% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.5% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.6% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.7% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.7% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.8% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.9% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 99.0% of total magnitude (threshold: 80%)
+
+[DEBUG Step  150] Act=[steer:-0.038, thr/brk:+0.497] | Rew=+110.29 | Speed= 16.0 km/h | LatDev=-0.35m | Collisions=0
+   [Reward] Efficiency=+0.53 | Lane=+0.58 | Comfort=-0.04 | Safety=+0.00 | Progress=+109.23
+   [Waypoints] (vehicle frame): WP1=[  +0.2,   +0.0]m (d=  0.2m) | WP2=[  +0.2,   +0.0]m (d=  0.2m) | WP3=[  +0.3,   +0.0]m (d=  0.3m)
+   [Image] shape=(4, 84, 84) | mean=0.136 | std=0.148 | range=[-0.576, 0.694]
+   [State] velocity=0.15 m/s | lat_dev=-0.099m | heading_err=-0.048 rad (-2.7°) | vector_dim=23
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 98.0% of total magnitude (threshold: 80%)
+WARNING:src.environment.reward_functions:[REWARD] ⚠️ Component 'progress' is dominating: 97.8% of total magnitude (threshold: 80%)
