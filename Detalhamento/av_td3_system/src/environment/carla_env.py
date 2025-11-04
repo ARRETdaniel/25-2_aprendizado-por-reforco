@@ -774,8 +774,8 @@ class CARLANavigationEnv(Env):
         """
         Construct observation from sensors and state.
 
-        🔧 FIX BUG #4: Handles variable-length waypoint arrays near route end by padding.
-        🔧 FIX BUG #9: Normalizes all vector features to comparable scales [-1, 1].
+        FIX BUG #4: Handles variable-length waypoint arrays near route end by padding.
+        FIX BUG #9: Normalizes all vector features to comparable scales [-1, 1].
 
         Returns:
             Dict with:

@@ -1,9 +1,9 @@
 # CNN Bugfix Implementation Guide
 
-**Date:** 2025-01-16  
-**Bug:** Normalization Range Mismatch (ReLU + Negative Inputs)  
-**Severity:** 🔴 CRITICAL  
-**Status:** Ready to implement  
+**Date:** 2025-01-16
+**Bug:** Normalization Range Mismatch (ReLU + Negative Inputs)
+**Severity:** 🔴 CRITICAL
+**Status:** Ready to implement
 
 ---
 

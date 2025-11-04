@@ -170,7 +170,7 @@ class TD3TrainingPipeline:
         if agent_device == 'cpu':
             print(f"[AGENT] Running on CPU to reserve GPU memory for CARLA simulator")
 
-        # 🔧 CRITICAL FIX: Initialize SEPARATE CNN instances for actor and critic
+        #  CRITICAL FIX: Initialize SEPARATE CNN instances for actor and critic
         # This prevents gradient interference that was causing training failure (-52k rewards)
         # Reference: Stable-Baselines3 TD3 uses share_features_extractor=False
         print(f"[AGENT] Initializing SEPARATE NatureCNN feature extractors for actor and critic...")

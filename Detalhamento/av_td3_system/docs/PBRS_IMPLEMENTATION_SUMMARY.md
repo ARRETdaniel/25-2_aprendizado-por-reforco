@@ -1,7 +1,7 @@
 # PBRS Implementation Summary
 
-**Date:** November 4, 2025  
-**Status:** ✅ IMPLEMENTATION COMPLETE  
+**Date:** November 4, 2025
+**Status:** ✅ IMPLEMENTATION COMPLETE
 **Priority:** CRITICAL (Priority 1-3 Fixes)
 
 ---
@@ -29,7 +29,7 @@ Successfully implemented all **Priority 1, 2, and 3 fixes** from the PBRS Implem
 class ObstacleDetector:
     """
     Detects obstacles ahead using CARLA sensor.other.obstacle.
-    
+
     Configuration:
     - distance: 10m lookahead
     - hit_radius: 0.5m (vehicle width)
@@ -58,7 +58,7 @@ class ObstacleDetector:
 def _on_collision(self, event: carla.CollisionEvent):
     """
     Captures collision impulse for graduated penalties.
-    
+
     Extracts:
     - collision_impulse: Impulse in N·s (Newton-seconds)
     - collision_force: Approximate force in N (Newtons)
@@ -432,7 +432,7 @@ The PBRS implementation provides:
 
 ---
 
-**Implementation Date:** November 4, 2025  
-**Implemented By:** AI Assistant (following PBRS_IMPLEMENTATION_GUIDE.md)  
-**Reviewed By:** Pending  
+**Implementation Date:** November 4, 2025
+**Implemented By:** AI Assistant (following PBRS_IMPLEMENTATION_GUIDE.md)
+**Reviewed By:** Pending
 **Status:** ✅ COMPLETE, READY FOR TESTING

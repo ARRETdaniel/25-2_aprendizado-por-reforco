@@ -1,5 +1,5 @@
 # Training Failure - Quick Reference Card
-**Last Updated:** 2025-01-28  
+**Last Updated:** 2025-01-28
 **Status:** Root causes identified, solutions ready
 
 ---
@@ -17,7 +17,7 @@
 Implement dense safety rewards in carla_env.py + reward_functions.py
 Status: ❌ NOT FIXED - Guide provided in PBRS_IMPLEMENTATION_GUIDE.md
 
-# Priority 2: Reduce penalties (HIGH) - 50-70% impact  
+# Priority 2: Reduce penalties (HIGH) - 50-70% impact
 Change collision_penalty: -100 → -10 in config/training_config.yaml
 Status: ⚠️ PARTIALLY FIXED - Needs -100 → -10
 
@@ -136,7 +136,7 @@ self.obstacle_sensor.listen(lambda event: self._on_obstacle_detection(event))
 # config/training_config.yaml
 safety:
   collision_penalty: -10.0   # ← Changed from -100.0
-  off_road_penalty: -10.0    # ← Changed from -100.0  
+  off_road_penalty: -10.0    # ← Changed from -100.0
   wrong_way_penalty: -5.0    # ← Changed from -50.0
 ```
 
@@ -167,6 +167,6 @@ safety:
 
 ---
 
-**Confidence Level:** 🟢 HIGH (backed by literature validation)  
-**Expected Success Rate After Fixes:** 70-90% (matching literature)  
+**Confidence Level:** 🟢 HIGH (backed by literature validation)
+**Expected Success Rate After Fixes:** 70-90% (matching literature)
 **Implementation Time:** ~4 hours (PBRS) + 24-48 hours (training)
