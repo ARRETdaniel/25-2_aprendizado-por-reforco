@@ -28,6 +28,7 @@ sys.path.insert(0, '/workspace/av_td3_system')
 
 import argparse
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -293,7 +294,7 @@ class TD3TrainingPipeline:
         """
         Initialize CNN weights with Kaiming initialization for ReLU activations.
 
-        🔧 UPDATED: Now initializes BOTH actor_cnn and critic_cnn separately.
+        UPDATED: Now initializes BOTH actor_cnn and critic_cnn separately.
 
         BUG FIX (2025-01-28): Explicit weight initialization ensures reproducibility
         and optimal gradient flow for ReLU-based networks. PyTorch defaults use
@@ -355,7 +356,7 @@ class TD3TrainingPipeline:
         """
         Flatten Dict observation to 1D array for TD3 agent using CNN feature extraction.
 
-        🔧 UPDATED: Uses actor_cnn for consistency with select_action behavior.
+        UPDATED: Uses actor_cnn for consistency with select_action behavior.
 
         Args:
             obs_dict: Dictionary with 'image' (4, 84, 84) and 'vector' (23,) keys
@@ -700,8 +701,8 @@ class TD3TrainingPipeline:
             if self.debug:
                 self._visualize_debug(obs_dict, action, reward, info, t)
 
-                # DEBUG: Print detailed step info to terminal every 10 steps
-                if t % 10 == 0:
+                # DEBUG: Print detailed step info to terminal every 100 steps (throttled)
+                if t % 100 == 0:
                     vehicle_state = info.get('vehicle_state', {})
                     reward_breakdown = info.get('reward_breakdown', {})
 
@@ -1218,6 +1219,41 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Configure logging based on --debug flag
+    # CRITICAL: This activates all debug instrumentation added to:
+    #   - sensors.py (image pipeline logs)
+    #   - cnn_extractor.py ( CNN forward pass logs)
+    #   - td3_agent.py ( feature extraction + training logs)
+    #   - reward_functions.py ( reward component breakdown logs)
+    if args.debug:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+            force=True  # Force reconfiguration
+        )
+        # Explicitly set root logger level
+        logging.getLogger().setLevel(logging.DEBUG)
+
+        print("\n" + "="*70)
+        print("[DEBUG LOGGING ENABLED]")
+        print("="*70)
+        print("[DEBUG] All pipeline logs will be shown:")
+        print("[DEBUG]   📸🎞️📷 Image preprocessing & frame stacking")
+        print("[DEBUG]   🧠 CNN layer-by-layer forward pass")
+        print("[DEBUG]   🎯🎓 TD3 feature extraction & training")
+        print("[DEBUG]   💰 Reward component breakdown")
+        print("="*70 + "\n")
+    else:
+        # Normal mode: only INFO and above
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+            force=True
+        )
+        logging.getLogger().setLevel(logging.INFO)
 
     # Initialize and run training
     trainer = TD3TrainingPipeline(

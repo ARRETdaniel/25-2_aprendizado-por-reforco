@@ -142,6 +142,16 @@ class CARLACameraManager:
         Returns:
             Grayscale image (84×84) normalized to [-1, 1]
         """
+        # DEBUG: Log input image statistics
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"   PREPROCESSING INPUT:\n"
+                f"   Shape: {image.shape}\n"
+                f"   Dtype: {image.dtype}\n"
+                f"   Range: [{image.min():.2f}, {image.max():.2f}]\n"
+                f"   Mean: {image.mean():.2f}, Std: {image.std():.2f}"
+            )
+
         # Convert RGB to grayscale
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
@@ -158,6 +168,17 @@ class CARLACameraManager:
         mean, std = 0.5, 0.5
         normalized = (scaled - mean) / std
 
+        # DEBUG: Log output statistics
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"   PREPROCESSING OUTPUT:\n"
+                f"   Shape: {normalized.shape}\n"
+                f"   Dtype: {normalized.dtype}\n"
+                f"   Range: [{normalized.min():.3f}, {normalized.max():.3f}]\n"
+                f"   Mean: {normalized.mean():.3f}, Std: {normalized.std():.3f}\n"
+                f"   Expected range: [-1, 1]"
+            )
+
         return normalized
 
     def get_latest_frame(self) -> Optional[np.ndarray]:
@@ -171,15 +192,33 @@ class CARLACameraManager:
             return self.latest_image
 
     def destroy(self):
-        """Clean up camera sensor."""
+        """
+        Clean up camera sensor.
+
+        CRITICAL FIX: In synchronous mode, sensor callbacks may still be pending
+        after stop(). We must flush the callback queue before destroying the actor.
+
+        Reference: https://carla.readthedocs.io/en/latest/adv_synchrony_timestep/
+        "Data coming from GPU-based sensors, mostly cameras, is usually generated
+        with a delay of a couple of frames."
+        """
         if self.camera_sensor:
             try:
-                # Stop listening before destruction (CARLA best practice)
+                # Step 1: Stop listening before destruction (CARLA best practice)
                 # Reference: https://carla.readthedocs.io/en/latest/core_sensors/
                 if self.camera_sensor.is_listening:
                     self.camera_sensor.stop()
                     self.logger.debug("Camera sensor stopped listening")
 
+                # Step 2: Flush pending callbacks in synchronous mode
+                # CRITICAL: In sync mode, callbacks may still be queued even after stop().
+                # We need to let the server process them before destroying the actor.
+                # The world.tick() call in the environment will handle this automatically,
+                # but we add a small safety delay for async callback completion.
+                import time
+                time.sleep(0.01)  # 10ms grace period for callback completion
+
+                # Step 3: Destroy the sensor actor
                 self.camera_sensor.destroy()
                 self.logger.info("Camera sensor destroyed")
             except RuntimeError as e:
@@ -233,7 +272,29 @@ class ImageStack:
                 f"Frame shape {frame.shape} != expected "
                 f"({self.frame_height}, {self.frame_width})"
             )
+
+        # DEBUG: Log frame stacking
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"   FRAME STACKING:\n"
+                f"   New frame shape: {frame.shape}\n"
+                f"   New frame range: [{frame.min():.3f}, {frame.max():.3f}]\n"
+                f"   Stack size before: {len(self.stack)}\n"
+                f"   Stack filled: {self.is_filled()}"
+            )
+
         self.stack.append(frame)
+
+        # DEBUG: Log stack state after push
+        if self.logger.isEnabledFor(logging.DEBUG):
+            stacked = self.get_stacked_frames()
+            self.logger.debug(
+                f"  STACK STATE AFTER PUSH:\n"
+                f"   Stack size: {len(self.stack)}\n"
+                f"   Stacked shape: {stacked.shape}\n"
+                f"   Stacked range: [{stacked.min():.3f}, {stacked.max():.3f}]\n"
+                f"   Per-frame ranges: {[f'[{frame.min():.3f}, {frame.max():.3f}]' for frame in self.stack]}"
+            )
 
     def get_stacked_frames(self) -> np.ndarray:
         """
@@ -368,7 +429,12 @@ class CollisionDetector:
             self.collision_force = 0.0
 
     def destroy(self):
-        """Clean up collision sensor."""
+        """
+        Clean up collision sensor.
+
+        CRITICAL FIX: Add grace period for pending callback completion.
+        Reference: https://carla.readthedocs.io/en/latest/adv_synchrony_timestep/
+        """
         if self.collision_sensor:
             try:
                 # Stop listening before destruction (CARLA best practice)
@@ -376,6 +442,10 @@ class CollisionDetector:
                 if self.collision_sensor.is_listening:
                     self.collision_sensor.stop()
                     self.logger.debug("Collision sensor stopped listening")
+
+                # Grace period for async callback completion
+                import time
+                time.sleep(0.01)
 
                 self.collision_sensor.destroy()
                 self.logger.info("Collision sensor destroyed")
@@ -451,7 +521,12 @@ class LaneInvasionDetector:
             self.invasion_event = None
 
     def destroy(self):
-        """Clean up lane invasion sensor."""
+        """
+        Clean up lane invasion sensor.
+
+        CRITICAL FIX: Add grace period for pending callback completion.
+        Reference: https://carla.readthedocs.io/en/latest/adv_synchrony_timestep/
+        """
         if self.lane_sensor:
             try:
                 # Stop listening before destruction (CARLA best practice)
@@ -460,10 +535,16 @@ class LaneInvasionDetector:
                     self.lane_sensor.stop()
                     self.logger.debug("Lane invasion sensor stopped listening")
 
+                # Grace period for async callback completion
+                import time
+                time.sleep(0.01)
+
                 self.lane_sensor.destroy()
                 self.logger.info("Lane invasion sensor destroyed")
             except RuntimeError as e:
                 self.logger.warning(f"Lane invasion sensor already destroyed or invalid: {e}")
+            except Exception as e:
+                self.logger.error(f"Error destroying lane invasion sensor: {e}")
             except Exception as e:
                 self.logger.error(f"Error destroying lane invasion sensor: {e}")
 
@@ -578,12 +659,21 @@ class ObstacleDetector:
             self.other_actor = None
 
     def destroy(self):
-        """Clean up obstacle sensor."""
+        """
+        Clean up obstacle sensor.
+
+        CRITICAL FIX: Add grace period for pending callback completion.
+        Reference: https://carla.readthedocs.io/en/latest/adv_synchrony_timestep/
+        """
         if self.obstacle_sensor:
             try:
                 if self.obstacle_sensor.is_listening:
                     self.obstacle_sensor.stop()
                     self.logger.debug("Obstacle sensor stopped listening")
+
+                # Grace period for async callback completion
+                import time
+                time.sleep(0.01)
 
                 self.obstacle_sensor.destroy()
                 self.logger.info("Obstacle sensor destroyed")
@@ -655,7 +745,21 @@ class SensorSuite:
         Returns:
             (4, 84, 84) array with 4 stacked grayscale frames, normalized [-1, 1]
         """
-        return self.image_stack.get_stacked_frames()
+        stacked = self.image_stack.get_stacked_frames()
+
+        # DEBUG: Log final observation
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"   FINAL CAMERA OBSERVATION:\n"
+                f"   Shape: {stacked.shape}\n"
+                f"   Dtype: {stacked.dtype}\n"
+                f"   Range: [{stacked.min():.3f}, {stacked.max():.3f}]\n"
+                f"   Mean: {stacked.mean():.3f}, Std: {stacked.std():.3f}\n"
+                f"   Non-zero frames: {(stacked != 0).any(axis=(1,2)).sum()}/4\n"
+                f"   Ready for CNN input (batch, 4, 84, 84)"
+            )
+
+        return stacked
 
     def is_collision_detected(self) -> bool:
         """

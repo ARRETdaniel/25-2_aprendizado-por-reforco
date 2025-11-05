@@ -541,7 +541,7 @@ class CARLANavigationEnv(Env):
                     f"   Actual yaw: {actual_transform.rotation.yaw:.2f}°\n"
                     f"   Actual forward vector: [{forward_vec.x:.3f}, {forward_vec.y:.3f}, {forward_vec.z:.3f}]\n"
                     f"   Expected forward (route): [{expected_fwd[0]:.3f}, {expected_fwd[1]:.3f}, {expected_fwd[2]:.3f}]\n"
-                    f"   Match: {'✓ ALIGNED' if abs(forward_vec.x - expected_fwd[0]) < 0.1 and abs(forward_vec.y - expected_fwd[1]) < 0.1 else '✗ MISALIGNED'}"
+                    f"   Match: {'ALIGNED' if abs(forward_vec.x - expected_fwd[0]) < 0.1 and abs(forward_vec.y - expected_fwd[1]) < 0.1 else '✗ MISALIGNED'}"
                 )
         except RuntimeError as e:
             raise RuntimeError(f"Failed to spawn ego vehicle: {e}")
@@ -797,7 +797,7 @@ class CARLANavigationEnv(Env):
             vehicle_location, vehicle_heading_radians
         )
 
-        # 🔧 FIX BUG #4: Handle variable-length waypoint arrays near route end
+        # FIX BUG #4: Handle variable-length waypoint arrays near route end
         # Expected: num_waypoints_ahead waypoints (e.g., 25 with 2m spacing)
         # Near route end: may return fewer waypoints
         # Solution: Pad with last waypoint to maintain fixed observation size
@@ -943,7 +943,7 @@ class CARLANavigationEnv(Env):
         """
         Check if episode should terminate naturally (within MDP).
 
-        ✅ FIX BUG #11: This function returns TRUE only for NATURAL MDP terminations.
+        FIX BUG #11: This function returns TRUE only for NATURAL MDP terminations.
         Time limits are NOT MDP terminations - they are handled as TRUNCATION in step().
 
         Natural MDP Termination Conditions (terminated=True):
@@ -1188,8 +1188,20 @@ class CARLANavigationEnv(Env):
         # Phase 1: Destroy actors (sensors, vehicle, NPCs)
         self._cleanup_episode()
 
+        # CRITICAL FIX: Allow CARLA to complete pending operations
+        # After destroying actors, CARLA may have pending callbacks/ticks
+        # Give it time to finish before disabling synchronous mode
+        if self.world:
+            try:
+                # Perform one final tick to ensure all callbacks complete
+                self.world.tick()
+                time.sleep(0.02)  # 20ms grace period for callback completion
+                self.logger.debug("Final world tick completed, callbacks flushed")
+            except Exception as e:
+                self.logger.warning(f"Final world tick failed: {e}")
+
         # Phase 2: Disable Traffic Manager synchronous mode
-        # CRITICAL: Must be done BEFORE world sync mode per CARLA docs
+        # CRITICAL: Must be done AFTER world sync mode per CARLA docs
         # Reference: https://carla.readthedocs.io/en/latest/adv_traffic_manager/
         if self.traffic_manager:
             try:

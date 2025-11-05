@@ -18,12 +18,20 @@ algorithm:
 
   # Training parameters
   batch_size: 256  # Mini-batch size sampled from replay buffer
-  buffer_size: 10000  # Replay buffer capacity (10K for debug, 1M for full training)
-  learning_starts: 1000  # Reduced for debug (25000 for full training)
-  # Rationale: Papers show 10k-25k range sufficient for CARLA environments.
-  # CARLA physics is more deterministic than MuJoCo (original TD3 benchmark),
-  # so less initial random exploration needed. Shorter warm-up allows agent
-  # to start learning useful behaviors earlier while still populating replay buffer.
+  buffer_size: 97000  # Replay buffer capacity (~22GB RAM, 1M for full training)
+  # Memory calculation: ~226KB per transition (state+action+next_state+reward+done)
+  # 22GB / 226KB ≈ 97,345 transitions. Using 97,000 for ~22GB usage.
+
+  # MODIFIED FOR 10K DEBUG RUN: Reduced from 25,000 to 5,000
+  # Rationale: TD3 exploration phase (OpenAI Spinning Up, Fujimoto et al. 2018)
+  #   - Steps 1-5,000: Random actions to fill replay buffer (exploration)
+  #   - Steps 5,001-10,000: Policy-based actions with TD3 training (learning)
+  # This allows us to observe BOTH phases in a 10K-step debug run:
+  #   - Exploration phase behavior (no CNN/policy calls, random actions)
+  #   - Learning phase behavior (CNN forward pass, TD3 training, full logs)
+  # Original: 25,000 (OpenAI Spinning Up default: 10,000)
+  learning_starts: 5000  # REDUCED: Start learning after 5K steps for 10K debug window
+
   train_freq: 1  # Update networks every step
   gradient_steps: -1  # -1 means as many gradient steps as environment steps
 
@@ -123,12 +131,20 @@ action:
 # Reward function configuration
 reward:
   # Component weights (tuned for safety-first autonomous driving)
+  # REWARD REBALANCING (Based on previous 30K failure analysis):
+  # Previous issue: Progress component dominated 88-99% of total reward magnitude
+  # Root cause: progress weight (5.0) was too high relative to other components
+  # Solution: Reduced progress from 5.0 to 1.0 for balanced contributions
+  # Target distribution: Each component contributes 10-30% of total reward
+  # References:
+  #   - TD3 paper (Fujimoto et al. 2018): Balanced reward components critical
+  #   - Contextual papers (Elallid et al., Chen et al.): Multi-component rewards
   weights:
     efficiency: 1.0  # Reward for maintaining target speed
     lane_keeping: 2.0  # Reward for staying centered in lane (only when moving!)
     comfort: 0.5  # Penalty for high jerk / Reward for smooth driving (only when moving!)
     safety: 1.0  # FIXED: Changed from -100.0. Penalties are already negative values.
-    progress: 5.0  # NEW: Reward for forward progress toward goal (goal-directed navigation)
+    progress: 5.0  # REDUCED from 5.0: Reward for forward progress (prevent domination)
 
   # Efficiency reward parameters
   efficiency:

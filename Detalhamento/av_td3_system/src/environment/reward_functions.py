@@ -96,6 +96,12 @@ class RewardCalculator:
         # Discount factor for potential function (should match TD3's gamma)
         self.gamma = config.get("gamma", 0.99)
 
+        # Step counter for throttling logging frequency
+        # Purpose: Prevent logging floods (domination warnings every step)
+        # Added: 2025-01-20 to address logging verbosity issue
+        self.step_counter = 0
+        self.log_frequency = 100  # Log warnings only every N steps
+
     def calculate(
         self,
         velocity: float,
@@ -233,38 +239,96 @@ class RewardCalculator:
             ),
         }
 
-        #  DIAGNOSTIC LOGGING: Reward Component Balance
-        # Added 2025-01-20 for training failure investigation
-        # Purpose: Identify which component is dominating and causing -50k mean reward
-        self.logger.debug(
-            f"[REWARD] Components - "
-            f"Efficiency: {efficiency:.3f}×{self.weights['efficiency']:.1f}={self.weights['efficiency']*efficiency:.2f}, "
-            f"Lane: {lane_keeping:.3f}×{self.weights['lane_keeping']:.1f}={self.weights['lane_keeping']*lane_keeping:.2f}, "
-            f"Comfort: {comfort:.3f}×{self.weights['comfort']:.1f}={self.weights['comfort']*comfort:.2f}, "
-            f"Safety: {safety:.3f}×{self.weights['safety']:.1f}={self.weights['safety']*safety:.2f}, "
-            f"Progress: {progress:.3f}×{self.weights['progress']:.1f}={self.weights['progress']*progress:.2f}"
-        )
+        # DEBUG: Comprehensive reward breakdown logging
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"   REWARD BREAKDOWN (Step {self.step_counter}):\n"
+                f"   ══════════════════════════════════════\n"
+                f"   EFFICIENCY (target speed tracking):\n"
+                f"      Raw: {efficiency:.4f}\n"
+                f"      Weight: {self.weights['efficiency']:.2f}\n"
+                f"      Contribution: {self.weights['efficiency']*efficiency:.4f}\n"
+                f"   ──────────────────────────────────────\n"
+                f"   LANE KEEPING (stay in lane):\n"
+                f"      Raw: {lane_keeping:.4f}\n"
+                f"      Weight: {self.weights['lane_keeping']:.2f}\n"
+                f"      Contribution: {self.weights['lane_keeping']*lane_keeping:.4f}\n"
+                f"   ──────────────────────────────────────\n"
+                f"   COMFORT (minimize jerk):\n"
+                f"      Raw: {comfort:.4f}\n"
+                f"      Weight: {self.weights['comfort']:.2f}\n"
+                f"      Contribution: {self.weights['comfort']*comfort:.4f}\n"
+                f"   ──────────────────────────────────────\n"
+                f"   SAFETY (collision/offroad penalty):\n"
+                f"      Raw: {safety:.4f}\n"
+                f"      Weight: {self.weights['safety']:.2f}\n"
+                f"      Contribution: {self.weights['safety']*safety:.4f}\n"
+                f"      Status: {' COLLISION' if collision_detected else ' OFFROAD' if offroad_detected else '✅ SAFE'}\n"
+                f"   ──────────────────────────────────────\n"
+                f"   PROGRESS (goal-directed movement):\n"
+                f"      Raw: {progress:.4f}\n"
+                f"      Weight: {self.weights['progress']:.2f}\n"
+                f"      Contribution: {self.weights['progress']*progress:.4f}\n"
+                f"   ══════════════════════════════════════\n"
+                f"    TOTAL REWARD: {total_reward:.4f}\n"
+                f"   ══════════════════════════════════════"
+            )
 
-        self.logger.debug(f"[REWARD] TOTAL: {total_reward:.2f}")
+            # Check for reward domination
+            component_magnitudes = {
+                "efficiency": abs(self.weights['efficiency'] * efficiency),
+                "lane_keeping": abs(self.weights['lane_keeping'] * lane_keeping),
+                "comfort": abs(self.weights['comfort'] * comfort),
+                "safety": abs(self.weights['safety'] * safety),
+                "progress": abs(self.weights['progress'] * progress),
+            }
+            total_magnitude = sum(component_magnitudes.values())
+
+            if total_magnitude > 0:
+                max_component = max(component_magnitudes.items(), key=lambda x: x[1])
+                component_name, magnitude = max_component
+                ratio = magnitude / total_magnitude
+
+                if ratio > 0.8:
+                    self.logger.debug(
+                        f"     WARNING: '{component_name}' dominates ({ratio*100:.1f}% of total magnitude)"
+                    )
+        else:
+            # Regular logging (not debug mode) - minimal output
+            self.logger.debug(
+                f"[REWARD] Components - "
+                f"Efficiency: {efficiency:.3f}×{self.weights['efficiency']:.1f}={self.weights['efficiency']*efficiency:.2f}, "
+                f"Lane: {lane_keeping:.3f}×{self.weights['lane_keeping']:.1f}={self.weights['lane_keeping']*lane_keeping:.2f}, "
+                f"Comfort: {comfort:.3f}×{self.weights['comfort']:.1f}={self.weights['comfort']*comfort:.2f}, "
+                f"Safety: {safety:.3f}×{self.weights['safety']:.1f}={self.weights['safety']*safety:.2f}, "
+                f"Progress: {progress:.3f}×{self.weights['progress']:.1f}={self.weights['progress']*progress:.2f}"
+            )
+            self.logger.debug(f"[REWARD] TOTAL: {total_reward:.2f}")
+
+        # Increment step counter (for logging frequency control)
+        self.step_counter += 1
 
         # Log warning if any component is dominating (>80% of total absolute magnitude)
-        component_magnitudes = {
-            "efficiency": abs(self.weights['efficiency'] * efficiency),
-            "lane_keeping": abs(self.weights['lane_keeping'] * lane_keeping),
-            "comfort": abs(self.weights['comfort'] * comfort),
-            "safety": abs(self.weights['safety'] * safety),
-            "progress": abs(self.weights['progress'] * progress),
-        }
-        total_magnitude = sum(component_magnitudes.values())
+        # FIXED: Only log every 100 steps to prevent output flooding (only in non-debug mode)
+        if not self.logger.isEnabledFor(logging.DEBUG) and self.step_counter % self.log_frequency == 0:
+            component_magnitudes = {
+                "efficiency": abs(self.weights['efficiency'] * efficiency),
+                "lane_keeping": abs(self.weights['lane_keeping'] * lane_keeping),
+                "comfort": abs(self.weights['comfort'] * comfort),
+                "safety": abs(self.weights['safety'] * safety),
+                "progress": abs(self.weights['progress'] * progress),
+            }
+            total_magnitude = sum(component_magnitudes.values())
 
-        if total_magnitude > 0:
-            for component, magnitude in component_magnitudes.items():
-                ratio = magnitude / total_magnitude
-                if ratio > 0.8:
-                    self.logger.warning(
-                        f"[REWARD] Component '{component}' is dominating: "
-                        f"{ratio*100:.1f}% of total magnitude (threshold: 80%)"
-                    )
+            if total_magnitude > 0:
+                for component, magnitude in component_magnitudes.items():
+                    ratio = magnitude / total_magnitude
+                    if ratio > 0.8:
+                        self.logger.warning(
+                            f"[REWARD] Component '{component}' is dominating: "
+                            f"{ratio*100:.1f}% of total magnitude (threshold: 80%) "
+                            f"[Logged at step {self.step_counter}]"
+                        )
 
         return reward_dict
 
@@ -848,3 +912,4 @@ class RewardCalculator:
         self.prev_acceleration = 0.0
         self.prev_acceleration_lateral = 0.0
         self.prev_distance_to_goal = None  # Reset progress tracking
+        self.step_counter = 0  # Reset step counter for new episode

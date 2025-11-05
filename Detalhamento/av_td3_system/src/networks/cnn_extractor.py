@@ -21,6 +21,7 @@ Date: 2025-01-16
 import torch
 import torch.nn as nn
 import numpy as np
+import logging
 from typing import Tuple
 
 
@@ -88,6 +89,9 @@ class NatureCNN(nn.Module):
         self.input_channels = input_channels
         self.num_frames = num_frames
         self.feature_dim = feature_dim
+
+        # Logger for debug output
+        self.logger = logging.getLogger(__name__)
 
         # Convolutional layers following Nature DQN architecture
         # Layer 1: Extract low-level features (edges, textures) with large receptive field
@@ -209,17 +213,75 @@ class NatureCNN(nn.Module):
                 f"got {x.shape}"
             )
 
+        # DEBUG: Log input statistics
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"   CNN FORWARD PASS - INPUT:\n"
+                f"   Shape: {x.shape}\n"
+                f"   Dtype: {x.dtype}\n"
+                f"   Device: {x.device}\n"
+                f"   Range: [{x.min().item():.3f}, {x.max().item():.3f}]\n"
+                f"   Mean: {x.mean().item():.3f}, Std: {x.std().item():.3f}\n"
+                f"   Has NaN: {torch.isnan(x).any().item()}\n"
+                f"   Has Inf: {torch.isinf(x).any().item()}"
+            )
+
         # Convolutional layers with Leaky ReLU activations
         # Preserves negative values from zero-centered normalization
         out = self.activation(self.conv1(x))   # (batch, 32, 20, 20)
+
+        # DEBUG: Log after conv1
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"   CNN LAYER 1 (Conv 32×8×8, stride=4):\n"
+                f"   Output shape: {out.shape}\n"
+                f"   Range: [{out.min().item():.3f}, {out.max().item():.3f}]\n"
+                f"   Mean: {out.mean().item():.3f}, Std: {out.std().item():.3f}\n"
+                f"   Active neurons: {(out > 0).float().mean().item()*100:.1f}%"
+            )
+
         out = self.activation(self.conv2(out))  # (batch, 64, 9, 9)
+
+        # DEBUG: Log after conv2
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"   CNN LAYER 2 (Conv 64×4×4, stride=2):\n"
+                f"   Output shape: {out.shape}\n"
+                f"   Range: [{out.min().item():.3f}, {out.max().item():.3f}]\n"
+                f"   Mean: {out.mean().item():.3f}, Std: {out.std().item():.3f}\n"
+                f"   Active neurons: {(out > 0).float().mean().item()*100:.1f}%"
+            )
+
         out = self.activation(self.conv3(out))  # (batch, 64, 7, 7)
+
+        # DEBUG: Log after conv3
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"   CNN LAYER 3 (Conv 64×3×3, stride=1):\n"
+                f"   Output shape: {out.shape}\n"
+                f"   Range: [{out.min().item():.3f}, {out.max().item():.3f}]\n"
+                f"   Mean: {out.mean().item():.3f}, Std: {out.std().item():.3f}\n"
+                f"   Active neurons: {(out > 0).float().mean().item()*100:.1f}%"
+            )
 
         # Flatten spatial dimensions
         out = out.view(out.size(0), -1)  # (batch, 3136)
 
         # Fully connected projection to feature space
         features = self.fc(out)  # (batch, 512)
+
+        # DEBUG: Log output features
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"   CNN FORWARD PASS - OUTPUT:\n"
+                f"   Feature shape: {features.shape}\n"
+                f"   Range: [{features.min().item():.3f}, {features.max().item():.3f}]\n"
+                f"   Mean: {features.mean().item():.3f}, Std: {features.std().item():.3f}\n"
+                f"   L2 norm: {features.norm(dim=1).mean().item():.3f}\n"
+                f"   Has NaN: {torch.isnan(features).any().item()}\n"
+                f"   Has Inf: {torch.isinf(features).any().item()}\n"
+                f"   Feature quality: {'GOOD' if not (torch.isnan(features).any() or torch.isinf(features).any()) else 'BAD'}"
+            )
 
         return features
 

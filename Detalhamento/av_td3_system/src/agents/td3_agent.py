@@ -15,6 +15,7 @@ Date: 2024
 """
 
 import copy
+import logging
 import os
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -262,6 +263,9 @@ class TD3Agent:
         # CNN diagnostics tracker (optional, for debugging)
         self.cnn_diagnostics = None
 
+        # Initialize logger for debug mode
+        self.logger = logging.getLogger(__name__)
+
         print(f"TD3Agent initialized with:")
         print(f"  State dim: {state_dim}, Action dim: {action_dim}")
         print(f"  Actor hidden size: {network_config.get('hidden_sizes', network_config.get('hidden_layers', [256, 256]))}")
@@ -375,6 +379,18 @@ class TD3Agent:
         # FIX: Select correct CNN based on caller (actor or critic)
         cnn = self.actor_cnn if use_actor_cnn else self.critic_cnn
 
+        # DEBUG: Log input observations
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"   FEATURE EXTRACTION - INPUT:\n"
+                f"   Mode: {'ACTOR' if use_actor_cnn else 'CRITIC'}\n"
+                f"   Gradient: {'ENABLED' if enable_grad else 'DISABLED'}\n"
+                f"   Image shape: {obs_dict['image'].shape}\n"
+                f"   Image range: [{obs_dict['image'].min().item():.3f}, {obs_dict['image'].max().item():.3f}]\n"
+                f"   Vector shape: {obs_dict['vector'].shape}\n"
+                f"   Vector range: [{obs_dict['vector'].min().item():.3f}, {obs_dict['vector'].max().item():.3f}]"
+            )
+
         if cnn is None:
             # No CNN provided - use zeros for image features (fallback)
             batch_size = obs_dict['vector'].shape[0]
@@ -389,9 +405,33 @@ class TD3Agent:
             with torch.no_grad():
                 image_features = cnn(obs_dict['image'])  # (B, 512)
 
+        # DEBUG: Log extracted image features
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"   FEATURE EXTRACTION - IMAGE FEATURES:\n"
+                f"   Shape: {image_features.shape}\n"
+                f"   Range: [{image_features.min().item():.3f}, {image_features.max().item():.3f}]\n"
+                f"   Mean: {image_features.mean().item():.3f}, Std: {image_features.std().item():.3f}\n"
+                f"   L2 norm: {image_features.norm(dim=1).mean().item():.3f}\n"
+                f"   Requires grad: {image_features.requires_grad}"
+            )
+
         # Concatenate visual features with vector state
         # Result: (B, 535) = (B, 512) + (B, 23)
         state = torch.cat([image_features, obs_dict['vector']], dim=1)
+
+        # DEBUG: Log final concatenated state
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"   FEATURE EXTRACTION - OUTPUT:\n"
+                f"   State shape: {state.shape} (512 image + 23 vector = 535)\n"
+                f"   Range: [{state.min().item():.3f}, {state.max().item():.3f}]\n"
+                f"   Mean: {state.mean().item():.3f}, Std: {state.std().item():.3f}\n"
+                f"   Requires grad: {state.requires_grad}\n"
+                f"   Has NaN: {torch.isnan(state).any().item()}\n"
+                f"   Has Inf: {torch.isinf(state).any().item()}\n"
+                f"   State quality: {'GOOD' if not (torch.isnan(state).any() or torch.isinf(state).any()) else 'BAD'}"
+            )
 
         return state
 
@@ -494,6 +534,17 @@ class TD3Agent:
             # DictReplayBuffer returns: (obs_dict, action, next_obs_dict, reward, not_done)
             obs_dict, action, next_obs_dict, reward, not_done = self.replay_buffer.sample(batch_size)
 
+            # DEBUG: Log batch statistics (throttled to reduce overhead)
+            if self.logger.isEnabledFor(logging.DEBUG) and (self.total_it % 100 == 0):
+                self.logger.debug(
+                    f"   TRAINING STEP {self.total_it} - BATCH SAMPLED:\n"
+                    f"   Batch size: {batch_size}\n"
+                    f"   Reward range: [{reward.min().item():.2f}, {reward.max().item():.2f}]\n"
+                    f"   Reward mean: {reward.mean().item():.2f}, Std: {reward.std().item():.2f}\n"
+                    f"   Action range: [{action.min().item():.3f}, {action.max().item():.3f}]\n"
+                    f"   Done count: {(~not_done.bool()).sum().item()}/{batch_size}"
+                )
+
             #  FIX: Extract state features WITH gradients using CRITIC'S CNN
             # Critic loss will backprop through critic_cnn (not actor_cnn)
             state = self.extract_features(
@@ -535,12 +586,44 @@ class TD3Agent:
         # Compute critic loss (MSE on both Q-networks)
         critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
 
+        # DEBUG: Log Q-values and critic loss (throttled)
+        if self.logger.isEnabledFor(logging.DEBUG) and (self.total_it % 100 == 0):
+            self.logger.debug(
+                f"   TRAINING STEP {self.total_it} - CRITIC UPDATE:\n"
+                f"   Current Q1: mean={current_Q1.mean().item():.2f}, std={current_Q1.std().item():.2f}\n"
+                f"   Current Q2: mean={current_Q2.mean().item():.2f}, std={current_Q2.std().item():.2f}\n"
+                f"   Target Q: mean={target_Q.mean().item():.2f}, std={target_Q.std().item():.2f}\n"
+                f"   Critic loss: {critic_loss.item():.4f}\n"
+                f"   TD error Q1: {(current_Q1 - target_Q).abs().mean().item():.4f}\n"
+                f"   TD error Q2: {(current_Q2 - target_Q).abs().mean().item():.4f}"
+            )
+
         # FIX: Optimize critics AND critic's CNN (gradients flow through state → critic_cnn)
         self.critic_optimizer.zero_grad()
         if self.critic_cnn_optimizer is not None:
             self.critic_cnn_optimizer.zero_grad()  # Zero critic CNN gradients before backprop
 
         critic_loss.backward()  # Gradients flow: critic_loss → state → critic_cnn!
+
+        # DEBUG: Log gradient norms (throttled)
+        if self.logger.isEnabledFor(logging.DEBUG) and (self.total_it % 100 == 0):
+            critic_grad_norm = sum(
+                p.grad.norm().item() for p in self.critic.parameters() if p.grad is not None
+            )
+            if self.critic_cnn is not None:
+                cnn_grad_norm = sum(
+                    p.grad.norm().item() for p in self.critic_cnn.parameters() if p.grad is not None
+                )
+                self.logger.debug(
+                    f"   TRAINING STEP {self.total_it} - GRADIENTS:\n"
+                    f"   Critic grad norm: {critic_grad_norm:.4f}\n"
+                    f"   Critic CNN grad norm: {cnn_grad_norm:.4f}"
+                )
+            else:
+                self.logger.debug(
+                    f"   TRAINING STEP {self.total_it} - GRADIENTS:\n"
+                    f"   Critic grad norm: {critic_grad_norm:.4f}"
+                )
 
         # Capture CNN gradients for diagnostics (after backward, before step)
         if self.cnn_diagnostics is not None:
@@ -583,12 +666,40 @@ class TD3Agent:
             # Compute actor loss: -Q1(s, μ_φ(s))
             actor_loss = -self.critic.Q1(state_for_actor, self.actor(state_for_actor)).mean()
 
+            # DEBUG: Log actor loss (throttled)
+            if self.logger.isEnabledFor(logging.DEBUG) and (self.total_it % 100 == 0):
+                self.logger.debug(
+                    f"   TRAINING STEP {self.total_it} - ACTOR UPDATE (delayed, freq={self.policy_freq}):\n"
+                    f"   Actor loss: {actor_loss.item():.4f}\n"
+                    f"   Q-value under current policy: {-actor_loss.item():.2f}"
+                )
+
             # FIX: Optimize actor AND actor's CNN (gradients flow through state_for_actor → actor_cnn)
             self.actor_optimizer.zero_grad()
             if self.actor_cnn_optimizer is not None:
                 self.actor_cnn_optimizer.zero_grad()
 
             actor_loss.backward()  # Gradients flow: actor_loss → state → actor_cnn!
+
+            # DEBUG: Log actor gradient norms (throttled)
+            if self.logger.isEnabledFor(logging.DEBUG) and (self.total_it % 100 == 0):
+                actor_grad_norm = sum(
+                    p.grad.norm().item() for p in self.actor.parameters() if p.grad is not None
+                )
+                if self.actor_cnn is not None:
+                    actor_cnn_grad_norm = sum(
+                        p.grad.norm().item() for p in self.actor_cnn.parameters() if p.grad is not None
+                    )
+                    self.logger.debug(
+                        f"   TRAINING STEP {self.total_it} - ACTOR GRADIENTS:\n"
+                        f"   Actor grad norm: {actor_grad_norm:.4f}\n"
+                        f"   Actor CNN grad norm: {actor_cnn_grad_norm:.4f}"
+                    )
+                else:
+                    self.logger.debug(
+                        f"   TRAINING STEP {self.total_it} - ACTOR GRADIENTS:\n"
+                        f"   Actor grad norm: {actor_grad_norm:.4f}"
+                    )
 
             # Capture CNN gradients for diagnostics (after backward, before step)
             if self.cnn_diagnostics is not None:
