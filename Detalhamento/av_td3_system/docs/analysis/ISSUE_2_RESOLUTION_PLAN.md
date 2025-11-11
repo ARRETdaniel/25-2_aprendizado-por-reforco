@@ -1,8 +1,8 @@
 # Issue #2: Vector Observation Size Mismatch - Resolution Plan
 
-**Issue:** Vector observation is 23 dimensions, expected 53 dimensions  
-**Root Cause:** Configuration mismatch - waypoint config produces 10 waypoints instead of 25  
-**Solution Type:** Configuration fix (no code changes to core logic)  
+**Issue:** Vector observation is 23 dimensions, expected 53 dimensions
+**Root Cause:** Configuration mismatch - waypoint config produces 10 waypoints instead of 25
+**Solution Type:** Configuration fix (no code changes to core logic)
 **Estimated Time:** 2-3 hours (config + testing + validation)
 
 ---
@@ -160,17 +160,17 @@ state_dim = cnn_output_dim + vector_obs_dim  # 512 + 53 = 565
 3. **Test observation space:**
    ```python
    from src.environment.carla_env import CARLANavigationEnv
-   
+
    env = CARLANavigationEnv(
        carla_config_path='config/carla_config.yaml',
        td3_config_path='config/td3_config.yaml',
        training_config_path='config/training_config.yaml'
    )
-   
+
    obs, info = env.reset()
    print(f"Vector shape: {obs['vector'].shape}")
    # Expected: Vector shape: (53,)
-   
+
    assert obs['vector'].shape == (53,), f"Expected (53,), got {obs['vector'].shape}"
    ```
 
@@ -217,7 +217,7 @@ state_dim = cnn_output_dim + vector_obs_dim  # 512 + 53 = 565
    ```python
    # Change:
    state_dim = 535  # OLD
-   
+
    # To:
    state_dim = 565  # NEW (512 CNN + 53 vector)
    ```
@@ -226,18 +226,18 @@ state_dim = cnn_output_dim + vector_obs_dim  # 512 + 53 = 565
    ```python
    from src.networks.actor import Actor
    from src.networks.critic import Critic
-   
+
    actor = Actor(state_dim=565, action_dim=2)
    critic = Critic(state_dim=565, action_dim=2)
-   
+
    # Test forward pass
    import torch
    state = torch.randn(1, 565)
    action = torch.randn(1, 2)
-   
+
    actor_output = actor(state)
    q_value = critic(state, action)
-   
+
    print(f"Actor output shape: {actor_output.shape}")  # Should be (1, 2)
    print(f"Critic output shape: {q_value.shape}")      # Should be (1, 1)
    ```
@@ -256,27 +256,27 @@ state_dim = cnn_output_dim + vector_obs_dim  # 512 + 53 = 565
    # Test full observation → network pipeline
    env = CARLANavigationEnv(...)
    obs, info = env.reset()
-   
+
    # Extract components
    image_obs = obs['image']  # (4, 84, 84)
    vector_obs = obs['vector']  # (53,)
-   
+
    # CNN forward pass
    cnn_features = cnn_extractor(torch.from_numpy(image_obs).unsqueeze(0))
    assert cnn_features.shape == (1, 512)
-   
+
    # Concatenate state
    state = torch.cat([cnn_features, torch.from_numpy(vector_obs).unsqueeze(0)], dim=1)
    assert state.shape == (1, 565)
-   
+
    # Actor forward pass
    action = actor(state)
    assert action.shape == (1, 2)
-   
+
    # Critic forward pass
    q_value = critic(state, action)
    assert q_value.shape == (1, 1)
-   
+
    print("✅ Full pipeline test passed!")
    ```
 
@@ -419,9 +419,9 @@ state = concat([
 
 ---
 
-**Status:** ✅ PLAN READY - Awaiting approval to execute  
-**Priority:** P0 - Critical blocker for Steps 4-8  
-**Assigned To:** [To be assigned]  
+**Status:** ✅ PLAN READY - Awaiting approval to execute
+**Priority:** P0 - Critical blocker for Steps 4-8
+**Assigned To:** [To be assigned]
 **ETA:** 2-3 hours after start
 
 ---

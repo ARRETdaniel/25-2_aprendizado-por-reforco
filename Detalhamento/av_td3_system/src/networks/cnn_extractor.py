@@ -93,6 +93,10 @@ class NatureCNN(nn.Module):
         # Logger for debug output
         self.logger = logging.getLogger(__name__)
 
+        # OPTIMIZATION: Step counter for throttled debug logging (every 100 calls)
+        self.forward_step_counter = 0
+        self.log_frequency = 100
+
         # Convolutional layers following Nature DQN architecture
         # Layer 1: Extract low-level features (edges, textures) with large receptive field
         self.conv1 = nn.Conv2d(
@@ -206,6 +210,10 @@ class NatureCNN(nn.Module):
             >>> features = cnn(frames)
             >>> print(features.shape)  # torch.Size([16, 512])
         """
+        # OPTIMIZATION: Increment step counter for throttled logging
+        self.forward_step_counter += 1
+        should_log = (self.forward_step_counter % self.log_frequency == 0)
+
         # Validate input shape
         if x.shape[1:] != (self.input_channels, 84, 84):
             raise ValueError(
@@ -213,10 +221,11 @@ class NatureCNN(nn.Module):
                 f"got {x.shape}"
             )
 
-        # DEBUG: Log input statistics
-        if self.logger.isEnabledFor(logging.DEBUG):
+        # DEBUG: Log input statistics every 100 forward passes
+        # OPTIMIZATION: Throttled to reduce logging overhead (was every forward pass)
+        if self.logger.isEnabledFor(logging.DEBUG) and should_log:
             self.logger.debug(
-                f"   CNN FORWARD PASS - INPUT:\n"
+                f"   CNN FORWARD PASS #{self.forward_step_counter} - INPUT:\n"
                 f"   Shape: {x.shape}\n"
                 f"   Dtype: {x.dtype}\n"
                 f"   Device: {x.device}\n"
@@ -230,8 +239,9 @@ class NatureCNN(nn.Module):
         # Preserves negative values from zero-centered normalization
         out = self.activation(self.conv1(x))   # (batch, 32, 20, 20)
 
-        # DEBUG: Log after conv1
-        if self.logger.isEnabledFor(logging.DEBUG):
+        # DEBUG: Log after conv1 every 100 forward passes
+        # OPTIMIZATION: Throttled to reduce logging overhead (was every forward pass)
+        if self.logger.isEnabledFor(logging.DEBUG) and should_log:
             self.logger.debug(
                 f"   CNN LAYER 1 (Conv 32×8×8, stride=4):\n"
                 f"   Output shape: {out.shape}\n"
@@ -242,8 +252,9 @@ class NatureCNN(nn.Module):
 
         out = self.activation(self.conv2(out))  # (batch, 64, 9, 9)
 
-        # DEBUG: Log after conv2
-        if self.logger.isEnabledFor(logging.DEBUG):
+        # DEBUG: Log after conv2 every 100 forward passes
+        # OPTIMIZATION: Throttled to reduce logging overhead (was every forward pass)
+        if self.logger.isEnabledFor(logging.DEBUG) and should_log:
             self.logger.debug(
                 f"   CNN LAYER 2 (Conv 64×4×4, stride=2):\n"
                 f"   Output shape: {out.shape}\n"
@@ -254,8 +265,9 @@ class NatureCNN(nn.Module):
 
         out = self.activation(self.conv3(out))  # (batch, 64, 7, 7)
 
-        # DEBUG: Log after conv3
-        if self.logger.isEnabledFor(logging.DEBUG):
+        # DEBUG: Log after conv3 every 100 forward passes
+        # OPTIMIZATION: Throttled to reduce logging overhead (was every forward pass)
+        if self.logger.isEnabledFor(logging.DEBUG) and should_log:
             self.logger.debug(
                 f"   CNN LAYER 3 (Conv 64×3×3, stride=1):\n"
                 f"   Output shape: {out.shape}\n"
@@ -270,8 +282,9 @@ class NatureCNN(nn.Module):
         # Fully connected projection to feature space
         features = self.fc(out)  # (batch, 512)
 
-        # DEBUG: Log output features
-        if self.logger.isEnabledFor(logging.DEBUG):
+        # DEBUG: Log output features every 100 forward passes
+        # OPTIMIZATION: Throttled to reduce logging overhead (was every forward pass)
+        if self.logger.isEnabledFor(logging.DEBUG) and should_log:
             self.logger.debug(
                 f"   CNN FORWARD PASS - OUTPUT:\n"
                 f"   Feature shape: {features.shape}\n"

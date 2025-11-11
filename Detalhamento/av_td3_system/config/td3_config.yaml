@@ -144,7 +144,7 @@ reward:
     lane_keeping: 2.0  # Reward for staying centered in lane (only when moving!)
     comfort: 0.5  # Penalty for high jerk / Reward for smooth driving (only when moving!)
     safety: 1.0  # FIXED: Changed from -100.0. Penalties are already negative values.
-    progress: 5.0  # REDUCED from 5.0: Reward for forward progress (prevent domination)
+    progress: 1.0  # REDUCED from 5.0: Reward for forward progress (prevent domination)
 
   # Efficiency reward parameters
   efficiency:

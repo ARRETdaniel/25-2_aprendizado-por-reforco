@@ -219,7 +219,7 @@ class TD3Agent:
 
         # Validation checks
         if use_dict_buffer and (self.actor_cnn is None or self.critic_cnn is None):
-            print("  ⚠️  WARNING: DictReplayBuffer enabled but CNN(s) missing!")
+            print("   WARNING: DictReplayBuffer enabled but CNN(s) missing!")
             if self.actor_cnn is None:
                 print("      actor_cnn is None - actor will use zero features")
             if self.critic_cnn is None:
@@ -228,11 +228,11 @@ class TD3Agent:
         # Check if same CNN instance is shared (not recommended)
         if self.actor_cnn is not None and self.critic_cnn is not None:
             if id(self.actor_cnn) == id(self.critic_cnn):
-                print("  ⚠️  CRITICAL WARNING: Actor and critic share the SAME CNN instance!")
+                print("      CRITICAL WARNING: Actor and critic share the SAME CNN instance!")
                 print("      This causes gradient interference and training instability.")
                 print("      Create separate CNN instances: actor_cnn = CNN(), critic_cnn = CNN()")
             else:
-                print(f"  ✅ Actor and critic use SEPARATE CNN instances (recommended)")
+                print(f"     Actor and critic use SEPARATE CNN instances (recommended)")
                 print(f"     Actor CNN id: {id(self.actor_cnn)}")
                 print(f"     Critic CNN id: {id(self.critic_cnn)}")
 
@@ -424,7 +424,7 @@ class TD3Agent:
         if self.logger.isEnabledFor(logging.DEBUG):
             self.logger.debug(
                 f"   FEATURE EXTRACTION - OUTPUT:\n"
-                f"   State shape: {state.shape} (512 image + 23 vector = 535)\n"
+                f"   State shape: {state.shape} (previous it was 512 image + 23 vector = 535)\n"
                 f"   Range: [{state.min().item():.3f}, {state.max().item():.3f}]\n"
                 f"   Mean: {state.mean().item():.3f}, Std: {state.std().item():.3f}\n"
                 f"   Requires grad: {state.requires_grad}\n"
@@ -534,8 +534,9 @@ class TD3Agent:
             # DictReplayBuffer returns: (obs_dict, action, next_obs_dict, reward, not_done)
             obs_dict, action, next_obs_dict, reward, not_done = self.replay_buffer.sample(batch_size)
 
-            # DEBUG: Log batch statistics (throttled to reduce overhead)
-            if self.logger.isEnabledFor(logging.DEBUG) and (self.total_it % 100 == 0):
+            # DEBUG: Log batch statistics every 100 training steps
+            # OPTIMIZATION: Throttled to reduce logging overhead (was every step)
+            if self.logger.isEnabledFor(logging.DEBUG) and self.total_it % 100 == 0:
                 self.logger.debug(
                     f"   TRAINING STEP {self.total_it} - BATCH SAMPLED:\n"
                     f"   Batch size: {batch_size}\n"
@@ -586,8 +587,9 @@ class TD3Agent:
         # Compute critic loss (MSE on both Q-networks)
         critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
 
-        # DEBUG: Log Q-values and critic loss (throttled)
-        if self.logger.isEnabledFor(logging.DEBUG) and (self.total_it % 100 == 0):
+        # DEBUG: Log Q-values and critic loss every 100 training steps
+        # OPTIMIZATION: Throttled to reduce logging overhead (was every step)
+        if self.logger.isEnabledFor(logging.DEBUG) and self.total_it % 100 == 0:
             self.logger.debug(
                 f"   TRAINING STEP {self.total_it} - CRITIC UPDATE:\n"
                 f"   Current Q1: mean={current_Q1.mean().item():.2f}, std={current_Q1.std().item():.2f}\n"
@@ -605,8 +607,9 @@ class TD3Agent:
 
         critic_loss.backward()  # Gradients flow: critic_loss → state → critic_cnn!
 
-        # DEBUG: Log gradient norms (throttled)
-        if self.logger.isEnabledFor(logging.DEBUG) and (self.total_it % 100 == 0):
+        # DEBUG: Log gradient norms every 100 training steps
+        # OPTIMIZATION: Throttled to reduce logging overhead (was every step)
+        if self.logger.isEnabledFor(logging.DEBUG) and self.total_it % 100 == 0:
             critic_grad_norm = sum(
                 p.grad.norm().item() for p in self.critic.parameters() if p.grad is not None
             )
@@ -625,23 +628,39 @@ class TD3Agent:
                     f"   Critic grad norm: {critic_grad_norm:.4f}"
                 )
 
-        # Capture CNN gradients for diagnostics (after backward, before step)
+        # 🔍 ENHANCED CNN DIAGNOSTICS #1: Capture gradients (after backward, before step)
         if self.cnn_diagnostics is not None:
             self.cnn_diagnostics.capture_gradients()
 
-        # Capture CNN features for diagnostics
+            # Log detailed gradient flow every 100 steps
+            if self.total_it % 100 == 0:
+                self._log_detailed_gradient_flow(self.critic_cnn, "critic_cnn")
+
+        # 🔍 ENHANCED CNN DIAGNOSTICS #2: Capture features for diversity analysis
         if self.cnn_diagnostics is not None and self.use_dict_buffer and self.critic_cnn is not None:
             with torch.no_grad():
                 sample_features = self.critic_cnn(obs_dict['image'])
                 self.cnn_diagnostics.capture_features(sample_features, name="critic_update")
 
+                # Log feature diversity metrics every 100 steps
+                if self.total_it % 100 == 0:
+                    self._log_feature_diversity(sample_features, "critic_cnn")
+
         self.critic_optimizer.step()
         if self.critic_cnn_optimizer is not None:
             self.critic_cnn_optimizer.step()  # UPDATE CRITIC CNN WEIGHTS!
 
-            # Capture weight changes after optimizer step
+            # 🔍 ENHANCED CNN DIAGNOSTICS #3: Capture weight changes (after optimizer step)
             if self.cnn_diagnostics is not None:
                 self.cnn_diagnostics.capture_weights()
+
+                # Log weight statistics every 1000 steps
+                if self.total_it % 1000 == 0:
+                    self._log_weight_statistics(self.critic_cnn, "critic_cnn")
+
+            # 🔍 ENHANCED CNN DIAGNOSTICS #4: Log learning rate every 1000 steps
+            if self.total_it % 1000 == 0:
+                self._log_learning_rate(self.critic_cnn_optimizer, "critic_cnn")
 
         # Prepare metrics
         metrics = {
@@ -666,8 +685,9 @@ class TD3Agent:
             # Compute actor loss: -Q1(s, μ_φ(s))
             actor_loss = -self.critic.Q1(state_for_actor, self.actor(state_for_actor)).mean()
 
-            # DEBUG: Log actor loss (throttled)
-            if self.logger.isEnabledFor(logging.DEBUG) and (self.total_it % 100 == 0):
+            # DEBUG: Log actor loss every 100 training steps
+            # OPTIMIZATION: Throttled to reduce logging overhead (was every delayed update)
+            if self.logger.isEnabledFor(logging.DEBUG) and self.total_it % 100 == 0:
                 self.logger.debug(
                     f"   TRAINING STEP {self.total_it} - ACTOR UPDATE (delayed, freq={self.policy_freq}):\n"
                     f"   Actor loss: {actor_loss.item():.4f}\n"
@@ -681,8 +701,9 @@ class TD3Agent:
 
             actor_loss.backward()  # Gradients flow: actor_loss → state → actor_cnn!
 
-            # DEBUG: Log actor gradient norms (throttled)
-            if self.logger.isEnabledFor(logging.DEBUG) and (self.total_it % 100 == 0):
+            # DEBUG: Log actor gradient norms every 100 training steps
+            # OPTIMIZATION: Throttled to reduce logging overhead (was every delayed update)
+            if self.logger.isEnabledFor(logging.DEBUG) and self.total_it % 100 == 0:
                 actor_grad_norm = sum(
                     p.grad.norm().item() for p in self.actor.parameters() if p.grad is not None
                 )
@@ -701,23 +722,39 @@ class TD3Agent:
                         f"   Actor grad norm: {actor_grad_norm:.4f}"
                     )
 
-            # Capture CNN gradients for diagnostics (after backward, before step)
+            # 🔍 ENHANCED CNN DIAGNOSTICS #1: Capture actor gradients (after backward, before step)
             if self.cnn_diagnostics is not None:
                 self.cnn_diagnostics.capture_gradients()
 
-            # Capture CNN features for diagnostics
+                # Log detailed gradient flow every 100 steps
+                if self.total_it % 100 == 0:
+                    self._log_detailed_gradient_flow(self.actor_cnn, "actor_cnn")
+
+            # 🔍 ENHANCED CNN DIAGNOSTICS #2: Capture actor features for diversity analysis
             if self.cnn_diagnostics is not None and self.use_dict_buffer and self.actor_cnn is not None:
                 with torch.no_grad():
                     sample_features = self.actor_cnn(obs_dict['image'])
                     self.cnn_diagnostics.capture_features(sample_features, name="actor_update")
 
+                    # Log feature diversity metrics every 100 steps
+                    if self.total_it % 100 == 0:
+                        self._log_feature_diversity(sample_features, "actor_cnn")
+
             self.actor_optimizer.step()
             if self.actor_cnn_optimizer is not None:
                 self.actor_cnn_optimizer.step()  # UPDATE ACTOR CNN WEIGHTS!
 
-                # Capture weight changes after optimizer step
+                # 🔍 ENHANCED CNN DIAGNOSTICS #3: Capture actor weight changes (after optimizer step)
                 if self.cnn_diagnostics is not None:
                     self.cnn_diagnostics.capture_weights()
+
+                    # Log weight statistics every 1000 steps
+                    if self.total_it % 1000 == 0:
+                        self._log_weight_statistics(self.actor_cnn, "actor_cnn")
+
+                # 🔍 ENHANCED CNN DIAGNOSTICS #4: Log actor learning rate every 1000 steps
+                if self.total_it % 1000 == 0:
+                    self._log_learning_rate(self.actor_cnn_optimizer, "actor_cnn")
 
             # Soft update target networks: θ' ← τθ + (1-τ)θ'
             for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
@@ -1009,6 +1046,199 @@ class TD3Agent:
             return float(torch.min(params_flat).item())
         else:
             raise ValueError(f"Unknown stat_type: {stat_type}")
+
+    def _log_detailed_gradient_flow(self, cnn: torch.nn.Module, network_name: str) -> None:
+        """
+        Log detailed gradient flow statistics for CNN layers.
+
+        Analyzes gradient norms for each layer to detect vanishing or exploding
+        gradients, which are common issues in deep networks.
+
+        Args:
+            cnn: CNN network (actor_cnn or critic_cnn)
+            network_name: Name for logging (e.g., "actor_cnn", "critic_cnn")
+        """
+        if cnn is None:
+            return
+
+        gradient_norms = []
+        vanishing_threshold = 1e-6
+        exploding_threshold = 10.0
+
+        for name, param in cnn.named_parameters():
+            if param.grad is not None:
+                grad_norm = param.grad.norm().item()
+                gradient_norms.append(grad_norm)
+
+                # Determine status
+                if grad_norm < vanishing_threshold:
+                    status = "⚠️ VANISHING"
+                elif grad_norm > exploding_threshold:
+                    status = "🔥 EXPLODING"
+                else:
+                    status = "✅ OK"
+
+                self.logger.debug(
+                    f"🔄 [{network_name}] Gradient {name}: {grad_norm:.6f} {status}"
+                )
+
+        if gradient_norms:
+            min_norm = min(gradient_norms)
+            max_norm = max(gradient_norms)
+            avg_norm = np.mean(gradient_norms)
+
+            # Calculate gradient flow ratio (first/last layer)
+            flow_ratio = gradient_norms[0] / gradient_norms[-1] if len(gradient_norms) > 1 else 1.0
+
+            # Assess overall health
+            issues = []
+            if min_norm < vanishing_threshold:
+                issues.append("⚠️ Vanishing gradients")
+            if max_norm > exploding_threshold:
+                issues.append("🔥 Exploding gradients")
+            if flow_ratio < 0.1 or flow_ratio > 10.0:
+                issues.append(f"⚠️ Poor flow ratio ({flow_ratio:.2f})")
+
+            health_status = " | ".join(issues) if issues else "✅ HEALTHY"
+
+            self.logger.debug(
+                f"📊 [{network_name}] Gradient Flow Summary (Step {self.total_it}):\n"
+                f"   Min: {min_norm:.6f}, Max: {max_norm:.6f}, Avg: {avg_norm:.6f}\n"
+                f"   Flow ratio (first/last): {flow_ratio:.3f}\n"
+                f"   Status: {health_status}"
+            )
+
+    def _log_feature_diversity(self, features: torch.Tensor, network_name: str) -> None:
+        """
+        Log feature diversity metrics to ensure CNN learns diverse representations.
+
+        Args:
+            features: Feature tensor (batch_size, feature_dim)
+            network_name: Name for logging (e.g., "actor_cnn", "critic_cnn")
+        """
+        if features.shape[0] < 2:
+            # Need at least 2 samples for correlation
+            return
+
+        try:
+            # Detach and move to CPU for analysis
+            features_cpu = features.detach().cpu()
+
+            # Calculate pairwise correlation matrix
+            feature_corr = torch.corrcoef(features_cpu.T)
+
+            # Average absolute correlation (excluding diagonal)
+            n_features = feature_corr.shape[0]
+            avg_corr = (feature_corr.abs().sum() - n_features) / (n_features * (n_features - 1))
+            avg_corr = avg_corr.item()
+
+            # Calculate sparsity (percentage of near-zero features)
+            sparsity_threshold = 0.1
+            sparsity = (features_cpu.abs() < sparsity_threshold).float().mean().item()
+
+            # Calculate effective rank (diversity measure)
+            _, s, _ = torch.svd(features_cpu)
+            s_normalized = s / s.sum()
+            entropy = -(s_normalized * torch.log(s_normalized + 1e-8)).sum().item()
+            effective_rank = torch.exp(torch.tensor(entropy)).item()
+
+            # Assess diversity health
+            correlation_threshold = 0.3
+            issues = []
+            if avg_corr > 0.7:
+                issues.append("⚠️ High correlation (feature collapse)")
+            elif avg_corr > correlation_threshold:
+                issues.append("⚠️ Moderate correlation")
+
+            if sparsity < 0.05:
+                issues.append("⚠️ Too dense")
+            elif sparsity > 0.5:
+                issues.append("⚠️ Too sparse")
+
+            diversity_status = " | ".join(issues) if issues else "✅ DIVERSE"
+
+            self.logger.debug(
+                f"🎨 [{network_name}] Feature Diversity (Step {self.total_it}):\n"
+                f"   Avg correlation: {avg_corr:.3f} (target: <{correlation_threshold})\n"
+                f"   Sparsity: {sparsity*100:.1f}% (target: 10-30%)\n"
+                f"   Effective rank: {effective_rank:.1f} / {n_features}\n"
+                f"   Status: {diversity_status}"
+            )
+
+        except Exception as e:
+            self.logger.warning(f"Could not compute feature diversity for {network_name}: {e}")
+
+    def _log_weight_statistics(self, cnn: torch.nn.Module, network_name: str) -> None:
+        """
+        Log weight statistics to track learning progress.
+
+        Monitors weight magnitudes and their changes over time to detect:
+        - Dead neurons (weights frozen)
+        - Excessive weight growth
+        - Layer-wise learning imbalances
+
+        Args:
+            cnn: CNN network (actor_cnn or critic_cnn)
+            network_name: Name for logging (e.g., "actor_cnn", "critic_cnn")
+        """
+        if cnn is None:
+            return
+
+        self.logger.debug(f"⚖️  [{network_name}] Weight Statistics (Step {self.total_it}):")
+
+        for name, param in cnn.named_parameters():
+            if 'weight' in name:  # Only log weight parameters, not biases
+                weights = param.data
+
+                mean = weights.mean().item()
+                std = weights.std().item()
+                min_val = weights.min().item()
+                max_val = weights.max().item()
+                norm = weights.norm().item()
+
+                # Detect issues
+                if std < 1e-6:
+                    status = "⚠️ DEAD (zero variance)"
+                elif norm > 100.0:
+                    status = "🔥 EXCESSIVE (large norm)"
+                else:
+                    status = "✅ OK"
+
+                self.logger.debug(
+                    f"   {name}:\n"
+                    f"      Mean: {mean:.6f}, Std: {std:.6f}\n"
+                    f"      Range: [{min_val:.6f}, {max_val:.6f}]\n"
+                    f"      L2 norm: {norm:.3f} {status}"
+                )
+
+    def _log_learning_rate(self, optimizer: torch.optim.Optimizer, optimizer_name: str) -> None:
+        """
+        Log current learning rates from optimizer.
+
+        Tracks learning rate changes from schedulers to ensure proper
+        training progression and diagnose convergence issues.
+
+        Args:
+            optimizer: PyTorch optimizer
+            optimizer_name: Name for logging (e.g., "actor_cnn", "critic_cnn")
+        """
+        if optimizer is None:
+            return
+
+        for idx, param_group in enumerate(optimizer.param_groups):
+            lr = param_group['lr']
+
+            # Assess learning rate health
+            if lr < 1e-6:
+                lr_status = "⚠️ TOO LOW"
+            elif lr > 1e-2:
+                lr_status = "🔥 TOO HIGH"
+            else:
+                lr_status = "✅ OK"
+
+            self.logger.debug(
+                f"📈 [{optimizer_name}] Learning Rate Group {idx}: {lr:.6e} {lr_status}"
+            )
 
     def get_gradient_stats(self) -> Dict[str, float]:
         """

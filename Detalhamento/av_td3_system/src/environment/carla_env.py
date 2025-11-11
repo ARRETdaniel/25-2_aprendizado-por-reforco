@@ -61,6 +61,7 @@ class CARLANavigationEnv(Env):
         host: str = "localhost",
         port: int = 2000,
         headless: bool = True,
+        tm_port: Optional[int] = None,
     ):
         """
         Initialize CARLA environment.
@@ -72,6 +73,10 @@ class CARLANavigationEnv(Env):
             host: CARLA server host (default localhost)
             port: CARLA server port (default 2000)
             headless: Whether to run without rendering (default True)
+            tm_port: Traffic Manager port (None = use default 8000)
+                     Use different ports for training vs evaluation environments
+                     to avoid Traffic Manager registry conflicts.
+                     Reference: EVALUATION_BUG_ANALYSIS.md
 
         Raises:
             RuntimeError: If cannot connect to CARLA server or invalid config
@@ -89,6 +94,7 @@ class CARLANavigationEnv(Env):
         # Connection parameters
         self.host = host
         self.port = port
+        self.tm_port = tm_port  # Custom TM port (None = use default 8000)
         self.client = None
         self.world = None
         self.traffic_manager = None
@@ -146,9 +152,9 @@ class CARLANavigationEnv(Env):
             waypoints_file=waypoints_file,
             lookahead_distance=self.carla_config.get("route", {}).get(
                 "lookahead_distance", 50.0
-            ),
+            ), #previous change to get 53 dimensions
             num_waypoints_ahead=self.carla_config.get("route", {}).get(
-                "num_waypoints_ahead", 10
+                "num_waypoints_ahead", 25
             ),
         )
 
@@ -214,7 +220,7 @@ class CARLANavigationEnv(Env):
         self.current_step = 0
         self.episode_start_time = None
         self.episode_count = 0  # Track episode number for diagnostics
-        # 🔧 FIX: Read max_time_steps from config (not max_duration_seconds)
+        #  FIX: Read max_time_steps from config (not max_duration_seconds)
         # Config has episode.max_time_steps (5000) directly in steps
         self.max_episode_steps = self.carla_config.get("episode", {}).get("max_time_steps", 1000)
 
@@ -236,7 +242,7 @@ class CARLANavigationEnv(Env):
 
         This allows existing code to continue working while using dynamic route generation.
 
-        🔧 FIX: Dynamically calculates num_waypoints_ahead to match lookahead_distance
+         FIX: Dynamically calculates num_waypoints_ahead to match lookahead_distance
         and actual sampling_resolution, preventing spacing mismatch bug.
 
         Returns:
@@ -248,7 +254,7 @@ class CARLANavigationEnv(Env):
                 self.lookahead_distance = lookahead_distance
                 self.sampling_resolution = sampling_resolution
 
-                # 🔧 FIX: Calculate num_waypoints dynamically to match actual spacing
+                #  FIX: Calculate num_waypoints dynamically to match actual spacing
                 # Before: num_waypoints_ahead was hardcoded (10), assuming 5m spacing
                 # After: num_waypoints = lookahead_distance / sampling_resolution
                 # Example: 50m / 2m = 25 waypoints (correct for 2m spacing)
@@ -304,7 +310,7 @@ class CARLANavigationEnv(Env):
 
                 return self.waypoints[start_idx:end_idx]
 
-        # 🔧 FIX: Pass sampling_resolution instead of hardcoded num_waypoints_ahead
+        # FIX: Pass sampling_resolution instead of hardcoded num_waypoints_ahead
         sampling_resolution = self.carla_config.get("route", {}).get("sampling_resolution", 2.0)
 
         return WaypointManagerAdapter(
@@ -349,14 +355,14 @@ class CARLANavigationEnv(Env):
         Observation space:
         - Dict with 'image' (4×84×84 float32 [-1,1]) and 'vector' (kinematic+waypoint state)
 
-        🔧 FIX: Dynamically calculates vector size based on actual waypoint count.
-        🔧 FIX BUG #8: Image space now matches preprocessing output range [-1,1].
+        FIX: Dynamically calculates vector size based on actual waypoint count.
+        FIX BUG #8: Image space now matches preprocessing output range [-1,1].
 
         Action space:
         - Box: 2D continuous [-1, 1]
         """
         # Image observation: 4 stacked frames, 84×84, normalized to [-1, 1]
-        # 🔧 FIX BUG #8: Match sensors.py preprocessing output (zero-centered normalization)
+        # FIX BUG #8: Match sensors.py preprocessing output (zero-centered normalization)
         image_space = spaces.Box(
             low=-1.0,
             high=1.0,
@@ -364,7 +370,7 @@ class CARLANavigationEnv(Env):
             dtype=np.float32,
         )
 
-        # 🔧 FIX: Calculate vector observation size dynamically
+        # FIX: Calculate vector observation size dynamically
         # Components: velocity (1) + lateral_dev (1) + heading_err (1) + waypoints (num_waypoints × 2)
         lookahead_distance = self.carla_config.get("route", {}).get("lookahead_distance", 50.0)
         sampling_resolution = self.carla_config.get("route", {}).get("sampling_resolution", 2.0)
@@ -473,7 +479,7 @@ class CARLANavigationEnv(Env):
                 dx = wp1[0] - wp0[0]  # X-component (East in CARLA)
                 dy = wp1[1] - wp0[1]  # Y-component (South in CARLA, +Y direction)
 
-                # 🔧 FIX BUG #10: CARLA uses LEFT-HANDED coordinate system (Unreal Engine)
+                # FIX BUG #10: CARLA uses LEFT-HANDED coordinate system (Unreal Engine)
                 # Standard math: +Y = North (right-handed), atan2(dy, dx) assumes this
                 # CARLA/Unreal: +Y = SOUTH (left-handed), 90° yaw points to +Y (South)
                 # Solution: Flip Y-axis by negating dy to convert between coordinate systems
@@ -510,9 +516,14 @@ class CARLANavigationEnv(Env):
             )
 
             self.logger.info(
-                f"Using LEGACY static waypoints:\n"
-                f"   Location: ({route_start[0]:.2f}, {route_start[1]:.2f}, {spawn_z:.2f})\n"
-                f"   Heading: {initial_yaw:.2f}°"
+                f"🗺️ Using LEGACY static waypoints:\n"
+                f"   Total waypoints in route: {len(self.waypoint_manager.waypoints)}\n"
+                f"   Spawn location: ({route_start[0]:.2f}, {route_start[1]:.2f}, {spawn_z:.2f})\n"
+                f"   Spawn heading: {initial_yaw:.2f}°\n"
+                f"   First 5 waypoints (X, Y, Z):\n" +
+                "\n".join([f"      WP{i}: ({wp[0]:.2f}, {wp[1]:.2f}, {wp[2]:.2f})"
+                          for i, wp in enumerate(self.waypoint_manager.waypoints[:5])]) +
+                f"\n   Route direction: dx={wp1[0]-wp0[0]:.2f}, dy={wp1[1]-wp0[1]:.2f} → yaw={initial_yaw:.2f}°"
             )
 
         # Spawn ego vehicle (Tesla Model 3)
@@ -520,29 +531,7 @@ class CARLANavigationEnv(Env):
 
         try:
             self.vehicle = self.world.spawn_actor(vehicle_bp, spawn_point)
-            self.logger.info(f" Ego vehicle spawned successfully")
-
-            # Verify actual vehicle orientation after spawn
-            actual_transform = self.vehicle.get_transform()
-            forward_vec = actual_transform.get_forward_vector()
-
-            # Calculate expected forward vector from route direction
-            if len(self.waypoint_manager.waypoints) >= 2:
-                wp0 = self.waypoint_manager.waypoints[0]
-                wp1 = self.waypoint_manager.waypoints[1]
-                expected_dx = wp1[0] - wp0[0]
-                expected_dy = wp1[1] - wp0[1]
-                expected_mag = math.sqrt(expected_dx**2 + expected_dy**2)
-                expected_fwd = [expected_dx/expected_mag, expected_dy/expected_mag, 0.0] if expected_mag > 0 else [1.0, 0.0, 0.0]
-
-                self.logger.info(
-                    f"SPAWN VERIFICATION:\n"
-                    f"   Spawn yaw: {spawn_point.rotation.yaw:.2f}°\n"
-                    f"   Actual yaw: {actual_transform.rotation.yaw:.2f}°\n"
-                    f"   Actual forward vector: [{forward_vec.x:.3f}, {forward_vec.y:.3f}, {forward_vec.z:.3f}]\n"
-                    f"   Expected forward (route): [{expected_fwd[0]:.3f}, {expected_fwd[1]:.3f}, {expected_fwd[2]:.3f}]\n"
-                    f"   Match: {'ALIGNED' if abs(forward_vec.x - expected_fwd[0]) < 0.1 and abs(forward_vec.y - expected_fwd[1]) < 0.1 else '✗ MISALIGNED'}"
-                )
+            self.logger.info(f"✅ Ego vehicle spawned successfully at ({route_start[0]:.2f}, {route_start[1]:.2f}, {spawn_z:.2f})")
         except RuntimeError as e:
             raise RuntimeError(f"Failed to spawn ego vehicle: {e}")
 
@@ -558,9 +547,33 @@ class CARLANavigationEnv(Env):
         self.waypoint_manager.reset()
         self.reward_calculator.reset()
 
-        # Tick simulation to initialize sensors
+        # Tick simulation to initialize sensors AND settle vehicle physics
         self.world.tick()
         self.sensors.tick()
+
+        # ✅ SPAWN VERIFICATION (after physics settled)
+        # Reference: ISSUE_1_CORRECTED_ANALYSIS.md - Fix spawn verification timing
+        actual_transform = self.vehicle.get_transform()
+        forward_vec = actual_transform.get_forward_vector()
+
+        # Calculate expected forward vector from route direction
+        if len(self.waypoint_manager.waypoints) >= 2:
+            wp0 = self.waypoint_manager.waypoints[0]
+            wp1 = self.waypoint_manager.waypoints[1]
+            expected_dx = wp1[0] - wp0[0]
+            expected_dy = wp1[1] - wp0[1]
+            expected_mag = math.sqrt(expected_dx**2 + expected_dy**2)
+            expected_fwd = [expected_dx/expected_mag, expected_dy/expected_mag, 0.0] if expected_mag > 0 else [1.0, 0.0, 0.0]
+
+            self.logger.info(
+                f"🔍 SPAWN VERIFICATION (post-tick):\n"
+                f"   Requested spawn yaw: {spawn_point.rotation.yaw:.2f}°\n"
+                f"   Actual vehicle yaw: {actual_transform.rotation.yaw:.2f}°\n"
+                f"   Actual forward vector: [{forward_vec.x:.3f}, {forward_vec.y:.3f}, {forward_vec.z:.3f}]\n"
+                f"   Expected forward (route): [{expected_fwd[0]:.3f}, {expected_fwd[1]:.3f}, {expected_fwd[2]:.3f}]\n"
+                f"   Yaw difference: {abs(actual_transform.rotation.yaw - spawn_point.rotation.yaw):.2f}°\n"
+                f"   Alignment: {'✅ ALIGNED' if abs(forward_vec.x - expected_fwd[0]) < 0.1 and abs(forward_vec.y - expected_fwd[1]) < 0.1 else '⚠️ MISALIGNED'}"
+            )
 
         # Get initial observation
         observation = self._get_observation()
@@ -752,7 +765,7 @@ class CARLANavigationEnv(Env):
         self.vehicle.apply_control(control)
 
         # DEBUG: Log control application and vehicle response (first 10 steps)
-        if self.current_step < 10:
+        if self.current_step < 100:
             # Get vehicle velocity
             velocity = self.vehicle.get_velocity()
             speed_mps = (velocity.x**2 + velocity.y**2 + velocity.z**2)**0.5
@@ -813,7 +826,7 @@ class CARLANavigationEnv(Env):
                 # No waypoints available (route finished), use zeros
                 next_waypoints = np.zeros((expected_num_waypoints, 2), dtype=np.float32)
 
-        # 🔧 FIX BUG #9: Normalize all vector features to comparable scales
+        # FIX BUG #9: Normalize all vector features to comparable scales
         # This prevents large-magnitude features (waypoints ~50m) from dominating
         # small-magnitude features (heading error ~π), which was causing training failure.
 
@@ -844,6 +857,28 @@ class CARLANavigationEnv(Env):
                 waypoints_normalized.flatten(),
             ]
         ).astype(np.float32)
+
+        # 📊 DEBUG: Log observation details every 100 steps (throttled logging)
+        if self.current_step % 100 == 0:
+            self.logger.info(
+                f"📊 OBSERVATION (Step {self.current_step}):\n"
+                f"   🚗 Vehicle State (Raw):\n"
+                f"      Velocity: {vehicle_state['velocity']:.2f} m/s ({vehicle_state['velocity']*3.6:.1f} km/h)\n"
+                f"      Lateral deviation: {vehicle_state['lateral_deviation']:.3f} m\n"
+                f"      Heading error: {np.degrees(vehicle_state['heading_error']):.2f}° ({vehicle_state['heading_error']:.3f} rad)\n"
+                f"   📍 Waypoints (Raw, vehicle frame):\n"
+                f"      Total waypoints: {len(next_waypoints)}\n"
+                f"      First 3 waypoints: {next_waypoints[:3].tolist() if len(next_waypoints) > 0 else 'None'}\n"
+                f"      Lookahead distance: {lookahead_distance:.1f} m\n"
+                f"   🔢 Normalized Vector Features (passed to TD3/CNN):\n"
+                f"      Velocity (normalized): {velocity_normalized:.4f} (÷30.0)\n"
+                f"      Lateral dev (normalized): {lateral_deviation_normalized:.4f} (÷3.5)\n"
+                f"      Heading err (normalized): {heading_error_normalized:.4f} (÷π)\n"
+                f"      Waypoints (normalized): shape={waypoints_normalized.shape}, range=[{waypoints_normalized.min():.3f}, {waypoints_normalized.max():.3f}] (÷{lookahead_distance})\n"
+                f"   📦 Final Observation Shapes:\n"
+                f"      Image: {image_obs.shape} (dtype={image_obs.dtype}, range=[{image_obs.min():.2f}, {image_obs.max():.2f}])\n"
+                f"      Vector: {vector_obs.shape} (dtype={vector_obs.dtype}, sum={vector_obs.sum():.3f})"
+            )
 
         return {
             "image": image_obs,
@@ -1028,8 +1063,20 @@ class CARLANavigationEnv(Env):
         self.logger.info(f"Spawning {npc_count} NPC vehicles...")
 
         try:
-            # Get traffic manager
-            self.traffic_manager = self.client.get_trafficmanager()
+            # Get or create Traffic Manager on specified port
+            # Reference: EVALUATION_BUG_ANALYSIS.md - Option A (Separate TM Ports)
+            # Training and evaluation environments MUST use different TM ports
+            # to avoid registry conflicts when destroying/spawning NPCs
+            if self.tm_port is None:
+                # Default behavior: use default TM port (8000)
+                self.traffic_manager = self.client.get_trafficmanager()
+                self.logger.info("Using default Traffic Manager port (8000)")
+            else:
+                # Custom port specified (e.g., 8050 for evaluation environment)
+                self.traffic_manager = self.client.get_trafficmanager(self.tm_port)
+                self.logger.info(f"Using custom Traffic Manager port ({self.tm_port})")
+
+            # Configure Traffic Manager for synchronous mode
             self.traffic_manager.set_synchronous_mode(True)
 
             # CRITICAL FIX: Set deterministic seed for reproducibility

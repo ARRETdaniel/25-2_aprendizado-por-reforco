@@ -185,7 +185,8 @@ route:
 
   # Waypoint processing (applies to both static and dynamic routes)
   lookahead_distance: 50.0  # meters (how far ahead to look)
-  num_waypoints_ahead: 10   # Number of future waypoints to include in state
+  # commented expecting dynamic calculation for verctor obs size
+  #num_waypoints_ahead: 10   # Number of future waypoints to include in state
 
   # Coordinate transformation
   use_relative_coordinates: true  # Transform to vehicle local frame

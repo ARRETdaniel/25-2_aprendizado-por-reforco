@@ -145,12 +145,23 @@ class TD3TrainingPipeline:
         else:
             print(f"[WARNING] Invalid scenario index, will use default")
 
+        # Traffic Manager port configuration
+        # Reference: EVALUATION_BUG_ANALYSIS.md - Option A (Separate TM Ports)
+        # Training and evaluation environments MUST use different TM ports
+        # to avoid "destroyed actor" errors during episode transitions
+        self.training_tm_port = 8000  # Training uses default TM port
+        self.eval_tm_port = 8050      # Evaluation uses separate TM port
+        print(f"[CONFIG] Traffic Manager ports:")
+        print(f"[CONFIG]   Training: {self.training_tm_port}")
+        print(f"[CONFIG]   Evaluation: {self.eval_tm_port}")
+
         # Initialize environment
         print(f"\n[ENVIRONMENT] Initializing CARLA environment...")
         self.env = CARLANavigationEnv(
             carla_config_path,
             agent_config_path,
-            training_config_path  # Fixed: use training_config_path for scenarios
+            training_config_path,  # Fixed: use training_config_path for scenarios
+            tm_port=self.training_tm_port  # Use training TM port
         )
         print(f"[ENVIRONMENT] State space: {self.env.observation_space}")
         print(f"[ENVIRONMENT] Action space: {self.env.action_space}")
@@ -701,7 +712,9 @@ class TD3TrainingPipeline:
             if self.debug:
                 self._visualize_debug(obs_dict, action, reward, info, t)
 
-                # DEBUG: Print detailed step info to terminal every 100 steps (throttled)
+                # DEBUG: Print detailed step info to terminal every 100 steps
+                # OPTIMIZATION: Reduced from every 10 steps to every 100 steps
+                # to minimize logging overhead while maintaining sufficient visibility
                 if t % 100 == 0:
                     vehicle_state = info.get('vehicle_state', {})
                     reward_breakdown = info.get('reward_breakdown', {})
@@ -1004,8 +1017,10 @@ class TD3TrainingPipeline:
         """
         Evaluate agent on multiple episodes without exploration noise.
 
-        FIXED: Creates a separate evaluation environment to avoid interfering
-        with training environment state (RNG, CARLA actors, internal counters).
+        FIXED: Creates a separate evaluation environment with SEPARATE Traffic Manager port
+        to avoid "destroyed actor" errors during episode transitions.
+
+        Reference: EVALUATION_BUG_ANALYSIS.md - Option A (Separate TM Ports)
 
         Returns:
             Dictionary with evaluation metrics:
@@ -1015,12 +1030,14 @@ class TD3TrainingPipeline:
             - avg_collisions: Average collisions per episode
             - avg_episode_length: Average episode length
         """
-        # FIXED: Create separate eval environment (don't reuse self.env)
-        print(f"[EVAL] Creating temporary evaluation environment...")
+        # FIXED: Create separate eval environment with DIFFERENT TM port
+        # This prevents Traffic Manager registry conflicts when destroying/spawning NPCs
+        print(f"[EVAL] Creating temporary evaluation environment (TM port {self.eval_tm_port})...")
         eval_env = CARLANavigationEnv(
             self.carla_config_path,
             self.agent_config_path,
-            self.training_config_path  # Fixed: use training_config_path for scenarios
+            self.training_config_path,  # Fixed: use training_config_path for scenarios
+            tm_port=self.eval_tm_port   # CRITICAL: Use separate TM port (8050)
         )
 
         eval_rewards = []

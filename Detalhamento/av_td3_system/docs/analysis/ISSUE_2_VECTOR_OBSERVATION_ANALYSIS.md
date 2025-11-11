@@ -1,8 +1,8 @@
 # Issue #2: Vector Observation Size Mismatch Analysis
 
-**Created:** 2025-01-XX  
-**Status:** INVESTIGATION COMPLETE - ROOT CAUSE IDENTIFIED  
-**Severity:** CRITICAL - Affects all network architectures (Actor, Critic, CNN integration)  
+**Created:** 2025-01-XX
+**Status:** INVESTIGATION COMPLETE - ROOT CAUSE IDENTIFIED
+**Severity:** CRITICAL - Affects all network architectures (Actor, Critic, CNN integration)
 **Priority:** P0 - Must resolve before Step 4-8 validation
 
 ---
@@ -13,7 +13,7 @@
 
 **Root Cause:** Configuration mismatch between `carla_config.yaml` and actual `_setup_spaces()` implementation. The code calculates vector size dynamically based on waypoint configuration (lookahead_distance / sampling_resolution), but the current settings produce only 23 dimensions instead of the expected 53.
 
-**Impact:** 
+**Impact:**
 - **Current:** Actor/Critic input = 535 dims (512 CNN + 23 vector)
 - **Expected:** Actor/Critic input = 565 dims (512 CNN + 53 vector)
 - **Delta:** Missing 30 dimensions of critical state information
@@ -36,13 +36,13 @@
      - **No specific state dimension prescribed** in the paper
      - TD3 is **environment-agnostic** - state_dim is determined by the task
      - Paper tested on MuJoCo tasks with varying state dimensions (11-376 dims)
-   
+
 2. **CARLA 0.9.16 Python API** (https://carla.readthedocs.io/en/latest/python_api/)
    - ✅ **carla.Vehicle:** Full state extraction methods documented
    - ✅ **carla.Waypoint:** Navigation and road topology features
    - ✅ **carla.Transform/Rotation:** Pose and orientation data
    - **Result:** Identified 31-35 potential dimensions from CARLA alone
-   
+
 3. **Current Implementation** (`av_td3_system/src/environment/carla_env.py`)
    - ✅ `_get_observation()` method (lines 786-886)
    - ✅ `_setup_spaces()` method (lines 350-430)
@@ -185,7 +185,7 @@ class WaypointManagerAdapter:
         # After: num_waypoints = lookahead_distance / sampling_resolution
         # Example: 50m / 2m = 25 waypoints (correct for 2m spacing)
         self.num_waypoints_ahead = int(np.ceil(lookahead_distance / sampling_resolution))
-        
+
         # Result: 50.0 / 2.0 = 25 waypoints
 ```
 
@@ -232,7 +232,7 @@ waypoints:
 
 **Currently Used (3 dims):**
 - ✅ Velocity: scalar magnitude (m/s)
-- ✅ Lateral deviation: distance from lane center (m)  
+- ✅ Lateral deviation: distance from lane center (m)
 - ✅ Heading error: angle error from lane direction (rad)
 
 **Available but UNUSED (~15 dims):**
@@ -305,7 +305,7 @@ class Actor(nn.Module):
         self.l3 = nn.Linear(256, action_dim)  # Output layer
 ```
 
-**Key Finding:** 
+**Key Finding:**
 - **state_dim is a parameter** - not prescribed by the paper
 - TD3 is **environment-agnostic**
 - The paper tested on MuJoCo tasks with state dimensions ranging from 11 (Reacher) to 376 (Humanoid)
@@ -583,6 +583,6 @@ python scripts/validate_steps.py --steps 4,5,6,7,8
 
 ---
 
-**Document Status:** ✅ COMPLETE - Ready for implementation  
-**Last Updated:** 2025-01-XX  
+**Document Status:** ✅ COMPLETE - Ready for implementation
+**Last Updated:** 2025-01-XX
 **Author:** GitHub Copilot (Deep Analysis Mode)

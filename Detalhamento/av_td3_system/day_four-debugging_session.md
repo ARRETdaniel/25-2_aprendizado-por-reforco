@@ -170,17 +170,17 @@ cd av_td3_system && docker run --rm --network host --runtime nvidia \
    - Our code: `src/agents/td3_agent.py`
 
 3. **Verify Three Core Improvements**:
-   
+
    a. **Clipped Double Q-Learning**:
    - [ ] Two separate Critic networks (Critic1, Critic2)
    - [ ] Take minimum of both for target Q-value
    - [ ] Prevents overestimation bias
-   
+
    b. **Delayed Policy Updates**:
    - [ ] Actor updated less frequently than Critics
    - [ ] Target networks updated less frequently
    - [ ] `policy_freq=2` (update actor every 2 critic updates)
-   
+
    c. **Target Policy Smoothing**:
    - [ ] Add clipped noise to target action
    - [ ] `policy_noise=0.2`, `noise_clip=0.5`
@@ -338,13 +338,13 @@ training_metrics = {
 ### CARLA Documentation Fetched:
 1. **Synchronous Mode**: GPU sensor delays, async callbacks
    - URL: https://carla.readthedocs.io/en/latest/adv_synchrony_timestep/
-   
+
 2. **Maps and Navigation**: Waypoint API, distance calculation
    - URL: https://carla.readthedocs.io/en/latest/core_map/
-   
+
 3. **Python API Reference**: carla.Map, carla.Waypoint methods
    - URL: https://carla.readthedocs.io/en/latest/python_api/#carlamap
-   
+
 4. **CARLA Agents**: Global Route Planner, navigation patterns
    - URL: https://carla.readthedocs.io/en/latest/adv_agents/
 

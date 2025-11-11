@@ -65,6 +65,10 @@ class CARLACameraManager:
         self.latest_image = None
         self.image_lock = threading.Lock()
 
+        # OPTIMIZATION: Step counter for throttled debug logging (every 100 frames)
+        self.frame_step_counter = 0
+        self.log_frequency = 100
+
         # Camera sensor setup
         self.camera_sensor = None
         self._setup_camera()
@@ -142,10 +146,15 @@ class CARLACameraManager:
         Returns:
             Grayscale image (84×84) normalized to [-1, 1]
         """
-        # DEBUG: Log input image statistics
-        if self.logger.isEnabledFor(logging.DEBUG):
+        # OPTIMIZATION: Increment step counter for throttled logging
+        self.frame_step_counter += 1
+        should_log = (self.frame_step_counter % self.log_frequency == 0)
+
+        # DEBUG: Log input image statistics every 100 frames
+        # OPTIMIZATION: Throttled to reduce logging overhead (was every frame)
+        if self.logger.isEnabledFor(logging.DEBUG) and should_log:
             self.logger.debug(
-                f"   PREPROCESSING INPUT:\n"
+                f"   PREPROCESSING INPUT (Frame #{self.frame_step_counter}):\n"
                 f"   Shape: {image.shape}\n"
                 f"   Dtype: {image.dtype}\n"
                 f"   Range: [{image.min():.2f}, {image.max():.2f}]\n"
@@ -168,8 +177,9 @@ class CARLACameraManager:
         mean, std = 0.5, 0.5
         normalized = (scaled - mean) / std
 
-        # DEBUG: Log output statistics
-        if self.logger.isEnabledFor(logging.DEBUG):
+        # DEBUG: Log output statistics every 100 frames
+        # OPTIMIZATION: Throttled to reduce logging overhead (was every frame)
+        if self.logger.isEnabledFor(logging.DEBUG) and should_log:
             self.logger.debug(
                 f"   PREPROCESSING OUTPUT:\n"
                 f"   Shape: {normalized.shape}\n"
@@ -251,6 +261,10 @@ class ImageStack:
         self.num_frames = num_frames
         self.logger = logging.getLogger(__name__)
 
+        # OPTIMIZATION: Step counter for throttled debug logging (every 100 pushes)
+        self.push_step_counter = 0
+        self.log_frequency = 100
+
         # Pre-allocate stack
         self.stack = deque(
             [
@@ -273,10 +287,15 @@ class ImageStack:
                 f"({self.frame_height}, {self.frame_width})"
             )
 
-        # DEBUG: Log frame stacking
-        if self.logger.isEnabledFor(logging.DEBUG):
+        # OPTIMIZATION: Increment step counter for throttled logging
+        self.push_step_counter += 1
+        should_log = (self.push_step_counter % self.log_frequency == 0)
+
+        # DEBUG: Log frame stacking every 100 pushes
+        # OPTIMIZATION: Throttled to reduce logging overhead (was every push)
+        if self.logger.isEnabledFor(logging.DEBUG) and should_log:
             self.logger.debug(
-                f"   FRAME STACKING:\n"
+                f"   FRAME STACKING (Push #{self.push_step_counter}):\n"
                 f"   New frame shape: {frame.shape}\n"
                 f"   New frame range: [{frame.min():.3f}, {frame.max():.3f}]\n"
                 f"   Stack size before: {len(self.stack)}\n"
@@ -285,8 +304,9 @@ class ImageStack:
 
         self.stack.append(frame)
 
-        # DEBUG: Log stack state after push
-        if self.logger.isEnabledFor(logging.DEBUG):
+        # DEBUG: Log stack state after push every 100 pushes
+        # OPTIMIZATION: Throttled to reduce logging overhead (was every push)
+        if self.logger.isEnabledFor(logging.DEBUG) and should_log:
             stacked = self.get_stacked_frames()
             self.logger.debug(
                 f"  STACK STATE AFTER PUSH:\n"
