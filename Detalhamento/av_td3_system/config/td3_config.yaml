@@ -30,7 +30,7 @@ algorithm:
   #   - Exploration phase behavior (no CNN/policy calls, random actions)
   #   - Learning phase behavior (CNN forward pass, TD3 training, full logs)
   # Original: 25,000 (OpenAI Spinning Up default: 10,000)
-  learning_starts: 5000  # REDUCED: Start learning after 5K steps for 10K debug window
+  learning_starts: 500  # REDUCED: Start learning after 5K steps for 10K debug window
 
   train_freq: 1  # Update networks every step
   gradient_steps: -1  # -1 means as many gradient steps as environment steps

@@ -48,7 +48,7 @@ class TD3Agent:
 
     def __init__(
         self,
-        state_dim: int = 535,
+        state_dim: int = 565, # previous changed from 535
         action_dim: int = 2,
         max_action: float = 1.0,
         cnn_extractor: Optional[torch.nn.Module] = None,  # DEPRECATED: Use actor_cnn/critic_cnn instead
@@ -239,14 +239,20 @@ class TD3Agent:
         # Initialize replay buffer (Dict or standard based on flag)
         if use_dict_buffer and (self.actor_cnn is not None or self.critic_cnn is not None):
             # Use DictReplayBuffer for end-to-end CNN training
+            # Calculate vector_dim dynamically from config
+            # Vector = 3 kinematic + (num_waypoints_ahead * 2)
+            num_waypoints = self.config.get("route", {}).get("num_waypoints_ahead", 25)
+            vector_dim = 3 + (num_waypoints * 2)  # 3 + (25*2) = 53
+
             self.replay_buffer = DictReplayBuffer(
                 image_shape=(4, 84, 84),
-                vector_dim=23,  # velocity(1) + lateral_dev(1) + heading_err(1) + waypoints(20)
+                vector_dim=vector_dim,  # Calculated: 3 kinematic + 50 waypoint coords
                 action_dim=action_dim,
                 max_size=self.buffer_size,
                 device=self.device
             )
             print(f"  Using DictReplayBuffer for end-to-end CNN training")
+            print(f"  Vector dimension: {vector_dim} (3 kinematic + {num_waypoints} waypoints × 2)")
         else:
             # Use standard ReplayBuffer (no CNN training)
             self.replay_buffer = ReplayBuffer(

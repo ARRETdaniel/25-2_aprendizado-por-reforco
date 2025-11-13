@@ -40,7 +40,7 @@ class DictReplayBuffer:
     def __init__(
         self,
         image_shape: Tuple[int, int, int] = (4, 84, 84),  # (channels, height, width)
-        vector_dim: int = 23,  # velocity(1) + lateral_dev(1) + heading_err(1) + waypoints(20)
+        vector_dim: int = 53,  #  FIX: velocity(1) + lateral_dev(1) + heading_err(1) + waypoints(50 = 25*2)
         action_dim: int = 2,   # steering + throttle/brake
         max_size: int = int(1e6),
         device: str = None

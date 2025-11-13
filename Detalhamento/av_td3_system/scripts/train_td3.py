@@ -213,8 +213,13 @@ class TD3TrainingPipeline:
         print(f"[AGENT] CNN training mode: ENABLED (weights will be updated during training)")
 
         # Initialize TD3Agent WITH SEPARATE CNNs for end-to-end training
+        # 🔧 FIX: Calculate state_dim dynamically from config
+        # State = 512 (CNN features) + 3 (kinematic) + (num_waypoints * 2)
+        num_waypoints = self.carla_config.get("route", {}).get("num_waypoints_ahead", 25)
+        state_dim = 512 + 3 + (num_waypoints * 2)  # 512 + 3 + 50 = 565
+
         self.agent = TD3Agent(
-            state_dim=535,
+            state_dim=state_dim,  # Calculated: 565 (was hardcoded 535)
             action_dim=2,
             max_action=1.0,
             actor_cnn=self.actor_cnn,   # ← Separate CNN for actor!
@@ -299,6 +304,10 @@ class TD3TrainingPipeline:
         print(f"\n[INIT] Training pipeline ready!")
         print(f"[INIT] Max timesteps: {max_timesteps:,}")
         print(f"[INIT] Seed: {seed}")
+        print(f"[INIT] Debug mode: {self.debug}")
+        print(f"[INIT] Evaluation frequency: {eval_freq}")
+        print(f"[INIT] Checkpoint frequency: {checkpoint_freq}")
+        print(f"[INIT] Number of evaluation episodes: {num_eval_episodes}")
         print("="*70 + "\n")
 
     def _initialize_cnn_weights(self):
@@ -878,7 +887,7 @@ class TD3TrainingPipeline:
 
                 # ===== LOG AGENT STATISTICS EVERY 1000 STEPS (RECOMMENDATION 4) =====
                 # Following Stable-Baselines3 and OpenAI Spinning Up best practices
-                if t % 1000 == 0:
+                if t % 100 == 0:
                     agent_stats = self.agent.get_stats()
 
                     # Training progress
@@ -911,7 +920,7 @@ class TD3TrainingPipeline:
                         self.writer.add_scalar('agent/critic_cnn_param_std', agent_stats['critic_cnn_param_std'], t)
 
                     # Print summary of key statistics
-                    if t % 5000 == 0:  # Print every 5000 steps
+                    if t % 100 == 0:  # Print every 5000 steps
                         print(f"\n{'='*70}")
                         print(f"[AGENT STATISTICS] Step {t:,}")
                         print(f"{'='*70}")

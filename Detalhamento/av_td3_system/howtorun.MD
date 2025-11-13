@@ -1,4 +1,7 @@
 docker ps -a | grep carla
+docker stop carla-server
+docker rm carla-server
+
 
 docker rm carla-server 2>/dev/null || true
 
@@ -33,3 +36,15 @@ cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_
 
 
 # REAL TRAINING
+
+sudo lsof -i :8000 -i :8050
+
+
+# tensorboard
+
+tensorboard --logdir /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system/data/logs --port 6008 &
+
+
+
+
+cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system && docker run --rm --network host --runtime nvidia -e NVIDIA_VISIBLE_DEVICES=all -e NVIDIA_DRIVER_CAPABILITIES=all -e PYTHONUNBUFFERED=1 -e PYTHONPATH=/workspace -v $(pwd):/workspace -w /workspace td3-av-system:v2.0-python310 python3 scripts/train_td3.py --scenario 0 --max-timesteps 5000 --eval-freq 3001 --checkpoint-freq 1000 --seed 42 --device cpu 2>&1 | tee training-test-tensor_5k-3.log

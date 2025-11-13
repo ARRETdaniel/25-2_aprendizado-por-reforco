@@ -1,7 +1,7 @@
 # Vehicle Spawn Misalignment - Detailed Analysis
 
-**Date**: November 6, 2025  
-**Status**: ✅ **NOT A BUG - WORKING AS DESIGNED**  
+**Date**: November 6, 2025
+**Status**: ✅ **NOT A BUG - WORKING AS DESIGNED**
 **Confidence Level**: 99%
 
 ---
@@ -46,7 +46,7 @@ The reported "180° spawn misalignment" (Issue #1 in STEP_1_KEY_FINDINGS.md) is 
 | WP0   | **317.74** | 129.49 | 8.333 |
 | WP1   | **314.74** | 129.49 | 8.333 |
 
-**Direction of Travel**: X decreases (317.74 → 314.74), Y constant  
+**Direction of Travel**: X decreases (317.74 → 314.74), Y constant
 **Movement**: **WESTWARD** along X-axis (negative X direction)
 
 ### Waypoint Delta Calculation
@@ -66,10 +66,10 @@ dy = wp1[1] - wp0[1] = 129.49 - 129.49 =  0.00  # ← No Y movement
 
 > **"CARLA uses the Unreal Engine coordinates system. This is a Z-up left-handed system."**
 >
-> **Yaw mapping**:  
-> - **0° = East (+X)**  
-> - **90° = South (+Y)**  
-> - **180° = West (-X)**  
+> **Yaw mapping**:
+> - **0° = East (+X)**
+> - **90° = South (+Y)**
+> - **180° = West (-X)**
 > - **270° = North (-Y)**
 
 ### Coordinate System Diagram
@@ -229,7 +229,7 @@ Actual yaw: 0.00°       ← Queried from vehicle after spawn
 
 ### Verification
 
-**Expected forward direction (route)**: Westward, `[-1, 0, 0]` in world coordinates  
+**Expected forward direction (route)**: Westward, `[-1, 0, 0]` in world coordinates
 **Actual forward direction (vehicle)**: Eastward, `[1, 0, 0]` in world coordinates
 
 **Conclusion**: Vehicle is facing **180° opposite** the route direction.
@@ -421,6 +421,6 @@ spawn_point.location.z += 0.5  # Lift slightly
 
 ---
 
-**Prepared by**: GitHub Copilot AI Assistant  
-**Review Status**: Ready for implementation  
+**Prepared by**: GitHub Copilot AI Assistant
+**Review Status**: Ready for implementation
 **Action Required**: Apply recommended fix (Option C preferred)
