@@ -1,9 +1,9 @@
 # Step 8: Repeat (Episode Loop & Reset) Validation
 
-**Status**: ✅ **VALIDATED** (100% Confidence)  
-**Date**: 2025-11-12  
-**Validation File**: `DEBUG_validation_20251105_194845.log` (698,614 lines)  
-**Reference Documentation**: [Gymnasium Env API](https://gymnasium.farama.org/api/env/), [OpenAI Spinning Up - TD3](https://spinningup.openai.com/en/latest/algorithms/td3.html)  
+**Status**: ✅ **VALIDATED** (100% Confidence)
+**Date**: 2025-11-12
+**Validation File**: `DEBUG_validation_20251105_194845.log` (698,614 lines)
+**Reference Documentation**: [Gymnasium Env API](https://gymnasium.farama.org/api/env/), [OpenAI Spinning Up - TD3](https://spinningup.openai.com/en/latest/algorithms/td3.html)
 **Code Files**: `src/environment/carla_env.py`, `scripts/train_td3.py`
 
 ---
@@ -95,9 +95,9 @@ REPEAT (until convergence):
    Execute a in environment
    Observe next state s', reward r, done signal d
    Store (s, a, r, s', d) in replay buffer D
-   
+
    If s' is terminal, reset environment state ← KEY MECHANISM!
-   
+
    If it's time to update:
       For j in range(updates):
          Sample batch B from D
@@ -127,11 +127,11 @@ def reset(
     """
     Resets the environment to an initial internal state, returning an initial
     observation and info.
-    
+
     This method generates a new starting state often with some randomness to ensure
     that the agent explores the state space and learns a generalised policy about
     the environment.
-    
+
     Returns:
         observation (ObsType): Observation of the initial state
         info (dict): Auxiliary diagnostic information
@@ -180,19 +180,19 @@ self.episode_timesteps = 0
 # Main loop: timestep-based (not episode-based)
 for t in range(1, int(self.max_timesteps) + 1):
     self.episode_timesteps += 1
-    
+
     # Steps 1-7: Observe, select action, execute, store, train
     # ... (action selection, env.step, replay buffer, agent.train)
-    
+
     # Step 8: EPISODE TERMINATION CHECK
     if done or truncated:
         # Log episode metrics
         self.training_rewards.append(self.episode_reward)
         self.writer.add_scalar('train/episode_reward', self.episode_reward, self.episode_num)
         self.writer.add_scalar('train/episode_length', self.episode_timesteps, self.episode_num)
-        self.writer.add_scalar('train/collisions_per_episode', 
+        self.writer.add_scalar('train/collisions_per_episode',
                               self.episode_collision_count, self.episode_num)
-        
+
         # Console logging every 10 episodes
         if self.episode_num % 10 == 0:
             avg_reward = np.mean(self.training_rewards[-10:])
@@ -201,16 +201,16 @@ for t in range(1, int(self.max_timesteps) + 1):
                   f"Reward {self.episode_reward:8.2f} | "
                   f"Avg Reward (10ep) {avg_reward:8.2f} | "
                   f"Collisions {self.episode_collision_count:2d}")
-        
+
         # CRITICAL: Reset environment (Gymnasium v0.25+ compliance)
         obs_dict, _ = self.env.reset()  # ← Returns (obs, info) tuple
-        
+
         # Reinitialize episode-specific state
         self.episode_num += 1
         self.episode_reward = 0
         self.episode_timesteps = 0
         self.episode_collision_count = 0
-        
+
     # Continue to next timestep (no break!)
 ```
 
@@ -232,7 +232,7 @@ def reset(
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
     """
     Reset environment for new episode.
-    
+
     Steps:
     1. Clean up previous episode (vehicle, NPCs, sensors)
     2. Spawn new ego vehicle
@@ -244,32 +244,32 @@ def reset(
     # Increment episode counter
     self.episode_count += 1
     self.logger.info(f"Resetting environment (episode {self.episode_count})...")
-    
+
     # 1. CLEANUP PREVIOUS EPISODE
     self._cleanup_episode()  # ← Destroys vehicle, sensors, NPCs
-    
+
     # 2. SPAWN NEW EGO VEHICLE
     # ... (get spawn point from route, spawn vehicle)
-    
+
     # 3. ATTACH SENSORS
     self.sensors = SensorSuite(self.vehicle, self.carla_config, self.world)
-    
+
     # 4. SPAWN NPC TRAFFIC
     self._spawn_npc_traffic()
-    
+
     # 5. INITIALIZE STATE TRACKING
     self.current_step = 0
     self.episode_start_time = time.time()
     self.waypoint_manager.reset()
     self.reward_calculator.reset()
-    
+
     # 6. TICK SIMULATION (initialize sensors & settle physics)
     self.world.tick()
     self.sensors.tick()
-    
+
     # 7. GET INITIAL OBSERVATION
     observation = self._get_observation()
-    
+
     # 8. BUILD INFO DICT (Gymnasium v0.25+ compliance)
     info = {
         "episode": self.episode_count,
@@ -278,7 +278,7 @@ def reset(
         "spawn_location": {...},
         "observation_shapes": {...},
     }
-    
+
     return observation, info  # ← Gymnasium v0.25+ format
 ```
 
@@ -296,10 +296,10 @@ def reset(
 def _cleanup_episode(self) -> None:
     """
     Clean up episode resources (vehicle, sensors, NPCs).
-    
+
     CRITICAL: Proper cleanup prevents CARLA from accumulating actors,
     which can cause memory leaks, performance degradation, and crashes.
-    
+
     Destruction order:
     1. Sensors (must be destroyed before vehicle)
     2. Ego vehicle
@@ -311,14 +311,14 @@ def _cleanup_episode(self) -> None:
         self.sensors.destroy()
         self.sensors = None
         self.logger.debug("Sensor suite destroyed successfully")
-    
+
     # 2. Destroy ego vehicle
     if self.vehicle is not None:
         self.logger.debug("Destroying ego vehicle...")
         self.vehicle.destroy()
         self.vehicle = None
         self.logger.debug("Ego vehicle destroyed successfully")
-    
+
     # 3. Destroy NPC vehicles
     if len(self.npcs) > 0:
         self.logger.debug(f"Destroying {len(self.npcs)} NPC vehicles...")
@@ -327,7 +327,7 @@ def _cleanup_episode(self) -> None:
                 npc.destroy()
         self.npcs.clear()
         self.logger.debug("NPC vehicles destroyed successfully")
-    
+
     self.logger.debug("Episode cleanup completed successfully")
 ```
 
@@ -530,10 +530,10 @@ Episode 2 Start: 22:48:59.XXX (< 0.150s)
 ```
 Episode N:
    Spawn vehicle → Attach sensors → Spawn NPCs → Run episode → Destroy all
-   
+
 Episode N+1:
    Spawn vehicle → Attach sensors → Spawn NPCs → Run episode → Destroy all
-   
+
 (Repeat 10,000 times)
 ```
 
@@ -573,14 +573,14 @@ Episode N+1:
 for t in range(1, int(self.max_timesteps) + 1):
     # Execute step
     next_obs_dict, reward, done, truncated, info = self.env.step(action)
-    
+
     # Store transition (accumulates across episodes!)
     self.agent.replay_buffer.add(obs_dict, action, next_obs_dict, reward, 1.0 - done)
-    
+
     # Train (if past warmup)
     if t >= self.start_timesteps:
         metrics = self.agent.train(batch_size=self.batch_size)
-    
+
     # Episode end: reset, but DON'T BREAK!
     if done or truncated:
         obs_dict, _ = self.env.reset()
@@ -802,7 +802,7 @@ The Episode Loop & Reset mechanism is **PERFECT** and **fully compliant** with b
 
 ---
 
-*Document Generated: 2025-11-12*  
-*Validation Confidence: 100%*  
-*Status: ✅ COMPLETE - NO CRITICAL ISSUES FOUND*  
+*Document Generated: 2025-11-12*
+*Validation Confidence: 100%*
+*Status: ✅ COMPLETE - NO CRITICAL ISSUES FOUND*
 *FULL 8-STEP PIPELINE VALIDATED: READY FOR TRAINING* 🎉
