@@ -1,8 +1,8 @@
 # Actor CNN Gradient Explosion Fix - Technical Analysis
 
-**Issue ID**: CRITICAL-001  
-**Discovered**: 1K Validation Run #2 (November 12, 2025)  
-**Severity**: 🟡 MEDIUM (blocking for 1M deployment)  
+**Issue ID**: CRITICAL-001
+**Discovered**: 1K Validation Run #2 (November 12, 2025)
+**Severity**: 🟡 MEDIUM (blocking for 1M deployment)
 **Status**: 🔧 FIX PROPOSED - Pending validation
 
 ---
@@ -232,23 +232,23 @@ networks:
 ```python
 def train(self, replay_buffer, batch_size=256):
     # ... existing critic training ...
-    
+
     # ACTOR TRAINING
     self.actor_cnn_optimizer.zero_grad()
     self.actor_optimizer.zero_grad()
-    
+
     # Forward pass
     actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
-    
+
     # Backward pass
     actor_loss.backward()
-    
+
     # NEW: Gradient clipping for actor CNN only
     torch.nn.utils.clip_grad_norm_(
-        self.actor_cnn.parameters(), 
+        self.actor_cnn.parameters(),
         max_norm=1.0  # Clip to unit norm
     )
-    
+
     # Optimizer step
     self.actor_cnn_optimizer.step()
     self.actor_optimizer.step()
@@ -281,24 +281,24 @@ def train(self, replay_buffer, batch_size=256):
 ```python
 def train(self, replay_buffer, batch_size=256):
     # ... existing critic training ...
-    
+
     # ACTOR TRAINING
     self.actor_cnn_optimizer.zero_grad()
     self.actor_optimizer.zero_grad()
-    
+
     # Forward pass with normalization
     raw_q_values = self.critic.Q1(state, self.actor(state))
-    
+
     # NEW: Normalize Q-values before loss calculation
     q_mean = raw_q_values.mean()
     q_std = raw_q_values.std() + 1e-8
     normalized_q = (raw_q_values - q_mean) / q_std
-    
+
     actor_loss = -normalized_q.mean()
-    
+
     # Backward pass
     actor_loss.backward()
-    
+
     # Optimizer step
     self.actor_cnn_optimizer.step()
     self.actor_optimizer.step()
@@ -566,7 +566,7 @@ CNN encoder: Learning rate = 1e-5
 Actor MLP: Learning rate = 3e-4
 Critic MLP: Learning rate = 3e-4
 
-Justification: "Visual features require more stable learning due to 
+Justification: "Visual features require more stable learning due to
 high dimensionality and sparse gradients from policy optimization."
 ```
 
@@ -632,7 +632,7 @@ self.actor_cnn_optimizer = torch.optim.Adam(
 ```python
 self.actor_cnn_optimizer = torch.optim.Adam(
     self.actor_cnn.parameters(),
-    lr=config['networks']['cnn'].get('actor_cnn_lr', 
+    lr=config['networks']['cnn'].get('actor_cnn_lr',
                                       config['networks']['cnn']['learning_rate'])
 )
 # Falls back to shared LR if actor_cnn_lr not specified
@@ -668,7 +668,7 @@ actor_loss.backward()
 
 # Gradient clipping for actor CNN only
 torch.nn.utils.clip_grad_norm_(
-    self.actor_cnn.parameters(), 
+    self.actor_cnn.parameters(),
     max_norm=config['networks']['cnn'].get('grad_clip_norm', 1.0)
 )
 
@@ -850,6 +850,6 @@ actor_cnn_lr: 0.00003  # Try 3e-5 (between 1e-5 and 1e-4)
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: November 12, 2025  
+**Document Version**: 1.0
+**Last Updated**: November 12, 2025
 **Next Review**: After Phase 2 validation complete

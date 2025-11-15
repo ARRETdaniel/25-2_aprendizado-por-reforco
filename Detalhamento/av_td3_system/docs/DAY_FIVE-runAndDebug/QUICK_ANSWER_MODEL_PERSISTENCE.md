@@ -1,6 +1,6 @@
 # Quick Answer: Where is Learning Saved?
 
-**Your Question**: 
+**Your Question**:
 > "If our CNN is learning together with our TD3 agent, where is the CNN learning saved so we can use it later in deployment? Same with TD3 agent?"
 
 ---
@@ -9,9 +9,9 @@
 
 ✅ **EVERYTHING IS SAVED IN ONE CHECKPOINT FILE**
 
-**Format**: `.pth` (PyTorch standard)  
-**Location**: `av_td3_system/data/checkpoints/`  
-**Frequency**: Every 5,000 training steps  
+**Format**: `.pth` (PyTorch standard)
+**Location**: `av_td3_system/data/checkpoints/`
+**Frequency**: Every 5,000 training steps
 **Size**: ~20 MB per file
 
 ---
@@ -127,7 +127,7 @@ Camera Image → Actor CNN → Features → Actor → Action
                  │                     │
                  └─ Learned from      └─ Learned from
                     30K steps            30K steps
-                    
+
 Both saved in: td3_scenario_0_step_30000.pth
 ```
 
@@ -190,10 +190,10 @@ For detailed explanation, see:
 
 **Bottom Line**: 🎯
 
-> Your CNN and TD3 learning are BOTH saved in `.pth` checkpoint files.  
+> Your CNN and TD3 learning are BOTH saved in `.pth` checkpoint files.
 > Load the latest checkpoint (`td3_scenario_0_step_30000.pth`) and you're ready for deployment!
 
 ---
 
-**Last Updated**: 2025-11-12  
+**Last Updated**: 2025-11-12
 **Confidence**: 100%

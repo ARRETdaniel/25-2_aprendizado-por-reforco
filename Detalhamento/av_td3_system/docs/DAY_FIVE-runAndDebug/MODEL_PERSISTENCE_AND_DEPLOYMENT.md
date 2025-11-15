@@ -1,7 +1,7 @@
 # Model Persistence and Deployment - Complete Guide
 
-**Date**: 2025-11-12  
-**Status**: ✅ **VALIDATED** - Based on official PyTorch and TD3 documentation  
+**Date**: 2025-11-12
+**Status**: ✅ **VALIDATED** - Based on official PyTorch and TD3 documentation
 **Purpose**: Explain where CNN and TD3 learning is saved for deployment
 
 ---
@@ -93,11 +93,11 @@ def load(self, filename):
     # Load networks
     self.critic.load_state_dict(torch.load(filename + "_critic"))
     self.actor.load_state_dict(torch.load(filename + "_actor"))
-    
+
     # Load optimizers
     self.critic_optimizer.load_state_dict(torch.load(filename + "_critic_optimizer"))
     self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer"))
-    
+
     # Recreate target networks (TD3 convention)
     self.critic_target = copy.deepcopy(self.critic)
     self.actor_target = copy.deepcopy(self.actor)
@@ -122,35 +122,35 @@ Our implementation **extends** the original TD3 by adding **CNN state saving**:
 def save_checkpoint(self, filepath: str) -> None:
     """
     Save agent checkpoint to disk.
-    
+
     Saves actor, critic, CNN networks and their optimizers in a single file.
     FIXED: Now correctly saves BOTH actor_cnn and critic_cnn separately.
-    
+
     Args:
         filepath: Path to save checkpoint (e.g., 'checkpoints/td3_100k.pth')
     """
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    
+
     checkpoint = {
         # ===== TRAINING STATE =====
         'total_it': self.total_it,
-        
+
         # ===== CORE TD3 NETWORKS =====
         'actor_state_dict': self.actor.state_dict(),            # Actor policy μ_θ(s)
         'critic_state_dict': self.critic.state_dict(),          # Twin critics Q_φ1, Q_φ2
-        
+
         # ===== CORE TD3 OPTIMIZERS =====
         'actor_optimizer_state_dict': self.actor_optimizer.state_dict(),
         'critic_optimizer_state_dict': self.critic_optimizer.state_dict(),
-        
+
         # ===== CNN NETWORKS (OUR INNOVATION) =====
         'actor_cnn_state_dict': self.actor_cnn.state_dict(),    # Actor CNN features
         'critic_cnn_state_dict': self.critic_cnn.state_dict(),  # Critic CNN features
-        
+
         # ===== CNN OPTIMIZERS (OUR INNOVATION) =====
         'actor_cnn_optimizer_state_dict': self.actor_cnn_optimizer.state_dict(),
         'critic_cnn_optimizer_state_dict': self.critic_cnn_optimizer.state_dict(),
-        
+
         # ===== HYPERPARAMETERS (FOR SELF-CONTAINED CHECKPOINT) =====
         'config': self.config,
         'use_dict_buffer': self.use_dict_buffer,
@@ -163,7 +163,7 @@ def save_checkpoint(self, filepath: str) -> None:
         'state_dim': self.state_dim,
         'action_dim': self.action_dim,
     }
-    
+
     torch.save(checkpoint, filepath)
     print(f"Checkpoint saved to {filepath}")
     print(f"  Includes SEPARATE actor_cnn and critic_cnn states")
@@ -193,53 +193,53 @@ def save_checkpoint(self, filepath: str) -> None:
 def load_checkpoint(self, filepath: str) -> None:
     """
     Load agent checkpoint from disk.
-    
+
     Restores networks, optimizers, and training state. Also recreates
     target networks from loaded weights.
     FIXED: Now correctly loads BOTH actor_cnn and critic_cnn separately.
-    
+
     Args:
         filepath: Path to checkpoint file
     """
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"Checkpoint not found: {filepath}")
-    
+
     checkpoint = torch.load(filepath, map_location=self.device)
-    
+
     # ===== RESTORE TD3 NETWORKS =====
     self.actor.load_state_dict(checkpoint['actor_state_dict'])
     self.critic.load_state_dict(checkpoint['critic_state_dict'])
-    
+
     # ===== RECREATE TARGET NETWORKS (TD3 CONVENTION) =====
     # Target networks are NEVER saved, always recreated via deepcopy
     self.actor_target = copy.deepcopy(self.actor)
     self.critic_target = copy.deepcopy(self.critic)
-    
+
     # ===== RESTORE TD3 OPTIMIZERS =====
     self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
     self.critic_optimizer.load_state_dict(checkpoint['critic_optimizer_state_dict'])
-    
+
     # ===== RESTORE CNN NETWORKS (OUR INNOVATION) =====
     if self.actor_cnn is not None:
         self.actor_cnn.load_state_dict(checkpoint['actor_cnn_state_dict'])
         print(f"Actor CNN state restored")
-    
+
     if self.critic_cnn is not None:
         self.critic_cnn.load_state_dict(checkpoint['critic_cnn_state_dict'])
         print(f"Critic CNN state restored")
-    
+
     # ===== RESTORE CNN OPTIMIZERS (OUR INNOVATION) =====
     if self.actor_cnn_optimizer is not None:
         self.actor_cnn_optimizer.load_state_dict(checkpoint['actor_cnn_optimizer_state_dict'])
         print(f"Actor CNN optimizer restored")
-    
+
     if self.critic_cnn_optimizer is not None:
         self.critic_cnn_optimizer.load_state_dict(checkpoint['critic_cnn_optimizer_state_dict'])
         print(f"Critic CNN optimizer restored")
-    
+
     # ===== RESTORE TRAINING STATE =====
     self.total_it = checkpoint['total_it']
-    
+
     print(f"Checkpoint loaded from {filepath}")
     print(f"  Resumed at iteration: {self.total_it}")
     print(f"  SEPARATE CNNs restored")
@@ -357,13 +357,13 @@ obs_dict, info = env.reset()
 for t in range(1000):
     # Select action WITHOUT exploration noise
     action = agent.select_action(obs_dict, deterministic=True)
-    
+
     # Execute action
     next_obs_dict, reward, terminated, truncated, info = env.step(action)
-    
+
     if terminated or truncated:
         break
-    
+
     obs_dict = next_obs_dict
 
 env.close()
@@ -445,7 +445,7 @@ for param in agent_new.actor_cnn.parameters():
     param.requires_grad = False  # Freeze
 # OR
 agent_new.actor_cnn_optimizer = torch.optim.Adam(
-    agent_new.actor_cnn.parameters(), 
+    agent_new.actor_cnn.parameters(),
     lr=1e-5  # Much lower LR for fine-tuning
 )
 
@@ -509,7 +509,7 @@ agent_new.actor_cnn_optimizer = torch.optim.Adam(
 with torch.no_grad():
     # Extract features for next state
     next_features = self.extract_features(
-        next_obs_dict, 
+        next_obs_dict,
         enable_grad=False,  # No grad for target
         use_actor_cnn=False  # Use critic CNN
     )
@@ -546,13 +546,13 @@ if self.total_it % self.policy_freq == 0:
         enable_grad=True,  # ← GRADIENTS ENABLED
         use_actor_cnn=True  # Use actor CNN
     )
-    
+
     # Compute action via policy
     action = self.actor(features)
-    
+
     # Compute actor loss (maximize Q1)
     actor_loss = -self.critic.Q1(features, action).mean()
-    
+
     # BACKPROPAGATE (updates actor + actor_cnn)
     self.actor_optimizer.zero_grad()
     self.actor_cnn_optimizer.zero_grad()  # ← CNN optimizer
@@ -588,7 +588,7 @@ Let me search for evidence that CNN weights are being updated:
     - Param: fc.weight, Grad: mean=-0.0001, std=0.0017, max_abs=0.0120
     - Param: fc.bias, Grad: mean=-0.0001, std=0.0003, max_abs=0.0011
   ✅ Total gradient norm (actor_cnn): 3866.71
-  
+
   Critic CNN:
     - Param: features.0.weight, Grad: mean=-0.0001, std=0.0003, max_abs=0.0018
     - Param: features.0.bias, Grad: mean=-0.0000, std=0.0003, max_abs=0.0015
@@ -650,16 +650,16 @@ Let me search for evidence that CNN weights are being updated:
     'critic_state_dict': {...},      # Value: (state, action) → Q
     'actor_cnn_state_dict': {...},   # Features: image → 512-dim ← CNN LEARNING
     'critic_cnn_state_dict': {...},  # Features: image → 512-dim ← CNN LEARNING
-    
+
     # Optimizers (for resuming training)
     'actor_optimizer_state_dict': {...},
     'critic_optimizer_state_dict': {...},
     'actor_cnn_optimizer_state_dict': {...},   # Momentum for CNN
     'critic_cnn_optimizer_state_dict': {...},  # Momentum for CNN
-    
+
     # Training state
     'total_it': 30000,  # Resume at step 30001
-    
+
     # Hyperparameters (for reproducibility)
     'discount': 0.99,
     'tau': 0.005,
@@ -746,8 +746,8 @@ action = agent.select_action(obs_dict, deterministic=True)
 
 ---
 
-**Document Status**: ✅ **COMPLETE AND VALIDATED**  
-**Last Updated**: 2025-11-12  
+**Document Status**: ✅ **COMPLETE AND VALIDATED**
+**Last Updated**: 2025-11-12
 **Validation**: Based on official PyTorch docs, TD3 paper, and code inspection
 
 ---

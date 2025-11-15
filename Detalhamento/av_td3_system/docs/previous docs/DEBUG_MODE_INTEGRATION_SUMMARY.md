@@ -75,7 +75,7 @@ python scripts/train_td3.py --steps 1000 --debug --seed 42
 
 ---
 
-## Usage Examples
+## Usage 
 
 ### Example 1: Quick Health Check
 ```bash
