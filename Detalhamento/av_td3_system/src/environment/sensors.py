@@ -203,38 +203,64 @@ class CARLACameraManager:
 
     def destroy(self):
         """
-        Clean up camera sensor.
+        Clean up camera sensor with robust error handling.
 
-        CRITICAL FIX: In synchronous mode, sensor callbacks may still be pending
-        after stop(). We must flush the callback queue before destroying the actor.
+        CRITICAL FIX: Defense against "destroyed actor" RuntimeError
+        - Check is_alive before any operation
+        - Stop listening before destruction (CARLA best practice)
+        - Add grace period for async callback completion
+        - Catch C++ runtime errors that bypass Python exception handling
 
-        Reference: https://carla.readthedocs.io/en/latest/adv_synchrony_timestep/
-        "Data coming from GPU-based sensors, mostly cameras, is usually generated
-        with a delay of a couple of frames."
+        References:
+        - https://carla.readthedocs.io/en/latest/python_api/ (Actor.is_alive)
+        - https://carla.readthedocs.io/en/latest/core_sensors/ (sensor.stop())
+        - https://carla.readthedocs.io/en/latest/adv_synchrony_timestep/
         """
-        if self.camera_sensor:
-            try:
-                # Step 1: Stop listening before destruction (CARLA best practice)
-                # Reference: https://carla.readthedocs.io/en/latest/core_sensors/
-                if self.camera_sensor.is_listening:
-                    self.camera_sensor.stop()
-                    self.logger.debug("Camera sensor stopped listening")
+        if self.camera_sensor is None:
+            return
 
-                # Step 2: Flush pending callbacks in synchronous mode
-                # CRITICAL: In sync mode, callbacks may still be queued even after stop().
-                # We need to let the server process them before destroying the actor.
-                # The world.tick() call in the environment will handle this automatically,
-                # but we add a small safety delay for async callback completion.
-                import time
-                time.sleep(0.01)  # 10ms grace period for callback completion
+        try:
+            # Step 1: Check if actor is still alive before operations
+            # CRITICAL: Prevents "destroyed actor" RuntimeError
+            if not hasattr(self.camera_sensor, 'is_alive') or not self.camera_sensor.is_alive:
+                self.logger.warning("Camera sensor already destroyed, skipping cleanup")
+                self.camera_sensor = None
+                return
 
-                # Step 3: Destroy the sensor actor
-                self.camera_sensor.destroy()
-                self.logger.info("Camera sensor destroyed")
-            except RuntimeError as e:
-                self.logger.warning(f"Camera sensor already destroyed or invalid: {e}")
-            except Exception as e:
-                self.logger.error(f"Error destroying camera sensor: {e}")
+            # Step 2: Stop listening before destruction (CARLA best practice)
+            # Reference: https://carla.readthedocs.io/en/latest/core_sensors/
+            if hasattr(self.camera_sensor, 'is_listening') and self.camera_sensor.is_listening:
+                self.camera_sensor.stop()
+                self.logger.debug("Camera sensor stopped listening")
+
+            # Step 3: Flush pending callbacks in synchronous mode
+            # CRITICAL: In sync mode, callbacks may still be queued even after stop().
+            # We need to let the server process them before destroying the actor.
+            import time
+            time.sleep(0.01)  # 10ms grace period for callback completion
+
+            # Step 4: Double-check is_alive before destroy call
+            if self.camera_sensor.is_alive:
+                success = self.camera_sensor.destroy()
+                if success:
+                    self.logger.info("Camera sensor destroyed")
+                else:
+                    self.logger.warning("Camera sensor destroy returned False")
+            else:
+                self.logger.warning("Camera sensor became invalid before destroy call")
+
+        except RuntimeError as e:
+            # CARLA C++ runtime errors (e.g., "destroyed actor")
+            self.logger.warning(f"Camera sensor destruction RuntimeError: {e}")
+        except AttributeError as e:
+            # Handle missing attributes (actor already cleaned up)
+            self.logger.warning(f"Camera sensor attribute error during cleanup: {e}")
+        except Exception as e:
+            # Catch-all for unexpected errors
+            self.logger.error(f"Unexpected error destroying camera sensor: {e}", exc_info=True)
+        finally:
+            # Always clear reference to prevent further access attempts
+            self.camera_sensor = None
 
 
 class ImageStack:
@@ -365,6 +391,9 @@ class CollisionDetector:
         self.collision_force = 0.0    # NEW: Approximate force in Newtons
         self.collision_lock = threading.Lock()
 
+        # P0 FIX #2: Per-step collision counter for TensorBoard metrics
+        self.step_collision_count = 0
+
         # Collision sensor setup
         self.collision_sensor = None
         self._setup_collision_sensor()
@@ -409,6 +438,9 @@ class CollisionDetector:
             collision_duration = 0.1  # seconds (typical for rigid body impacts)
             self.collision_force = self.collision_impulse / collision_duration  # Newtons
 
+            # P0 FIX #2: Increment per-step counter for TensorBoard tracking
+            self.step_collision_count = 1  # Binary flag: collision occurred this step
+
         self.logger.warning(
             f"Collision detected with {event.other_actor.type_id} "
             f"(impulse: {self.collision_impulse:.1f} N·s, force: ~{self.collision_force:.1f} N)"
@@ -440,6 +472,16 @@ class CollisionDetector:
                 }
             return None
 
+    def get_step_collision_count(self) -> int:
+        """
+        P0 FIX #2: Get collision count for current step (0 or 1).
+
+        Returns:
+            1 if collision occurred this step, 0 otherwise
+        """
+        with self.collision_lock:
+            return self.step_collision_count
+
     def reset(self):
         """Reset collision state for new episode."""
         with self.collision_lock:
@@ -447,32 +489,66 @@ class CollisionDetector:
             self.collision_event = None
             self.collision_impulse = 0.0
             self.collision_force = 0.0
+            self.step_collision_count = 0  # P0 FIX #2: Reset counter
+
+    def reset_step_counter(self):
+        """
+        P0 FIX #2: Reset per-step counter (called after each environment step).
+        """
+        with self.collision_lock:
+            self.step_collision_count = 0
 
     def destroy(self):
         """
-        Clean up collision sensor.
+        Clean up collision sensor with robust error handling.
 
-        CRITICAL FIX: Add grace period for pending callback completion.
-        Reference: https://carla.readthedocs.io/en/latest/adv_synchrony_timestep/
+        CRITICAL FIX: Defense against "destroyed actor" RuntimeError
+        - Check is_alive before any operation
+        - Stop listening before destruction (CARLA best practice)
+        - Add grace period for async callback completion
+        - Catch C++ runtime errors that bypass Python exception handling
+
+        References:
+        - https://carla.readthedocs.io/en/latest/python_api/ (Actor.is_alive)
+        - https://carla.readthedocs.io/en/latest/core_sensors/ (sensor.stop())
         """
-        if self.collision_sensor:
-            try:
-                # Stop listening before destruction (CARLA best practice)
-                # Reference: https://carla.readthedocs.io/en/latest/core_sensors/
-                if self.collision_sensor.is_listening:
-                    self.collision_sensor.stop()
-                    self.logger.debug("Collision sensor stopped listening")
+        if self.collision_sensor is None:
+            return
 
-                # Grace period for async callback completion
-                import time
-                time.sleep(0.01)
+        try:
+            # Step 1: Check if actor is still alive
+            if not hasattr(self.collision_sensor, 'is_alive') or not self.collision_sensor.is_alive:
+                self.logger.warning("Collision sensor already destroyed, skipping cleanup")
+                self.collision_sensor = None
+                return
 
-                self.collision_sensor.destroy()
-                self.logger.info("Collision sensor destroyed")
-            except RuntimeError as e:
-                self.logger.warning(f"Collision sensor already destroyed or invalid: {e}")
-            except Exception as e:
-                self.logger.error(f"Error destroying collision sensor: {e}")
+            # Step 2: Stop listening before destruction
+            if hasattr(self.collision_sensor, 'is_listening') and self.collision_sensor.is_listening:
+                self.collision_sensor.stop()
+                self.logger.debug("Collision sensor stopped listening")
+
+            # Step 3: Grace period for async callback completion
+            import time
+            time.sleep(0.01)
+
+            # Step 4: Double-check is_alive before destroy
+            if self.collision_sensor.is_alive:
+                success = self.collision_sensor.destroy()
+                if success:
+                    self.logger.info("Collision sensor destroyed")
+                else:
+                    self.logger.warning("Collision sensor destroy returned False")
+            else:
+                self.logger.warning("Collision sensor became invalid before destroy call")
+
+        except RuntimeError as e:
+            self.logger.warning(f"Collision sensor destruction RuntimeError: {e}")
+        except AttributeError as e:
+            self.logger.warning(f"Collision sensor attribute error during cleanup: {e}")
+        except Exception as e:
+            self.logger.error(f"Unexpected error destroying collision sensor: {e}", exc_info=True)
+        finally:
+            self.collision_sensor = None
 
 
 class LaneInvasionDetector:
@@ -496,6 +572,9 @@ class LaneInvasionDetector:
         self.lane_invaded = False
         self.invasion_event = None
         self.invasion_lock = threading.Lock()
+
+        # P0 FIX #3: Per-step lane invasion counter for TensorBoard metrics
+        self.step_invasion_count = 0
 
         # Lane invasion sensor setup
         self.lane_sensor = None
@@ -522,6 +601,10 @@ class LaneInvasionDetector:
         with self.invasion_lock:
             self.lane_invaded = True
             self.invasion_event = event
+
+            # P0 FIX #3: Increment per-step counter for TensorBoard tracking
+            self.step_invasion_count = 1  # Binary flag: lane invasion occurred this step
+
         self.logger.warning(f"Lane invasion detected: {event.crossed_lane_markings}")
 
     def is_invading_lane(self) -> bool:
@@ -534,39 +617,81 @@ class LaneInvasionDetector:
         with self.invasion_lock:
             return self.lane_invaded
 
+    def get_step_invasion_count(self) -> int:
+        """
+        P0 FIX #3: Get lane invasion count for current step (0 or 1).
+
+        Returns:
+            1 if lane invasion occurred this step, 0 otherwise
+        """
+        with self.invasion_lock:
+            return self.step_invasion_count
+
     def reset(self):
         """Reset lane invasion state for new episode."""
         with self.invasion_lock:
             self.lane_invaded = False
             self.invasion_event = None
+            self.step_invasion_count = 0  # P0 FIX #3: Reset counter
+
+    def reset_step_counter(self):
+        """
+        P0 FIX #3: Reset per-step counter (called after each environment step).
+        """
+        with self.invasion_lock:
+            self.step_invasion_count = 0
 
     def destroy(self):
         """
-        Clean up lane invasion sensor.
+        Clean up lane invasion sensor with robust error handling.
 
-        CRITICAL FIX: Add grace period for pending callback completion.
-        Reference: https://carla.readthedocs.io/en/latest/adv_synchrony_timestep/
+        CRITICAL FIX: Defense against "destroyed actor" RuntimeError
+        - Check is_alive before any operation
+        - Stop listening before destruction (CARLA best practice)
+        - Add grace period for async callback completion
+        - Catch C++ runtime errors that bypass Python exception handling
+
+        References:
+        - https://carla.readthedocs.io/en/latest/python_api/ (Actor.is_alive)
+        - https://carla.readthedocs.io/en/latest/core_sensors/ (sensor.stop())
         """
-        if self.lane_sensor:
-            try:
-                # Stop listening before destruction (CARLA best practice)
-                # Reference: https://carla.readthedocs.io/en/latest/core_sensors/
-                if self.lane_sensor.is_listening:
-                    self.lane_sensor.stop()
-                    self.logger.debug("Lane invasion sensor stopped listening")
+        if self.lane_sensor is None:
+            return
 
-                # Grace period for async callback completion
-                import time
-                time.sleep(0.01)
+        try:
+            # Step 1: Check if actor is still alive
+            if not hasattr(self.lane_sensor, 'is_alive') or not self.lane_sensor.is_alive:
+                self.logger.warning("Lane invasion sensor already destroyed, skipping cleanup")
+                self.lane_sensor = None
+                return
 
-                self.lane_sensor.destroy()
-                self.logger.info("Lane invasion sensor destroyed")
-            except RuntimeError as e:
-                self.logger.warning(f"Lane invasion sensor already destroyed or invalid: {e}")
-            except Exception as e:
-                self.logger.error(f"Error destroying lane invasion sensor: {e}")
-            except Exception as e:
-                self.logger.error(f"Error destroying lane invasion sensor: {e}")
+            # Step 2: Stop listening before destruction
+            if hasattr(self.lane_sensor, 'is_listening') and self.lane_sensor.is_listening:
+                self.lane_sensor.stop()
+                self.logger.debug("Lane invasion sensor stopped listening")
+
+            # Step 3: Grace period for async callback completion
+            import time
+            time.sleep(0.01)
+
+            # Step 4: Double-check is_alive before destroy
+            if self.lane_sensor.is_alive:
+                success = self.lane_sensor.destroy()
+                if success:
+                    self.logger.info("Lane invasion sensor destroyed")
+                else:
+                    self.logger.warning("Lane invasion sensor destroy returned False")
+            else:
+                self.logger.warning("Lane invasion sensor became invalid before destroy call")
+
+        except RuntimeError as e:
+            self.logger.warning(f"Lane invasion sensor destruction RuntimeError: {e}")
+        except AttributeError as e:
+            self.logger.warning(f"Lane invasion sensor attribute error during cleanup: {e}")
+        except Exception as e:
+            self.logger.error(f"Unexpected error destroying lane invasion sensor: {e}", exc_info=True)
+        finally:
+            self.lane_sensor = None
 
 
 class ObstacleDetector:
@@ -680,27 +805,55 @@ class ObstacleDetector:
 
     def destroy(self):
         """
-        Clean up obstacle sensor.
+        Clean up obstacle sensor with robust error handling.
 
-        CRITICAL FIX: Add grace period for pending callback completion.
-        Reference: https://carla.readthedocs.io/en/latest/adv_synchrony_timestep/
+        CRITICAL FIX: Defense against "destroyed actor" RuntimeError
+        - Check is_alive before any operation
+        - Stop listening before destruction (CARLA best practice)
+        - Add grace period for async callback completion
+        - Catch C++ runtime errors that bypass Python exception handling
+
+        References:
+        - https://carla.readthedocs.io/en/latest/python_api/ (Actor.is_alive)
+        - https://carla.readthedocs.io/en/latest/core_sensors/ (sensor.stop())
         """
-        if self.obstacle_sensor:
-            try:
-                if self.obstacle_sensor.is_listening:
-                    self.obstacle_sensor.stop()
-                    self.logger.debug("Obstacle sensor stopped listening")
+        if self.obstacle_sensor is None:
+            return
 
-                # Grace period for async callback completion
-                import time
-                time.sleep(0.01)
+        try:
+            # Step 1: Check if actor is still alive
+            if not hasattr(self.obstacle_sensor, 'is_alive') or not self.obstacle_sensor.is_alive:
+                self.logger.warning("Obstacle sensor already destroyed, skipping cleanup")
+                self.obstacle_sensor = None
+                return
 
-                self.obstacle_sensor.destroy()
-                self.logger.info("Obstacle sensor destroyed")
-            except RuntimeError as e:
-                self.logger.warning(f"Obstacle sensor already destroyed or invalid: {e}")
-            except Exception as e:
-                self.logger.error(f"Error destroying obstacle sensor: {e}")
+            # Step 2: Stop listening before destruction
+            if hasattr(self.obstacle_sensor, 'is_listening') and self.obstacle_sensor.is_listening:
+                self.obstacle_sensor.stop()
+                self.logger.debug("Obstacle sensor stopped listening")
+
+            # Step 3: Grace period for async callback completion
+            import time
+            time.sleep(0.01)
+
+            # Step 4: Double-check is_alive before destroy
+            if self.obstacle_sensor.is_alive:
+                success = self.obstacle_sensor.destroy()
+                if success:
+                    self.logger.info("Obstacle sensor destroyed")
+                else:
+                    self.logger.warning("Obstacle sensor destroy returned False")
+            else:
+                self.logger.warning("Obstacle sensor became invalid before destroy call")
+
+        except RuntimeError as e:
+            self.logger.warning(f"Obstacle sensor destruction RuntimeError: {e}")
+        except AttributeError as e:
+            self.logger.warning(f"Obstacle sensor attribute error during cleanup: {e}")
+        except Exception as e:
+            self.logger.error(f"Unexpected error destroying obstacle sensor: {e}", exc_info=True)
+        finally:
+            self.obstacle_sensor = None
 
 
 class SensorSuite:
@@ -803,6 +956,18 @@ class SensorSuite:
         """Get collision details if any."""
         return self.collision_detector.get_collision_info()
 
+    def get_step_collision_count(self) -> int:
+        """
+        P0 FIX #2: Get collision count for current step (0 or 1).
+        """
+        return self.collision_detector.get_step_collision_count()
+
+    def get_step_lane_invasion_count(self) -> int:
+        """
+        P0 FIX #3: Get lane invasion count for current step (0 or 1).
+        """
+        return self.lane_invasion_detector.get_step_invasion_count()
+
     def get_distance_to_nearest_obstacle(self) -> float:
         """
         Get distance to nearest detected obstacle.
@@ -823,6 +988,14 @@ class SensorSuite:
         self.lane_invasion_detector.reset()
         self.obstacle_detector.reset()
         self.logger.info("All sensors reset")
+
+    def reset_step_counters(self):
+        """
+        P0 FIX #2 & #3: Reset per-step counters for all sensors.
+        Called after each environment step to clear collision/lane invasion flags.
+        """
+        self.collision_detector.reset_step_counter()
+        self.lane_invasion_detector.reset_step_counter()
 
     def destroy(self):
         """Clean up all sensors."""

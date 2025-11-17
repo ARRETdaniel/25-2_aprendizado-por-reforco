@@ -703,6 +703,10 @@ class CARLANavigationEnv(Env):
         truncated = (self.current_step >= self.max_episode_steps) and not done
         terminated = done and not truncated
 
+        # P0 FIX #2 & #3: Get per-step sensor counts for TensorBoard metrics
+        collision_count = self.sensors.get_step_collision_count()
+        lane_invasion_count = self.sensors.get_step_lane_invasion_count()
+
         # Prepare info dict
         info = {
             "step": self.current_step,
@@ -710,6 +714,8 @@ class CARLANavigationEnv(Env):
             "termination_reason": termination_reason,
             "vehicle_state": vehicle_state,
             "collision_info": collision_info,  # Already retrieved above
+            "collision_count": collision_count,  # P0 FIX #2: Per-step collision count
+            "lane_invasion_count": lane_invasion_count,  # P0 FIX #3: Per-step lane invasion count
             "distance_to_goal": distance_to_goal,
             "progress_percentage": self.waypoint_manager.get_progress_percentage(),
             "current_waypoint_idx": self.waypoint_manager.get_current_waypoint_index(),
@@ -720,6 +726,9 @@ class CARLANavigationEnv(Env):
             "time_to_collision": time_to_collision,
             "collision_impulse": collision_impulse,
         }
+
+        # P0 FIX #2 & #3: Reset per-step counters after collecting data
+        self.sensors.reset_step_counters()
 
         if terminated or truncated:
             self.logger.info(
@@ -1170,27 +1179,54 @@ class CARLANavigationEnv(Env):
         if self.vehicle:
             try:
                 self.logger.debug("Destroying ego vehicle...")
-                success = self.vehicle.destroy()
-                if success:
-                    self.logger.debug("Ego vehicle destroyed successfully")
-                else:
-                    cleanup_errors.append("Ego vehicle destruction returned False")
-                    self.logger.warning("Ego vehicle destruction failed")
-                self.vehicle = None
 
+                # Check if actor is still alive before operations
+                if not hasattr(self.vehicle, 'is_alive') or not self.vehicle.is_alive:
+                    self.logger.warning("Ego vehicle already destroyed, skipping cleanup")
+                    self.vehicle = None
+                else:
+                    # Vehicle is alive, proceed with destruction
+                    success = self.vehicle.destroy()
+                    if success:
+                        self.logger.debug("Ego vehicle destroyed successfully")
+                    else:
+                        cleanup_errors.append("Ego vehicle destruction returned False")
+                        self.logger.warning("Ego vehicle destruction failed")
+                    self.vehicle = None
+
+            except RuntimeError as e:
+                cleanup_errors.append(f"Vehicle cleanup RuntimeError: {e}")
+                self.logger.warning(f"Vehicle destruction RuntimeError: {e}")
+                self.vehicle = None  # Clear reference anyway
+            except AttributeError as e:
+                cleanup_errors.append(f"Vehicle attribute error: {e}")
+                self.logger.warning(f"Vehicle attribute error during cleanup: {e}")
+                self.vehicle = None
             except Exception as e:
                 cleanup_errors.append(f"Vehicle cleanup error: {e}")
-                self.logger.error(f"Error during vehicle cleanup: {e}", exc_info=True)
+                self.logger.error(f"Unexpected error during vehicle cleanup: {e}", exc_info=True)
                 self.vehicle = None  # Clear reference anyway
 
         # STEP 3: Destroy NPCs (independent actors, non-critical)
         npc_failures = 0
         for i, npc in enumerate(self.npcs):
             try:
+                # Check if NPC is still alive before destroying
+                if not hasattr(npc, 'is_alive') or not npc.is_alive:
+                    self.logger.debug(f"NPC {i} already destroyed")
+                    continue
+
                 success = npc.destroy()
                 if not success:
                     npc_failures += 1
                     self.logger.debug(f"NPC {i} destruction returned False")
+
+            except RuntimeError as e:
+                npc_failures += 1
+                self.logger.debug(f"NPC {i} RuntimeError during destruction: {e}")
+            except AttributeError as e:
+                npc_failures += 1
+                self.logger.debug(f"NPC {i} AttributeError during destruction: {e}")
             except Exception as e:
                 npc_failures += 1
                 self.logger.debug(f"Failed to destroy NPC {i}: {e}")

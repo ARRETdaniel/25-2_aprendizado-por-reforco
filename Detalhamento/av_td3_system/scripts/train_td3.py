@@ -218,6 +218,13 @@ class TD3TrainingPipeline:
         num_waypoints = self.carla_config.get("route", {}).get("num_waypoints_ahead", 25)
         state_dim = 512 + 3 + (num_waypoints * 2)  # 512 + 3 + 50 = 565
 
+        # Get start_timesteps from config BEFORE initializing agent
+        # CRITICAL FIX (2025-11-13): Pass start_timesteps to agent to sync phase detection
+        # Without this, agent uses default start_timesteps (10k-25k) while training script
+        # uses config value (2k for debugging), causing is_training flag to stay frozen at 0
+        start_timesteps = self.agent_config.get('training', {}).get('learning_starts',
+                          self.agent_config.get('algorithm', {}).get('learning_starts', 2500))
+
         self.agent = TD3Agent(
             state_dim=state_dim,  # Calculated: 565 (was hardcoded 535)
             action_dim=2,
@@ -225,6 +232,7 @@ class TD3TrainingPipeline:
             actor_cnn=self.actor_cnn,   # ← Separate CNN for actor!
             critic_cnn=self.critic_cnn,  # ← Separate CNN for critic!
             use_dict_buffer=True,        # ← Enable DictReplayBuffer!
+            #start_timesteps=start_timesteps,  # ← FIX: Pass start_timesteps explicitly!
             config=self.agent_config,
             device=agent_device
         )
@@ -293,13 +301,25 @@ class TD3TrainingPipeline:
         self.episode_reward = 0
         self.episode_timesteps = 0
         self.episode_collision_count = 0
+        self.episode_lane_invasion_count = 0  # P0 FIX #3: Per-episode lane invasion counter
         self.episode_steps_since_collision = 0
+
+        # LITERATURE-VALIDATED FIX (WARNING-002): Track reward components per episode
+        # Reference: Analysis shows progress dominated at 88.9%, need to track balance
+        self.episode_reward_components = {
+            'efficiency': 0.0,
+            'lane_keeping': 0.0,
+            'comfort': 0.0,
+            'safety': 0.0,
+            'progress': 0.0
+        }
 
         # Statistics
         self.training_rewards = []
         self.eval_rewards = []
         self.eval_success_rates = []
         self.eval_collisions = []
+        self.eval_lane_invasions = []  # P0 FIX #3: Lane invasion statistics
 
         print(f"\n[INIT] Training pipeline ready!")
         print(f"[INIT] Max timesteps: {max_timesteps:,}")
@@ -436,8 +456,13 @@ class TD3TrainingPipeline:
             # Get the latest frame from the stack
             latest_frame = obs_dict['image'][-1]  # Shape: (84, 84)
 
+            # BUG FIX: Denormalize from [-1, 1] to [0, 1] before visualization
+            # The preprocessed frames are normalized to [-1, 1] (see sensors.py line 181)
+            # but OpenCV expects [0, 255] uint8 for display
+            latest_frame_denorm = (latest_frame + 1.0) / 2.0  # [-1, 1] → [0, 1]
+
             # Convert from [0, 1] float to [0, 255] uint8
-            frame_uint8 = (latest_frame * 255).astype(np.uint8)
+            frame_uint8 = (latest_frame_denorm * 255).astype(np.uint8)
 
             # Resize to larger display size
             frame_resized = cv2.resize(frame_uint8, (800, 600), interpolation=cv2.INTER_LINEAR)
@@ -635,7 +660,7 @@ class TD3TrainingPipeline:
             print(f"   Vector shape: {obs_dict['vector'].shape}")
             print(f"{'='*70}\n")
 
-        start_timesteps = self.agent_config.get('algorithm', {}).get('learning_starts', 25000)
+        start_timesteps = self.agent_config.get('algorithm', {}).get('learning_starts', 2500)
         batch_size = self.agent_config.get('algorithm', {}).get('batch_size', 256)
 
         # Phase logging
@@ -717,9 +742,10 @@ class TD3TrainingPipeline:
                 print(f"  Range: [{cnn_features.min():.3f}, {cnn_features.max():.3f}]")
                 print(f"  Action: [{action[0]:.3f}, {action[1]:.3f}] (steering, throttle/brake)")
 
-            # Debug visualization (use original Dict observation)
+            # BUG FIX: Debug visualization should use NEXT observation (current frame after action)
+            # Previous bug: Used obs_dict (old frame before action) causing 1-frame delay
             if self.debug:
-                self._visualize_debug(obs_dict, action, reward, info, t)
+                self._visualize_debug(next_obs_dict, action, reward, info, t)
 
                 # DEBUG: Print detailed step info to terminal every 100 steps
                 # OPTIMIZATION: Reduced from every 10 steps to every 100 steps
@@ -763,6 +789,14 @@ class TD3TrainingPipeline:
                     comfort_reward = comfort_tuple[2] if isinstance(comfort_tuple, tuple) else 0.0
                     safety_reward = safety_tuple[2] if isinstance(safety_tuple, tuple) else 0.0
                     progress_reward = progress_tuple[2] if isinstance(progress_tuple, tuple) else 0.0
+
+                    # LITERATURE-VALIDATED FIX (WARNING-002): Accumulate reward components
+                    # Track components to verify progress doesn't dominate (was 88.9%)
+                    self.episode_reward_components['efficiency'] += eff_reward
+                    self.episode_reward_components['lane_keeping'] += lane_reward
+                    self.episode_reward_components['comfort'] += comfort_reward
+                    self.episode_reward_components['safety'] += safety_reward
+                    self.episode_reward_components['progress'] += progress_reward
 
                     # Print main debug line
                     print(
@@ -819,6 +853,7 @@ class TD3TrainingPipeline:
             # Track episode metrics
             self.episode_reward += reward
             self.episode_collision_count += info.get('collision_count', 0)
+            self.episode_lane_invasion_count += info.get('lane_invasion_count', 0)  # P0 FIX #3
             self.episode_steps_since_collision = info.get('steps_since_collision', 0)
 
             #  FIX BUG #12: Use ONLY done (terminated) for TD3 bootstrapping
@@ -873,9 +908,42 @@ class TD3TrainingPipeline:
                     if 'actor_loss' in metrics:  # Actor updated only on delayed steps
                         self.writer.add_scalar('train/actor_loss', metrics['actor_loss'], t)
 
+                    # ===== GRADIENT EXPLOSION MONITORING (Solution A Validation) =====
+                    # Track gradient norms to detect potential explosion
+                    if 'actor_cnn_grad_norm' in metrics:
+                        actor_cnn_grad = metrics['actor_cnn_grad_norm']
+                        self.writer.add_scalar('gradients/actor_cnn_norm', actor_cnn_grad, t)
+
+                        # ALERT: Gradient explosion detection (threshold from GRADIENT_EXPLOSION_FIX.md)
+                        if actor_cnn_grad > 50000:
+                            self.writer.add_scalar('alerts/gradient_explosion_critical', 1, t)
+                            print(f"\n{'!'*70}")
+                            print(f"🔴 CRITICAL ALERT: Actor CNN gradient explosion detected!")
+                            print(f"   Step: {t:,}")
+                            print(f"   Actor CNN grad norm: {actor_cnn_grad:,.2f}")
+                            print(f"   Threshold: 50,000")
+                            print(f"   Recommendation: Stop training, implement Solution B (gradient clipping)")
+                            print(f"{'!'*70}\n")
+                        elif actor_cnn_grad > 10000:
+                            self.writer.add_scalar('alerts/gradient_explosion_warning', 1, t)
+                            print(f"\n⚠️  WARNING: Actor CNN gradient elevated at step {t:,}: {actor_cnn_grad:,.2f}")
+                        else:
+                            self.writer.add_scalar('alerts/gradient_explosion_critical', 0, t)
+                            self.writer.add_scalar('alerts/gradient_explosion_warning', 0, t)
+
+                    if 'critic_cnn_grad_norm' in metrics:
+                        self.writer.add_scalar('gradients/critic_cnn_norm', metrics['critic_cnn_grad_norm'], t)
+
+                    if 'actor_mlp_grad_norm' in metrics:
+                        self.writer.add_scalar('gradients/actor_mlp_norm', metrics['actor_mlp_grad_norm'], t)
+
+                    if 'critic_mlp_grad_norm' in metrics:
+                        self.writer.add_scalar('gradients/critic_mlp_norm', metrics['critic_mlp_grad_norm'], t)
+
                     # Log CNN diagnostics every 100 steps (if debug mode enabled)
+                    # 🔧 FIX: Pass writer parameter to log_to_tensorboard
                     if self.debug and self.agent.cnn_diagnostics is not None:
-                        self.agent.cnn_diagnostics.log_to_tensorboard(t)
+                        self.agent.cnn_diagnostics.log_to_tensorboard(self.writer, t)
 
                         # Print detailed CNN diagnostics every 1000 steps
                         if t % 1000 == 0:
@@ -970,6 +1038,63 @@ class TD3TrainingPipeline:
                     self.episode_collision_count,
                     self.episode_num
                 )
+                self.writer.add_scalar(  # P0 FIX #3: Log lane invasions per episode
+                    'train/lane_invasions_per_episode',
+                    self.episode_lane_invasion_count,
+                    self.episode_num
+                )
+
+                # LITERATURE-VALIDATED FIX (WARNING-002): Log reward component balance
+                # Reference: Analysis showed progress at 88.9%, need to track and verify fix
+                # Calculate total absolute magnitude to determine percentage contributions
+                total_magnitude = sum(abs(v) for v in self.episode_reward_components.values())
+
+                if total_magnitude > 0:
+                    # Log individual components (weighted contributions)
+                    self.writer.add_scalar(
+                        'rewards/efficiency_component',
+                        self.episode_reward_components['efficiency'],
+                        self.episode_num
+                    )
+                    self.writer.add_scalar(
+                        'rewards/lane_keeping_component',
+                        self.episode_reward_components['lane_keeping'],
+                        self.episode_num
+                    )
+                    self.writer.add_scalar(
+                        'rewards/comfort_component',
+                        self.episode_reward_components['comfort'],
+                        self.episode_num
+                    )
+                    self.writer.add_scalar(
+                        'rewards/safety_component',
+                        self.episode_reward_components['safety'],
+                        self.episode_num
+                    )
+                    self.writer.add_scalar(
+                        'rewards/progress_component',
+                        self.episode_reward_components['progress'],
+                        self.episode_num
+                    )
+
+                    # Log percentage contributions (for tracking domination)
+                    for component, value in self.episode_reward_components.items():
+                        percentage = (abs(value) / total_magnitude) * 100.0
+                        self.writer.add_scalar(
+                            f'rewards/{component}_percentage',
+                            percentage,
+                            self.episode_num
+                        )
+
+                    # Log warning if any component dominates >70% (literature recommends <60%)
+                    max_component = max(self.episode_reward_components.items(), key=lambda x: abs(x[1]))
+                    max_percentage = (abs(max_component[1]) / total_magnitude) * 100.0
+
+                    if max_percentage > 70.0:
+                        print(
+                            f"[REWARD BALANCE] '{max_component[0]}' dominates at {max_percentage:.1f}% "
+                            f"(target <70%, literature <60%)"
+                        )
 
                 # Console logging every 10 episodes
                 if self.episode_num % 10 == 0:
@@ -979,7 +1104,8 @@ class TD3TrainingPipeline:
                         f"Timestep {t:7d} | "
                         f"Reward {self.episode_reward:8.2f} | "
                         f"Avg Reward (10ep) {avg_reward:8.2f} | "
-                        f"Collisions {self.episode_collision_count:2d}"
+                        f"Collisions {self.episode_collision_count:2d} | "
+                        f"Lane Invasions {self.episode_lane_invasion_count:2d}"  # P0 FIX #3
                     )
 
                 # Reset episode (get Dict observation)
@@ -990,6 +1116,16 @@ class TD3TrainingPipeline:
                 self.episode_reward = 0
                 self.episode_timesteps = 0
                 self.episode_collision_count = 0
+                self.episode_lane_invasion_count = 0  # P0 FIX #3: Reset lane invasion counter
+
+                # LITERATURE-VALIDATED FIX (WARNING-002): Reset reward component tracking
+                self.episode_reward_components = {
+                    'efficiency': 0.0,
+                    'lane_keeping': 0.0,
+                    'comfort': 0.0,
+                    'safety': 0.0,
+                    'progress': 0.0
+                }
 
             # Periodic evaluation
             if t % self.eval_freq == 0:
@@ -999,16 +1135,19 @@ class TD3TrainingPipeline:
                 self.writer.add_scalar('eval/mean_reward', eval_metrics['mean_reward'], t)
                 self.writer.add_scalar('eval/success_rate', eval_metrics['success_rate'], t)
                 self.writer.add_scalar('eval/avg_collisions', eval_metrics['avg_collisions'], t)
+                self.writer.add_scalar('eval/avg_lane_invasions', eval_metrics['avg_lane_invasions'], t)  # P0 FIX #3
                 self.writer.add_scalar('eval/avg_episode_length', eval_metrics['avg_episode_length'], t)
 
                 self.eval_rewards.append(eval_metrics['mean_reward'])
                 self.eval_success_rates.append(eval_metrics['success_rate'])
                 self.eval_collisions.append(eval_metrics['avg_collisions'])
+                self.eval_lane_invasions.append(eval_metrics['avg_lane_invasions'])  # P0 FIX #3
 
                 print(
                     f"[EVAL] Mean Reward: {eval_metrics['mean_reward']:.2f} | "
                     f"Success Rate: {eval_metrics['success_rate']*100:.1f}% | "
                     f"Avg Collisions: {eval_metrics['avg_collisions']:.2f} | "
+                    f"Avg Lane Invasions: {eval_metrics['avg_lane_invasions']:.2f} | "  # P0 FIX #3
                     f"Avg Length: {eval_metrics['avg_episode_length']:.0f}"
                 )
                 print()
@@ -1052,6 +1191,7 @@ class TD3TrainingPipeline:
         eval_rewards = []
         eval_successes = []
         eval_collisions = []
+        eval_lane_invasions = []  # P0 FIX #3: Lane invasion tracking
         eval_lengths = []
 
         # FIXED: Use max_episode_steps from config, not max_timesteps (total training steps)
@@ -1087,6 +1227,7 @@ class TD3TrainingPipeline:
             eval_rewards.append(episode_reward)
             eval_successes.append(info.get('success', 0))
             eval_collisions.append(info.get('collision_count', 0))
+            eval_lane_invasions.append(info.get('lane_invasion_count', 0))  # P0 FIX #3
             eval_lengths.append(episode_length)
 
         # FIXED: Clean up eval environment
@@ -1098,6 +1239,7 @@ class TD3TrainingPipeline:
             'std_reward': np.std(eval_rewards),
             'success_rate': np.mean(eval_successes),
             'avg_collisions': np.mean(eval_collisions),
+            'avg_lane_invasions': np.mean(eval_lane_invasions),  # P0 FIX #3
             'avg_episode_length': np.mean(eval_lengths)
         }
 
@@ -1112,6 +1254,7 @@ class TD3TrainingPipeline:
             'eval_rewards': self.eval_rewards,
             'eval_success_rates': [float(x) for x in self.eval_success_rates],
             'eval_collisions': [float(x) for x in self.eval_collisions],
+            'eval_lane_invasions': [float(x) for x in self.eval_lane_invasions],  # P0 FIX #3
             'final_eval_mean_reward': float(np.mean(self.eval_rewards[-5:])) if len(self.eval_rewards) > 0 else 0,
             'final_eval_success_rate': float(np.mean(self.eval_success_rates[-5:])) if len(self.eval_success_rates) > 0 else 0
         }
