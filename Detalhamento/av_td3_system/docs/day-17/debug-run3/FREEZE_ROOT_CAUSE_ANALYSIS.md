@@ -1,8 +1,8 @@
 # CARLA FREEZE ROOT CAUSE ANALYSIS - Second Occurrence
 
-**Date**: November 18, 2025  
-**Run**: 5K Validation (actor_cnn_lr=1e-5 fix applied)  
-**Freeze Location**: Step 1,800 / Episode 67 / Step 7  
+**Date**: November 18, 2025
+**Run**: 5K Validation (actor_cnn_lr=1e-5 fix applied)
+**Freeze Location**: Step 1,800 / Episode 67 / Step 7
 **Log File**: `validation_5k_post_all_fixes_2_20251118_063659.log`
 
 ---
@@ -47,8 +47,8 @@ Step 7: Apply control → tick() → ❌ FREEZE (never reaches log)
 
 ### Exact Freeze Location
 
-**File**: `src/environment/carla_env.py`  
-**Function**: `step()`  
+**File**: `src/environment/carla_env.py`
+**Function**: `step()`
 **Line**: 628
 
 ```python
@@ -246,13 +246,13 @@ def step(self, action: np.ndarray):
         tick_start = time.time()
         self.world.wait_for_tick(timeout=10.0)
         tick_duration = time.time() - tick_start
-        
+
         if tick_duration > 5.0:  # Log slow ticks
             self.logger.warning(
                 f"Slow CARLA tick: {tick_duration:.2f}s "
                 f"(step {self.current_step}, episode {self.episode_count})"
             )
-    
+
     except RuntimeError as e:
         self.logger.error(
             f"CARLA tick timeout after 10.0s: {e}\n"
@@ -260,7 +260,7 @@ def step(self, action: np.ndarray):
             f"Attempting recovery..."
         )
         return self._handle_tick_timeout()
-    
+
     self.sensors.tick()
     # ... rest of step logic
 ```
@@ -285,14 +285,14 @@ def step(self, action: np.ndarray):
     # Set 10-second alarm
     signal.signal(signal.SIGALRM, timeout_handler)
     signal.alarm(10)
-    
+
     try:
         self.world.tick()
         signal.alarm(0)  # Cancel alarm
     except TimeoutException:
         self.logger.error("CARLA tick timeout (OS-level)")
         return self._handle_tick_timeout()
-    
+
     self.sensors.tick()
     # ... rest
 ```
@@ -305,7 +305,7 @@ def step(self, action: np.ndarray):
 def _handle_tick_timeout(self):
     """
     Handle CARLA tick timeout by gracefully terminating episode.
-    
+
     Returns:
         Tuple compatible with step() return: (obs, reward, terminated, truncated, info)
     """
@@ -313,7 +313,7 @@ def _handle_tick_timeout(self):
         f"Forcing episode termination due to CARLA timeout\n"
         f"Episode {self.episode_count}, Step {self.current_step}"
     )
-    
+
     # Get last known observation (may be stale)
     try:
         observation = self._get_observation()
@@ -323,18 +323,18 @@ def _handle_tick_timeout(self):
             "image": np.zeros((4, 84, 84), dtype=np.float32),
             "vector": np.zeros(53, dtype=np.float32),
         }
-    
+
     # Terminate episode with penalty
     reward = -100.0  # Timeout penalty
     terminated = True
     truncated = False
-    
+
     info = {
         "step": self.current_step,
         "termination_reason": "carla_timeout",
         "timeout_duration": 10.0,
     }
-    
+
     return observation, reward, terminated, truncated, info
 ```
 
@@ -356,12 +356,12 @@ collision_bp.set_attribute('sensor_queue_size', '10')
 def tick(self):
     """Process sensor data with queue monitoring."""
     queue_size = len(self._camera_queue)  # Track queue depth
-    
+
     if queue_size > 2:
         self.logger.warning(
             f"Sensor queue backup detected: {queue_size} frames pending"
         )
-    
+
     # Process all pending callbacks
     while not self._camera_queue.empty():
         self._process_camera_data(self._camera_queue.get())
@@ -382,24 +382,24 @@ class TrainingHeartbeat:
         self.running = True
         self.thread = threading.Thread(target=self._monitor, daemon=True)
         self.thread.start()
-    
+
     def beat(self):
         """Signal that training is alive."""
         self.last_heartbeat = time.time()
-    
+
     def _monitor(self):
         """Background thread monitoring heartbeat."""
         while self.running:
             time.sleep(5.0)  # Check every 5 seconds
             elapsed = time.time() - self.last_heartbeat
-            
+
             if elapsed > self.timeout:
                 logger.error(
                     f"🚨 TRAINING FREEZE DETECTED: No heartbeat for {elapsed:.1f}s\n"
                     f"This indicates CARLA tick timeout. Forcing shutdown..."
                 )
                 os._exit(1)  # Force process termination
-    
+
     def stop(self):
         self.running = False
 
@@ -421,10 +421,10 @@ class CarlaEnv:
     def __init__(self, ...):
         self.restart_interval = 1000  # Restart every 1000 episodes
         self.total_episodes = 0
-    
+
     def reset(self, ...):
         self.total_episodes += 1
-        
+
         # Periodic restart to prevent memory leaks
         if self.total_episodes % self.restart_interval == 0:
             self.logger.warning(
@@ -432,25 +432,25 @@ class CarlaEnv:
                 f"(episode {self.total_episodes})"
             )
             self._restart_carla_connection()
-        
+
         # ... normal reset logic
-    
+
     def _restart_carla_connection(self):
         """Restart CARLA client connection."""
         self.logger.info("Restarting CARLA client connection...")
-        
+
         # Clean up current connection
         self._cleanup_episode()
         self.client = None
-        
+
         # Wait for server to stabilize
         time.sleep(5.0)
-        
+
         # Reconnect
         self.client = carla.Client(self.host, self.port)
         self.client.set_timeout(30.0)
         self.world = self.client.get_world()
-        
+
         self.logger.info("✅ CARLA connection restarted")
 ```
 
@@ -520,7 +520,7 @@ python3 scripts/train_td3.py --max-timesteps 50000 --scenario 0
 | **Testing (1K validation)** | 15 min | 🔴 CRITICAL |
 | Testing (5K validation) | 35 min | 🔴 CRITICAL |
 
-**Minimum viable fix**: 45 minutes (Option 1 + 1K test)  
+**Minimum viable fix**: 45 minutes (Option 1 + 1K test)
 **Recommended full fix**: 2 hours (Option 1 + heartbeat + 5K test)
 
 ---
@@ -563,16 +563,16 @@ self.world.wait_for_tick(timeout=10.0)  # ✅ Fails gracefully
 4. ✅ **PROCEED**: Run 50K if 5K passes (6 hours)
 5. ✅ **PRODUCTION**: Run 1M if 50K passes (2-3 days)
 
-**Total time to validated system**: ~1.5 hours  
+**Total time to validated system**: ~1.5 hours
 **Total time to 1M results**: ~3 days
 
-**Paper deadline**: 9 days  
+**Paper deadline**: 9 days
 **Time remaining after fix**: 7.5 days (MORE than enough)
 
 ---
 
 **End of Analysis**
 
-**Prepared by**: Freeze Investigation Team  
-**Confidence**: 99.9% (exact freeze location identified)  
+**Prepared by**: Freeze Investigation Team
+**Confidence**: 99.9% (exact freeze location identified)
 **Recommendation**: 🔴 **IMPLEMENT TIMEOUT PROTECTION NOW**
