@@ -1,7 +1,7 @@
 # QUICK FIX SUMMARY - WARNING-001 & WARNING-002
 
-**Date**: 2025-11-17  
-**Status**: ✅ **ALL FIXES IMPLEMENTED**  
+**Date**: 2025-11-17
+**Status**: ✅ **ALL FIXES IMPLEMENTED**
 **Ready For**: 5K Validation Run
 
 ---
@@ -17,7 +17,7 @@
 ### Issue #2: Reward Imbalance (WARNING-002)
 - **Problem**: Progress dominated at 88.9%
 - **Root Cause**: Discrete bonuses 10-100× larger than continuous rewards
-- **Fix**: 
+- **Fix**:
   - Reduced `waypoint_bonus` from 10.0 → **1.0** (10× reduction)
   - Reduced `goal_reached_bonus` from 100.0 → **10.0** (10× reduction)
   - Increased `distance_scale` from 0.1 → **1.0** (10× increase)
