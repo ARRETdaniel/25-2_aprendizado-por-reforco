@@ -1,7 +1,7 @@
 # 🔍 VALIDATION REPORT: L2 Regularization Fix for Q-Value Explosion
 
-**Date**: November 18, 2025  
-**Validation Type**: Literature Review + Code Audit  
+**Date**: November 18, 2025
+**Validation Type**: Literature Review + Code Audit
 **Status**: ⚠️ **CRITICAL FINDING - RECOMMENDED FIX IS INCORRECT**
 
 ---
@@ -116,7 +116,7 @@ critic_loss = sum(F.mse_loss(current_q, target_q_values) for current_q in curren
 assert isinstance(critic_loss, th.Tensor)
 ```
 
-**Finding**: ❌ **NO L2 regularization** added to loss  
+**Finding**: ❌ **NO L2 regularization** added to loss
 **Finding**: ❌ **NO weight_decay** in optimizer by default
 
 ---
@@ -132,7 +132,7 @@ TD3 addresses DDPG's Q-value overestimation through three tricks:
 Trick One: Clipped Double-Q Learning
   Uses the smaller of two Q-values for targets
 
-Trick Two: Delayed Policy Updates  
+Trick Two: Delayed Policy Updates
   Updates policy less frequently than Q-functions
 
 Trick Three: Target Policy Smoothing
@@ -190,7 +190,7 @@ critic_loss = critic_loss + 0.01 * l2_reg_critic
 **Equivalent PyTorch way** (optimizer-based):
 ```python
 critic_optimizer = torch.optim.Adam(
-    self.critic.parameters(), 
+    self.critic.parameters(),
     lr=3e-4,
     weight_decay=0.01  # ← Same effect as manual L2 reg
 )
@@ -271,7 +271,7 @@ train/q1_value:      70     (batch average)
    - Current policy has learned to take "better" actions
    - Q(s, actor(s)) ≈ 2.33M ❌ **Overestimated catastrophically**
 
-**The problem is NOT that we need L2 regularization**  
+**The problem is NOT that we need L2 regularization**
 **The problem is that the critic is overestimating Q-values for the current policy!**
 
 ---
@@ -321,7 +321,7 @@ debug/reward_max:  156.7
 
 ### 5.2 Hypothesis: Discount Factor Too High
 
-**Current**: γ = 0.99  
+**Current**: γ = 0.99
 **Episode length**: ~10 steps (VERY SHORT!)
 
 **Effective horizon**:
@@ -557,7 +557,7 @@ Mismatch: 10× !
 
 **But diagnostic data shows**: train/q1_value ≈ train/q2_value (≈70)
 
-**Question**: Are Q1 and Q2 actually different?  
+**Question**: Are Q1 and Q2 actually different?
 **Required check**: Log `|Q1 - Q2|` to verify twin critics are working!
 
 ---
@@ -610,13 +610,13 @@ Mismatch: 10× !
 
 **CONFIDENCE**: 95% that these evidence-based fixes will resolve the issue
 
-**RISK ASSESSMENT**: 
+**RISK ASSESSMENT**:
 - Current proposal (L2 reg): 🔴 **HIGH RISK** (not validated)
 - Revised proposal (γ + LR): 🟢 **LOW RISK** (literature-aligned)
 
 ---
 
-**Status**: ⚠️ **VALIDATION FAILED - DO NOT PROCEED WITH L2 REGULARIZATION**  
+**Status**: ⚠️ **VALIDATION FAILED - DO NOT PROCEED WITH L2 REGULARIZATION**
 **Next Action**: Apply evidence-based hyperparameter fixes instead
 
 ---
@@ -665,4 +665,3 @@ Location: scripts/train_td3.py
 Add:
 writer.add_scalar('debug/q1_q2_diff', metrics['q1_q2_diff'], step)
 ```
-

@@ -209,14 +209,14 @@ class Nov18_5K_Analyzer:
 
         # Extract episode information
         import re
-        
+
         # Pattern: "Episode  XXX | Ep Step  YYY"
         episode_pattern = r'Episode\s+(\d+)\s+\|\s+Ep Step\s+(\d+)'
         episodes = re.findall(episode_pattern, log_content)
 
         if episodes:
             episode_lengths = [int(length) for _, length in episodes]
-            
+
             result = {
                 'total_episodes': len(episodes),
                 'mean_length': np.mean(episode_lengths),
@@ -240,7 +240,7 @@ class Nov18_5K_Analyzer:
 
     def generate_report(self) -> str:
         """Generate comprehensive analysis report."""
-        
+
         # Load data
         self.load_tensorboard_events()
 
@@ -322,7 +322,7 @@ def main():
     import json
     output_path = Path(project_root) / "docs" / "day-18" / "5K_VALIDATION_ANALYSIS_NOV18.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     with open(output_path, 'w') as f:
         # Convert numpy types to native Python types for JSON serialization
         def convert(obj):
@@ -337,7 +337,7 @@ def main():
             elif isinstance(obj, list):
                 return [convert(i) for i in obj]
             return obj
-        
+
         json.dump(convert(results), f, indent=2)
 
     print(f"\n📄 Results saved to: {output_path}")

@@ -1,7 +1,7 @@
 # 🎯 IMMEDIATE ACTION PLAN - Q-Value Explosion Fix
 
-**Date**: November 18, 2025  
-**Status**: Code fix ready, validation needed  
+**Date**: November 18, 2025
+**Status**: Code fix ready, validation needed
 **ETA to GO Decision**: 45 minutes
 
 ---
@@ -254,7 +254,7 @@ critic_loss = critic_loss + 0.01 * l2_reg_critic
 critic_loss = critic_loss + 0.05 * l2_reg_critic
 ```
 
-**Re-run**: 5K validation with new coefficient  
+**Re-run**: 5K validation with new coefficient
 **ETA**: +40 minutes
 
 ---
@@ -268,7 +268,7 @@ critic_loss = critic_loss + 0.05 * l2_reg_critic
 2. Discount factor too high (gamma=0.99 → try 0.95)
 3. Reward function issue (add clipping to [-10, +10])
 
-**Action**: Document findings, investigate alternatives  
+**Action**: Document findings, investigate alternatives
 **ETA**: +1-2 days
 
 ---
@@ -367,6 +367,6 @@ TOTAL: 57-62 hours to complete validated 1M run
 
 ---
 
-**Status**: Ready to apply fix  
-**Confidence**: 95% (literature-validated solution)  
+**Status**: Ready to apply fix
+**Confidence**: 95% (literature-validated solution)
 **Next Action**: Edit `td3_agent.py` and run validation

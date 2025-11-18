@@ -1,8 +1,8 @@
 # Systematic 5K Validation Run Analysis - November 18, 2025
 
-**Date**: November 18, 2025  
-**Run**: 5K validation (steps 0-5,000)  
-**Event File**: `TD3_scenario_0_npcs_20_20251118-110409/events.out.tfevents.1763463849.danielterra.1.0`  
+**Date**: November 18, 2025
+**Run**: 5K validation (steps 0-5,000)
+**Event File**: `TD3_scenario_0_npcs_20_20251118-110409/events.out.tfevents.1763463849.danielterra.1.0`
 **Log File**: `validation_5k_post_all_fixes_2_20251118_080401.log`
 
 ---
@@ -339,7 +339,7 @@ Suspected: Progress bonuses (+10 per waypoint) may be inflating returns
    # Expected per-step reward range: -50 to +200
    # Over 100 steps: -5,000 to +20,000
    # Discounted (γ=0.99): Should decay rapidly
-   
+
    # If Q-values reach 2.4M, rewards must be:
    # Q = Σ(γ^t * r_t) = 2.4M
    # This implies MASSIVE reward accumulation
@@ -397,7 +397,7 @@ writer.add_scalar('debug/q1_for_actor_min', q1_value.min(), step)
    ```python
    # Option 1: Clip rewards
    reward = np.clip(reward, -10, +10)
-   
+
    # Option 2: Normalize by running statistics
    reward = (reward - reward_mean) / (reward_std + 1e-8)
    ```
@@ -480,6 +480,6 @@ Run **5K diagnostic with enhanced logging** to identify the exact source of Q-va
 
 ---
 
-**Analysis completed**: November 18, 2025  
-**Analyst**: GitHub Copilot (Deep Research Mode)  
+**Analysis completed**: November 18, 2025
+**Analyst**: GitHub Copilot (Deep Research Mode)
 **Recommendation**: NO-GO for 50K until Q-value explosion resolved

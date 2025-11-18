@@ -1,7 +1,7 @@
 # Diagnostic Logging Implementation - Q-Value Explosion Debugging
 
-**Date**: November 18, 2025  
-**Purpose**: Add comprehensive logging to identify root cause of Q-value explosion (actor loss = -2.4M)  
+**Date**: November 18, 2025
+**Purpose**: Add comprehensive logging to identify root cause of Q-value explosion (actor loss = -2.4M)
 **Status**: ✅ IMPLEMENTED - Ready for diagnostic 5K run
 
 ---
@@ -44,7 +44,7 @@ actor_loss = -critic.q1_forward(obs, actor(obs)).mean()
 
 ### 1. Critic Update Diagnostics
 
-**File**: `src/agents/td3_agent.py`  
+**File**: `src/agents/td3_agent.py`
 **Location**: Line ~600 (after critic loss computation)
 
 **Added Metrics**:
@@ -97,7 +97,7 @@ self.logger.debug(
 
 ### 2. **CRITICAL**: Actor Update Diagnostics (THE SMOKING GUN)
 
-**File**: `src/agents/td3_agent.py`  
+**File**: `src/agents/td3_agent.py`
 **Location**: Line ~758 (actor loss computation)
 
 **Code Change**:
@@ -139,7 +139,7 @@ self.logger.debug(
 
 ### 3. Reward Component Logging
 
-**File**: `src/environment/carla_env.py`  
+**File**: `src/environment/carla_env.py`
 **Location**: Line ~693 (after reward calculation)
 
 **Added Metrics**:
@@ -191,19 +191,19 @@ Total weighted: -50 to +20 per step (normal operation)
 ```mermaid
 graph TD
     A[Run Diagnostic 5K] --> B{Check debug/actor_q_mean}
-    
+
     B -->|≈ +2.4M| C[Hypothesis 2: Critic Overestimation]
     B -->|≈ +90| D{Check reward_components/*}
-    
+
     C --> C1[Solution: Add critic regularization]
     C1 --> C2[critic_loss += 0.01 * L2_penalty]
-    
+
     D -->|Any component > 1000| E[Hypothesis 1: Reward Scaling]
     D -->|All components < 100| F[Logging/Scaling Bug]
-    
+
     E --> E1[Solution: Reward normalization]
     E1 --> E2[reward = clip reward/-std, -10, +10]
-    
+
     F --> F1[Investigate: TensorBoard step vs training step]
     F1 --> F2[Check: Reward accumulation in buffer]
 ```
@@ -324,7 +324,7 @@ reward_components/total: -50 to +20 (normal range)
 1. **Run diagnostic 5K**:
    ```bash
    cd av_td3_system
-   
+
    docker run --rm --network host --runtime nvidia \
      -e NVIDIA_VISIBLE_DEVICES=all \
      -e PYTHONUNBUFFERED=1 \
@@ -400,6 +400,6 @@ reward_components/total: -50 to +20 (normal range)
 
 ---
 
-**Status**: ✅ Ready for diagnostic 5K run  
-**Risk Level**: 🟢 LOW (logging only, fully reversible)  
+**Status**: ✅ Ready for diagnostic 5K run
+**Risk Level**: 🟢 LOW (logging only, fully reversible)
 **Next Action**: Run diagnostic 5K and analyze TensorBoard

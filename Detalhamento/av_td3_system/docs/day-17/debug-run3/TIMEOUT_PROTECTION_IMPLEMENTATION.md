@@ -1,8 +1,8 @@
 # CARLA Timeout Protection - Implementation Complete ✅
 
-**Date**: November 18, 2025  
-**Status**: 🟢 READY FOR TESTING  
-**Implementation Time**: 45 minutes  
+**Date**: November 18, 2025
+**Status**: 🟢 READY FOR TESTING
+**Implementation Time**: 45 minutes
 **Files Modified**: 1 (`carla_env.py`)
 
 ---
@@ -35,7 +35,7 @@ try:
     tick_start = time.time()
     self.world.wait_for_tick(timeout=10.0)  # 10-second timeout
     tick_duration = time.time() - tick_start
-    
+
     # Log slow ticks (>5s indicates performance issues)
     if tick_duration > 5.0:
         self.logger.warning(
@@ -123,10 +123,10 @@ except Exception as e:
 def _handle_tick_timeout(self):
     """
     Handle CARLA tick timeout by gracefully terminating episode.
-    
+
     This prevents silent freezes when CARLA simulator hangs (sensor queue
     overflow, Traffic Manager deadlock, physics engine lock, etc.).
-    
+
     Returns:
         Tuple compatible with step() return: (obs, reward, terminated, truncated, info)
     """
@@ -136,7 +136,7 @@ def _handle_tick_timeout(self):
         f"   Last waypoint: {self.waypoint_manager.current_waypoint_index}/{len(self.waypoint_manager.waypoints)}\n"
         f"   Recommendation: Check CARLA server logs for deadlock/error"
     )
-    
+
     # Get last known observation (may be stale)
     try:
         observation = self._get_observation()
@@ -147,12 +147,12 @@ def _handle_tick_timeout(self):
             "image": np.zeros((4, 84, 84), dtype=np.float32),
             "vector": np.zeros(53, dtype=np.float32),
         }
-    
+
     # Terminate episode with penalty
     reward = -100.0  # Heavy timeout penalty
     terminated = True
     truncated = False
-    
+
     info = {
         "step": self.current_step,
         "episode": self.episode_count,
@@ -161,12 +161,12 @@ def _handle_tick_timeout(self):
         "reward_total": reward,
         "reward_components": {"timeout_penalty": -100.0},
     }
-    
+
     # Increment timeout counter for monitoring
     if not hasattr(self, 'timeout_count'):
         self.timeout_count = 0
     self.timeout_count += 1
-    
+
     self.logger.warning(
         f"   Total timeouts in session: {self.timeout_count}\n"
         f"   If timeouts persist, consider:\n"
@@ -174,7 +174,7 @@ def _handle_tick_timeout(self):
         f"   2. Lowering sensor resolution\n"
         f"   3. Restarting CARLA server"
     )
-    
+
     return observation, reward, terminated, truncated, info
 ```
 
@@ -436,18 +436,18 @@ cd av_td3_system/scripts
 
 ---
 
-**Implementation Status**: ✅ COMPLETE  
-**Testing Status**: ⏳ READY TO START  
+**Implementation Status**: ✅ COMPLETE
+**Testing Status**: ⏳ READY TO START
 **Confidence**: 🟢 95% success probability
 
-**Time to validated system**: ~1 hour (1K test + 5K validation)  
-**Time to 1M results**: ~3 days (after validation passes)  
+**Time to validated system**: ~1 hour (1K test + 5K validation)
+**Time to 1M results**: ~3 days (after validation passes)
 **Time to paper submission**: 9 days (plenty of buffer)
 
 ---
 
 **End of Implementation Summary**
 
-**Prepared by**: Timeout Protection Implementation Team  
-**Date**: 2025-11-18  
+**Prepared by**: Timeout Protection Implementation Team
+**Date**: 2025-11-18
 **Next action**: Run `./test_timeout_protection.sh`

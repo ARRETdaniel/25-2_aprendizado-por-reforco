@@ -1,8 +1,8 @@
 # INTERRUPTED RUN ANALYSIS - 5K Validation (actor_cnn_lr=1e-5)
 
-**Analysis Date**: November 18, 2025  
-**Run Status**: ❌ FROZEN at ~1,800 steps (36% complete)  
-**Event File**: `events.out.tfevents.1763458626.danielterra.1.0`  
+**Analysis Date**: November 18, 2025
+**Run Status**: ❌ FROZEN at ~1,800 steps (36% complete)
+**Event File**: `events.out.tfevents.1763458626.danielterra.1.0`
 **Log File**: `validation_5k_post_all_fixes_2_20251118_063659.log`
 
 ---
@@ -525,6 +525,6 @@ python3 scripts/train_td3.py \
 
 **End of Analysis**
 
-**Prepared by**: GitHub Copilot Analysis Engine  
-**Date**: November 18, 2025  
+**Prepared by**: GitHub Copilot Analysis Engine
+**Date**: November 18, 2025
 **Status**: ✅ Learning rate fix validated, ❌ CARLA stability issue identified
