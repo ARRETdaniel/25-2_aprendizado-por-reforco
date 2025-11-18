@@ -1,7 +1,7 @@
 # CRITICAL TENSORBOARD ANALYSIS - 5K STEP TD3 RUN
-**Document Purpose**: Systematic validation of TD3 learning dynamics via TensorBoard metrics  
-**Created**: 2025-11-17  
-**Status**: 🚨 **CRITICAL ISSUES DETECTED**  
+**Document Purpose**: Systematic validation of TD3 learning dynamics via TensorBoard metrics
+**Created**: 2025-11-17
+**Status**: 🚨 **CRITICAL ISSUES DETECTED**
 **Priority**: **HIGH - REQUIRES IMMEDIATE ACTION BEFORE 1M-STEP RUN**
 
 ---
@@ -15,7 +15,7 @@
 **Key Metrics**:
 - ❌ **Actor Loss**: -2.85 → **-7,607,850** (diverging by factor of 2,667,000×)
 - ❌ **Actor CNN Gradient Norm**: Mean = **1,826,337** (max: **8,199,994**)
-- ⚠️ **Gradient Explosion Alerts**: 22 critical + 8 warnings  
+- ⚠️ **Gradient Explosion Alerts**: 22 critical + 8 warnings
 - ✅ **Critic Loss**: Stable (mean: 121.87, std: 107.96)
 - ✅ **Q-Values**: Reasonable and increasing (20 → 69, expected behavior)
 
@@ -42,8 +42,8 @@
 
 ### 1.1 Available Metrics (39 Total)
 
-**File**: `events.out.tfevents.1763040522.danielterra.1.0`  
-**Size**: 152.10 KB  
+**File**: `events.out.tfevents.1763040522.danielterra.1.0`
+**Size**: 152.10 KB
 **Training Range**: Steps 0-5,000 (Episode-level) + Steps 2,600-5,000 (Learning-level)
 
 #### Episode-Level Metrics (Logged Every Episode)
@@ -185,7 +185,7 @@ Step 2,600: Actor CNN gradient norm 35,421.23 > threshold 10,000 (WARNING)
 
 ### 3.1 OpenAI Spinning Up TD3 Specification
 
-**Source**: https://spinningup.openai.com/en/latest/algorithms/td3.html  
+**Source**: https://spinningup.openai.com/en/latest/algorithms/td3.html
 **Fetched**: 2025-11-17
 
 #### Recommended Hyperparameters
@@ -239,7 +239,7 @@ Step 2,600: Actor CNN gradient norm 35,421.23 > threshold 10,000 (WARNING)
 
 ### 3.2 Stable-Baselines3 TD3 Best Practices
 
-**Source**: https://stable-baselines3.readthedocs.io/en/master/modules/td3.html  
+**Source**: https://stable-baselines3.readthedocs.io/en/master/modules/td3.html
 **Fetched**: 2025-11-17
 
 #### Recommended Hyperparameters (SB3 Defaults)
@@ -557,7 +557,7 @@ self.actor_cnn_optimizer.step()
 
 #### Fix 2: Increase Actor CNN Learning Rate ⚠️ SECONDARY
 
-**Current**: `actor_cnn_lr = 1e-5`  
+**Current**: `actor_cnn_lr = 1e-5`
 **Recommended**: `actor_cnn_lr = 1e-4` (match critic CNN LR)
 
 **Rationale**:
@@ -580,18 +580,18 @@ class NormalizedRewardWrapper:
         self.clip_range = clip_range
         self.reward_running_mean = 0.0
         self.reward_running_std = 1.0
-        
+
     def step(self, action):
         obs, reward, done, info = self.env.step(action)
-        
+
         # Update running statistics (exponential moving average)
         self.reward_running_mean = 0.99 * self.reward_running_mean + 0.01 * reward
         self.reward_running_std = 0.99 * self.reward_running_std + 0.01 * abs(reward - self.reward_running_mean)
-        
+
         # Normalize and clip
         reward_normalized = (reward - self.reward_running_mean) / (self.reward_running_std + 1e-8)
         reward_clipped = np.clip(reward_normalized, -self.clip_range, self.clip_range)
-        
+
         return obs, reward_clipped, done, info
 ```
 

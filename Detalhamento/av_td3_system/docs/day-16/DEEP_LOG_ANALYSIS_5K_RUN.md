@@ -233,12 +233,12 @@ Step 50:
 2025-11-13 13:28:48 - sensors - WARNING - Lane invasion detected
 2025-11-13 13:28:48 - reward_functions - WARNING - [SAFETY-OFFROAD] penalty=-10.0
 
-[TRAIN] Episode 0 | Timestep 50 | Reward 781.24 | Avg Reward 781.24 | 
+[TRAIN] Episode 0 | Timestep 50 | Reward 781.24 | Avg Reward 781.24 |
         Collisions 0 | Lane Invasions 1
 ```
 
 **Critical Question** (from debug-note.todo):
-> "check if the agent is correctly reserving the lane invasion and collision negative reward  
+> "check if the agent is correctly reserving the lane invasion and collision negative reward
 > the total reward log, are not showing negative value for the lane invasion events"
 
 **Analysis**:
@@ -274,12 +274,12 @@ Final:     781.24 (validated ✅)
 **Found** (Lines 10,006 and 13,396):
 
 ```
-2025-11-13 13:29:34 - reward_functions - WARNING - 
-[REWARD] Component 'progress' is dominating: 93.7% of total magnitude 
+2025-11-13 13:29:34 - reward_functions - WARNING -
+[REWARD] Component 'progress' is dominating: 93.7% of total magnitude
 (threshold: 80%) [Logged at step 100]
 
-2025-11-13 13:29:54 - reward_functions - WARNING - 
-[REWARD] Component 'progress' is dominating: 95.8% of total magnitude 
+2025-11-13 13:29:54 - reward_functions - WARNING -
+[REWARD] Component 'progress' is dominating: 95.8% of total magnitude
 (threshold: 80%) [Logged at step 100]
 ```
 
@@ -304,7 +304,7 @@ Final:     781.24 (validated ✅)
 
 **Sample** (Line 19,317):
 ```
-2025-11-13 13:30:27 - carla_env - INFO - 
+2025-11-13 13:30:27 - carla_env - INFO -
 Episode ended: off_road after 52 steps (terminated=True, truncated=False)
 ```
 
@@ -340,7 +340,7 @@ Step N:
 ```
 
 **Official CARLA Documentation** (Previously Fetched):
-> "In synchronous mode, the server will not compute the following step  
+> "In synchronous mode, the server will not compute the following step
 > until the client sends a tick."
 
 **Timeline**:
@@ -470,7 +470,7 @@ Includes SEPARATE actor_cnn and critic_cnn states (Phase 21 fix)
 3. Waypoint coordinate transformation needs official doc validation
 4. Replay buffer smaller than recommended
 
-**Critical Missing Validation**: 
+**Critical Missing Validation**:
 - **Learning Phase Performance**: Must analyze TensorBoard to confirm policy improvement after step 2,501
 
 **Recommendation**: ✅ **PROCEED WITH CAUTION**

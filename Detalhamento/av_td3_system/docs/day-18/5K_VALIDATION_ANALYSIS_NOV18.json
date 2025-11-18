@@ -1,0 +1,25 @@
+{
+  "gradient_results": {},
+  "episode_results": {},
+  "actor_loss_results": {
+    "mean": -463834.3341131449,
+    "max": -2.3740177154541016,
+    "min": -2400730.5,
+    "final": -2400730.5
+  },
+  "log_results": {
+    "total_episodes": 50,
+    "mean_length": 101.0,
+    "max_length": 901,
+    "min_length": 1,
+    "episodes_under_10": 25,
+    "episodes_under_20": 34
+  },
+  "issues": [
+    "\u274c Actor loss shows Q-value explosion",
+    "\u26a0\ufe0f Episode length below expected (0.0)"
+  ],
+  "passes": [
+    "\u2705 Actor CNN gradients healthy"
+  ]
+}

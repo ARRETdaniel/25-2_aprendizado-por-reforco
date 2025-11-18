@@ -908,6 +908,50 @@ class TD3TrainingPipeline:
                     if 'actor_loss' in metrics:  # Actor updated only on delayed steps
                         self.writer.add_scalar('train/actor_loss', metrics['actor_loss'], t)
 
+                    # 🔍 DIAGNOSTIC LOGGING: Q-value explosion debugging (Nov 18, 2025)
+                    # Log all debug metrics for root cause analysis
+
+                    # Q-value statistics (critic update)
+                    if 'debug/q1_std' in metrics:
+                        self.writer.add_scalar('debug/q1_std', metrics['debug/q1_std'], t)
+                        self.writer.add_scalar('debug/q1_min', metrics['debug/q1_min'], t)
+                        self.writer.add_scalar('debug/q1_max', metrics['debug/q1_max'], t)
+                    if 'debug/q2_std' in metrics:
+                        self.writer.add_scalar('debug/q2_std', metrics['debug/q2_std'], t)
+                        self.writer.add_scalar('debug/q2_min', metrics['debug/q2_min'], t)
+                        self.writer.add_scalar('debug/q2_max', metrics['debug/q2_max'], t)
+
+                    # Target Q-value statistics
+                    if 'debug/target_q_mean' in metrics:
+                        self.writer.add_scalar('debug/target_q_mean', metrics['debug/target_q_mean'], t)
+                        self.writer.add_scalar('debug/target_q_std', metrics['debug/target_q_std'], t)
+                        self.writer.add_scalar('debug/target_q_min', metrics['debug/target_q_min'], t)
+                        self.writer.add_scalar('debug/target_q_max', metrics['debug/target_q_max'], t)
+
+                    # TD error
+                    if 'debug/td_error_q1' in metrics:
+                        self.writer.add_scalar('debug/td_error_q1', metrics['debug/td_error_q1'], t)
+                        self.writer.add_scalar('debug/td_error_q2', metrics['debug/td_error_q2'], t)
+
+                    # Reward analysis (THE SMOKING GUN for Hypothesis 1)
+                    if 'debug/reward_mean' in metrics:
+                        self.writer.add_scalar('debug/reward_mean', metrics['debug/reward_mean'], t)
+                        self.writer.add_scalar('debug/reward_std', metrics['debug/reward_std'], t)
+                        self.writer.add_scalar('debug/reward_min', metrics['debug/reward_min'], t)
+                        self.writer.add_scalar('debug/reward_max', metrics['debug/reward_max'], t)
+
+                    # Done signal and discount
+                    if 'debug/done_ratio' in metrics:
+                        self.writer.add_scalar('debug/done_ratio', metrics['debug/done_ratio'], t)
+                        self.writer.add_scalar('debug/effective_discount', metrics['debug/effective_discount'], t)
+
+                    # 🔍 CRITICAL: Actor Q-values (THE SMOKING GUN for Hypothesis 2)
+                    if 'debug/actor_q_mean' in metrics:
+                        self.writer.add_scalar('debug/actor_q_mean', metrics['debug/actor_q_mean'], t)
+                        self.writer.add_scalar('debug/actor_q_std', metrics['debug/actor_q_std'], t)
+                        self.writer.add_scalar('debug/actor_q_min', metrics['debug/actor_q_min'], t)
+                        self.writer.add_scalar('debug/actor_q_max', metrics['debug/actor_q_max'], t)
+
                     # ===== GRADIENT EXPLOSION MONITORING (Solution A Validation) =====
                     # Track gradient norms to detect potential explosion
                     if 'actor_cnn_grad_norm' in metrics:

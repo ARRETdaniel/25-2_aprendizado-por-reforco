@@ -1,8 +1,8 @@
 # SYSTEMATIC ANALYSIS REPORT: 5K-Step TD3 Training Run Validation
 
-**Document Version**: 1.0  
-**Date**: November 16, 2025  
-**Training Run**: `training-test-tensor_5k-3.log` (5,000 steps, Scenario 0)  
+**Document Version**: 1.0
+**Date**: November 16, 2025
+**Training Run**: `training-test-tensor_5k-3.log` (5,000 steps, Scenario 0)
 **Analysis Scope**: Pre-1M-training validation against CARLA 0.9.16 and TD3 official specifications
 
 ---
@@ -26,16 +26,16 @@ This document presents a comprehensive systematic analysis of the 5,000-step TD3
 
 ### Critical Discovery: Control Application Timing ⚠️
 
-**Finding**: Applied vehicle control lags sent control by 1 simulation step  
-**Root Cause**: ✅ **STANDARD CARLA BEHAVIOR** - Not a bug  
+**Finding**: Applied vehicle control lags sent control by 1 simulation step
+**Root Cause**: ✅ **STANDARD CARLA BEHAVIOR** - Not a bug
 **Official Documentation**: CARLA synchronous mode applies controls on **next world tick** (next physics simulation step)
 
 **Evidence from CARLA docs** (https://carla.readthedocs.io/en/latest/adv_synchrony_timestep/):
 > "The server waits for a client tick, a 'ready to go' message, before updating to the following simulation step."
-> 
+>
 > "In synchronous mode, the server will **not compute the following step until the client sends a tick**."
 
-**Implications**: 
+**Implications**:
 - Actions at timestep `t` affect environment at timestep `t+1`
 - Reward at `t+1` should be assigned to action taken at `t`
 - Current implementation appears to handle this correctly (rewards tracked per episode)
@@ -49,7 +49,7 @@ This document presents a comprehensive systematic analysis of the 5,000-step TD3
 
 ### 1.1 CARLA Simulator Setup ✅
 
-**Validation Source**: CARLA 0.9.16 Official Documentation  
+**Validation Source**: CARLA 0.9.16 Official Documentation
 **URL**: https://carla.readthedocs.io/en/latest/python_api/#carlavehiclecontrol
 
 ```yaml
@@ -65,16 +65,16 @@ Spawn Location: (317.74, 129.49, 0.50), heading -180° ✅
 
 **Official Reference** (adv_synchrony_timestep.md):
 ```
-Synchronous mode + fixed time-step: The client will rule the simulation. 
-The time step will be fixed. The server will not compute the following step 
-until the client sends a tick. This is the best mode when synchrony and 
+Synchronous mode + fixed time-step: The client will rule the simulation.
+The time step will be fixed. The server will not compute the following step
+until the client sends a tick. This is the best mode when synchrony and
 precision is relevant.
 ```
 
 ### 1.2 Observation Space Verification ✅
 
-**Validation Source**: Training Log Lines 1-250  
-**Expected**: Image (4, 84, 84) + Vector (53,)  
+**Validation Source**: Training Log Lines 1-250
+**Expected**: Image (4, 84, 84) + Vector (53,)
 **Actual**: ✅ **EXACT MATCH**
 
 #### Image Observation (4, 84, 84) float32, range [-1.0, 1.0]
@@ -96,7 +96,7 @@ Composition: ✅ CORRECT
     • velocity / 30.0           (normalized speed, m/s)
     • lateral_deviation / 3.5    (lane offset, meters)
     • heading_error / π          (angle deviation, radians)
-  
+
   - 50 waypoint coordinates:
     • 25 waypoints × (x, y) / 50.0  (lookahead: 50m, spacing: 2m)
 ```
@@ -105,8 +105,8 @@ Composition: ✅ CORRECT
 
 ### 1.3 Action Space Verification ✅
 
-**Validation Source**: Training Log (control commands) + CARLA VehicleControl API  
-**Expected**: Continuous 2D action vector [-1, 1]  
+**Validation Source**: Training Log (control commands) + CARLA VehicleControl API
+**Expected**: Continuous 2D action vector [-1, 1]
 **Actual**: ✅ **CORRECT**
 
 ```python
@@ -279,7 +279,7 @@ State Concatenation: (512,) + (53,) = (565,)
 
 **Current Training Log Evidence**:
 ```
-Observation space: Dict('image': Box(-1.0, 1.0, (4, 84, 84), float32), 
+Observation space: Dict('image': Box(-1.0, 1.0, (4, 84, 84), float32),
                         'vector': Box(-inf, inf, (53,), float32))
 Vector: (53,) = 3 kinematic + 25 waypoints × 2
 ```
@@ -317,7 +317,7 @@ Step 2: Sent (0.8467, 0.4007) → Applied (0.2789, -0.6226)  # Step 1's values
 
 **Official CARLA Documentation** (adv_synchrony_timestep.md):
 ```
-"In synchronous mode, the server will not compute the following step 
+"In synchronous mode, the server will not compute the following step
 until the client sends a tick."
 
 Typical Workflow:
@@ -357,7 +357,7 @@ state_N+1, reward_N+1, done = env.step()  # Observes result of action_N
 replay_buffer.add(state_N, action_N, state_N+1, reward_N+1, done)
 ```
 
-**Analysis**: 
+**Analysis**:
 - Reward at step N+1 correctly corresponds to action taken at step N
 - This is standard MDP formulation: `r_{t+1} = R(s_t, a_t, s_{t+1})`
 - No code changes required - implementation handles timing correctly
@@ -390,7 +390,7 @@ Phase 1 (Steps 1-2,500): EXPLORATION (random actions)
   - Actions: Highly variable Gaussian noise
   - Steering: ranges from -0.9872 to +0.9994
   - Throttle: ranges from +0.0052 to +0.9966
-  
+
 Phase 2 (Steps 2,501-5,000): LEARNING (policy updates begin)
 ```
 
@@ -491,14 +491,14 @@ Steps 1-200 (analyzed):
 
 ### 5.2 Architectural Validation Against Best Practices
 
-**Frame Stacking** (4 frames): ✅ Standard practice (DQN, A3C, DDPG, TD3)  
-**Image Size** (84×84): ✅ Atari standard, computationally efficient  
-**Grayscale**: ✅ Reduces dimensionality, focus on structure not color  
-**CNN Architecture** (Nature DQN): ✅ Proven effective for visual RL  
-**Separate CNNs** (Actor/Critic): ✅ Recommended for TD3 to prevent coupling  
-**Continuous Control** (TD3): ✅ State-of-the-art for continuous action spaces  
-**Replay Buffer**: ✅ Essential for off-policy learning  
-**Exploration Noise**: ✅ Gaussian noise standard for continuous control  
+**Frame Stacking** (4 frames): ✅ Standard practice (DQN, A3C, DDPG, TD3)
+**Image Size** (84×84): ✅ Atari standard, computationally efficient
+**Grayscale**: ✅ Reduces dimensionality, focus on structure not color
+**CNN Architecture** (Nature DQN): ✅ Proven effective for visual RL
+**Separate CNNs** (Actor/Critic): ✅ Recommended for TD3 to prevent coupling
+**Continuous Control** (TD3): ✅ State-of-the-art for continuous action spaces
+**Replay Buffer**: ✅ Essential for off-policy learning
+**Exploration Noise**: ✅ Gaussian noise standard for continuous control
 
 ---
 
@@ -563,7 +563,7 @@ All findings in this report are validated against the following official sources
 ### CARLA 0.9.16 Official Documentation
 1. **Python API Reference**: https://carla.readthedocs.io/en/latest/python_api/#carlavehiclecontrol
    - Section: carla.VehicleControl (throttle, steer, brake parameters)
-   
+
 2. **Synchrony and Time-Step**: https://carla.readthedocs.io/en/latest/adv_synchrony_timestep/
    - **CRITICAL FINDING**: "In synchronous mode, the server will not compute the following step until the client sends a tick."
    - **CONTROL APPLICATION TIMING**: Controls are applied **during world.tick()**, not when `apply_control()` is called
@@ -777,8 +777,8 @@ File: av_td3_system/docs/day-16/training-test-tensor_5k-3.log
 | 3 | 72 | +22.41 | 3 | lane_invasion | 10.5 m/s |
 | 4 | 37 | (partial) | 1 | lane_invasion | 8.9 m/s |
 
-**Mean Episode Length**: 52.25 steps  
-**Mean Reward** (episodes 2-3): +21.32  
+**Mean Episode Length**: 52.25 steps
+**Mean Reward** (episodes 2-3): +21.32
 **Waypoint Progress**: 10-23% of route completed before off-road
 
 ### A.3 Control Delay Examples (First 10 Steps)
@@ -835,12 +835,12 @@ Step 9: Sent (steer=-0.5236, throttle=+0.4712) → Applied (0.8144, 0.9272)
 
 ## DOCUMENT APPROVAL
 
-**Prepared By**: GitHub Copilot AI Agent  
-**Date**: November 16, 2025  
-**Version**: 1.0  
+**Prepared By**: GitHub Copilot AI Agent
+**Date**: November 16, 2025
+**Version**: 1.0
 **Status**: ✅ **APPROVED FOR 1M-STEP TRAINING**
 
-**Validation Confidence**: 95%  
+**Validation Confidence**: 95%
 **Recommendation**: **PROCEED WITH SUPERCOMPUTER DEPLOYMENT**
 
 ---

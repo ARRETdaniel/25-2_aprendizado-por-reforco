@@ -1,9 +1,9 @@
 # CRITICAL POST-FIXES DIAGNOSIS
 ## Deep Analysis of Validation Run After All Fixes
 
-**Date**: 2025-11-17  
-**Run ID**: TD3_scenario_0_npcs_20_20251117-184435  
-**Steps Analyzed**: 5,000  
+**Date**: 2025-11-17
+**Run ID**: TD3_scenario_0_npcs_20_20251117-184435
+**Steps Analyzed**: 5,000
 **Status**: 🚨 **CRITICAL ISSUES DETECTED**
 
 ---
@@ -68,7 +68,7 @@ Improvement:
 - Our TD3: **2 Critic networks + 1 Actor** (3 networks total)
 - Combined norm naturally higher than individual norms
 
-**Verdict**: ✅ **GRADIENT CLIPPING IS WORKING CORRECTLY**  
+**Verdict**: ✅ **GRADIENT CLIPPING IS WORKING CORRECTLY**
 (1.9 vs 1.8M is success, even if not exactly <1.0)
 
 ---
@@ -103,7 +103,7 @@ Comparison:
 
 #### Hypothesis #2: Learning Rate Still Too High ⚠️
 - **Evidence**: Actor CNN LR increased from 1e-5 → 1e-4 (10× increase)
-- **Analysis**: 
+- **Analysis**:
   - 10× higher LR with clipped gradients
   - Clipping prevents explosion but LR controls step size
   - Large steps (high LR) × many steps = divergence
@@ -116,7 +116,7 @@ Comparison:
   - **50× more gradient updates = 50× more opportunities for error accumulation**
 - **Literature Quote** (Spinning Up):
   > "TD3 updates the policy less frequently than the Q-function to **damp volatility**"
-- **Our Issue**: 
+- **Our Issue**:
   - Updating EVERY step doesn't allow Q-function to stabilize
   - Actor chases moving target (unstable Q-values)
   - Cumulative error grows exponentially despite clipped gradients
@@ -124,7 +124,7 @@ Comparison:
 
 #### Hypothesis #4: Reward Function Changed Behavior ⚠️
 - **Evidence**: Progress component shows 0% contribution (!?)
-- **Analysis**: 
+- **Analysis**:
   - We changed discrete bonuses: waypoint 10→1, goal 100→10
   - We changed distance_scale: 0.1→1.0
   - But 0% progress is WRONG - should still contribute!
@@ -138,7 +138,7 @@ Comparison:
 # In config/td3_config.yaml:
 algorithm:
   update_freq: 50  # Change from 1 to 50 (match Spinning Up)
-  
+
 # Expected Impact:
   - 50× fewer policy updates
   - Q-function stabilizes between policy updates
@@ -152,7 +152,7 @@ algorithm:
 networks:
   cnn:
     actor_cnn_lr: 0.00003  # 3e-5 (middle ground between 1e-5 and 1e-4)
-    
+
 # Rationale:
   - 1e-4 was 10× increase (too aggressive)
   - 3e-5 is 3× increase (more conservative)
@@ -199,7 +199,7 @@ Improvement: 0% (NO CHANGE)
 
 #### Hypothesis #2: Insufficient Weight Increase ⚠️
 - **Evidence**: 2.0→5.0 is only 2.5× increase
-- **Analysis**: 
+- **Analysis**:
   - Perot et al. (2017): "distance penalty enables rapid learning"
   - But maybe 5.0 is STILL too weak relative to other rewards
   - TensorBoard shows progress at 0% (suspicious!)
@@ -207,11 +207,11 @@ Improvement: 0% (NO CHANGE)
 - **Verdict**: **POSSIBLE, needs testing**
 
 #### Hypothesis #3: Episode Termination Condition Changed 🎯
-- **Evidence**: 
+- **Evidence**:
   - Max episode length shows 1000 steps (unchanged)
   - But mean is 12 and median is 3 (same as before)
   - Lane invasions still 1.0 per episode
-- **Analysis**: 
+- **Analysis**:
   - If lane invasion triggers episode termination IMMEDIATELY
   - Then increasing lane_keeping reward CANNOT help
   - Agent hits lane boundary → episode ends → no learning opportunity
@@ -226,7 +226,7 @@ Improvement: 0% (NO CHANGE)
 # Look for:
 if lane_invasion_detected:
     done = True  # ← This ends episode immediately!
-    
+
 # Should be:
 if lane_invasion_detected:
     # Apply penalty but DON'T terminate immediately
@@ -317,7 +317,7 @@ if step % 100 == 0:
 Q-Value Growth:
   Q1: 18.61 → 76.39 (3.40× growth)
   Q2: 18.64 → 76.28 (3.39× growth)
-  
+
 Expected Healthy Growth: 2-5×
 Status: ✅ WITHIN TARGET RANGE
 ```
@@ -331,7 +331,7 @@ Status: ✅ WITHIN TARGET RANGE
 - **Target Networks**: Polyak averaging (τ=0.005) provides stability
 - **Critic Gradient Clipping**: Also working (22.9 vs 5,897 before)
 
-**Conclusion**: ✅ **Critic learning is HEALTHY**  
+**Conclusion**: ✅ **Critic learning is HEALTHY**
 The problem is Actor, not Critic!
 
 ---
@@ -436,10 +436,10 @@ python scripts/train_td3.py \
 ```
 IF (Actor loss <100× divergence) AND (Episode length >20) AND (Reward components all >1%):
   → GO for 1M run ✅
-  
+
 ELSE IF (Actor loss <1000× divergence) AND (Episode length >10):
   → PARTIAL GO - Try 50K run first ⚠️
-  
+
 ELSE:
   → NO-GO - Fix critical issues first ❌
 ```
@@ -530,7 +530,7 @@ ELSE:
 4. **Re-run 5K validation** (1 hour)
 5. **Make final GO/NO-GO decision** (Based on objective criteria)
 
-**Estimated Time to GO Decision**: 2-3 hours  
+**Estimated Time to GO Decision**: 2-3 hours
 **Confidence in Path Forward**: 85%
 
 ---

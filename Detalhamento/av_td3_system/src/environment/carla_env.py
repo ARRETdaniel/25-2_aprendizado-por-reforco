@@ -792,6 +792,63 @@ class CARLANavigationEnv(Env):
                 f"   Hand Brake: {applied_control.hand_brake}, Reverse: {applied_control.reverse}, Gear: {applied_control.gear}"
             )
 
+    def _handle_tick_timeout(self):
+        """
+        Handle CARLA tick timeout by gracefully terminating episode.
+
+        This prevents silent freezes when CARLA simulator hangs (sensor queue
+        overflow, Traffic Manager deadlock, physics engine lock, etc.).
+
+        Returns:
+            Tuple compatible with step() return: (obs, reward, terminated, truncated, info)
+        """
+        self.logger.warning(
+            f"⚠️ Forcing episode termination due to CARLA tick timeout\n"
+            f"   Episode: {self.episode_count}, Step: {self.current_step}\n"
+            f"   Last waypoint: {self.waypoint_manager.current_waypoint_index}/{len(self.waypoint_manager.waypoints)}\n"
+            f"   Recommendation: Check CARLA server logs for deadlock/error"
+        )
+
+        # Get last known observation (may be stale)
+        try:
+            observation = self._get_observation()
+        except Exception as e:
+            # If even observation fails, return zero observation
+            self.logger.error(f"Failed to get observation during timeout recovery: {e}")
+            observation = {
+                "image": np.zeros((4, 84, 84), dtype=np.float32),
+                "vector": np.zeros(53, dtype=np.float32),
+            }
+
+        # Terminate episode with penalty
+        reward = -100.0  # Heavy timeout penalty
+        terminated = True
+        truncated = False
+
+        info = {
+            "step": self.current_step,
+            "episode": self.episode_count,
+            "termination_reason": "carla_tick_timeout",
+            "timeout_duration": 10.0,
+            "reward_total": reward,
+            "reward_components": {"timeout_penalty": -100.0},
+        }
+
+        # Increment timeout counter for monitoring
+        if not hasattr(self, 'timeout_count'):
+            self.timeout_count = 0
+        self.timeout_count += 1
+
+        self.logger.warning(
+            f"   Total timeouts in session: {self.timeout_count}\n"
+            f"   If timeouts persist, consider:\n"
+            f"   1. Reducing NPC density\n"
+            f"   2. Lowering sensor resolution\n"
+            f"   3. Restarting CARLA server"
+        )
+
+        return observation, reward, terminated, truncated, info
+
     def _get_observation(self) -> Dict[str, np.ndarray]:
         """
         Construct observation from sensors and state.

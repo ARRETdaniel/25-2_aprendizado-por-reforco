@@ -595,17 +595,24 @@ class TD3Agent:
         # Compute critic loss (MSE on both Q-networks)
         critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
 
-        # DEBUG: Log Q-values and critic loss every 100 training steps
-        # OPTIMIZATION: Throttled to reduce logging overhead (was every step)
+        # 🔍 DIAGNOSTIC LOGGING #1: Detailed Q-value and reward analysis
+        # Added to diagnose Q-value explosion (actor loss = -2.4M issue)
         if self.logger.isEnabledFor(logging.DEBUG) and self.total_it % 100 == 0:
             self.logger.debug(
                 f"   TRAINING STEP {self.total_it} - CRITIC UPDATE:\n"
-                f"   Current Q1: mean={current_Q1.mean().item():.2f}, std={current_Q1.std().item():.2f}\n"
-                f"   Current Q2: mean={current_Q2.mean().item():.2f}, std={current_Q2.std().item():.2f}\n"
-                f"   Target Q: mean={target_Q.mean().item():.2f}, std={target_Q.std().item():.2f}\n"
+                f"   Current Q1: mean={current_Q1.mean().item():.2f}, std={current_Q1.std().item():.2f}, "
+                f"min={current_Q1.min().item():.2f}, max={current_Q1.max().item():.2f}\n"
+                f"   Current Q2: mean={current_Q2.mean().item():.2f}, std={current_Q2.std().item():.2f}, "
+                f"min={current_Q2.min().item():.2f}, max={current_Q2.max().item():.2f}\n"
+                f"   Target Q: mean={target_Q.mean().item():.2f}, std={target_Q.std().item():.2f}, "
+                f"min={target_Q.min().item():.2f}, max={target_Q.max().item():.2f}\n"
                 f"   Critic loss: {critic_loss.item():.4f}\n"
                 f"   TD error Q1: {(current_Q1 - target_Q).abs().mean().item():.4f}\n"
-                f"   TD error Q2: {(current_Q2 - target_Q).abs().mean().item():.4f}"
+                f"   TD error Q2: {(current_Q2 - target_Q).abs().mean().item():.4f}\n"
+                f"   Reward stats: mean={reward.mean().item():.2f}, std={reward.std().item():.2f}, "
+                f"min={reward.min().item():.2f}, max={reward.max().item():.2f}\n"
+                f"   Next Q stats: mean={target_Q1.mean().item():.2f}, min_Q={target_Q.mean().item():.2f}\n"
+                f"   Discount applied: {self.discount:.4f}, Done ratio: {(~not_done.bool()).sum().item()}/{batch_size}"
             )
 
         # FIX: Optimize critics AND critic's CNN (gradients flow through state → critic_cnn)
@@ -694,7 +701,30 @@ class TD3Agent:
         metrics = {
             'critic_loss': critic_loss.item(),
             'q1_value': current_Q1.mean().item(),
-            'q2_value': current_Q2.mean().item()
+            'q2_value': current_Q2.mean().item(),
+            # 🔍 DIAGNOSTIC #2: Detailed Q-value statistics for Q-explosion debugging
+            # Added Nov 18, 2025 to diagnose actor loss = -2.4M issue
+            'debug/q1_std': current_Q1.std().item(),
+            'debug/q1_min': current_Q1.min().item(),
+            'debug/q1_max': current_Q1.max().item(),
+            'debug/q2_std': current_Q2.std().item(),
+            'debug/q2_min': current_Q2.min().item(),
+            'debug/q2_max': current_Q2.max().item(),
+            'debug/target_q_mean': target_Q.mean().item(),
+            'debug/target_q_std': target_Q.std().item(),
+            'debug/target_q_min': target_Q.min().item(),
+            'debug/target_q_max': target_Q.max().item(),
+            # 🔍 DIAGNOSTIC #3: TD error and Bellman components
+            'debug/td_error_q1': (current_Q1 - target_Q).abs().mean().item(),
+            'debug/td_error_q2': (current_Q2 - target_Q).abs().mean().item(),
+            # 🔍 DIAGNOSTIC #4: Reward analysis (check for >1000/step)
+            'debug/reward_mean': reward.mean().item(),
+            'debug/reward_std': reward.std().item(),
+            'debug/reward_min': reward.min().item(),
+            'debug/reward_max': reward.max().item(),
+            # 🔍 DIAGNOSTIC #5: Done signal and discount factor
+            'debug/done_ratio': (~not_done.bool()).sum().item() / batch_size,
+            'debug/effective_discount': (not_done * self.discount).mean().item(),
         }
 
         # ===== GRADIENT EXPLOSION MONITORING (Solution A Validation) =====
@@ -726,7 +756,11 @@ class TD3Agent:
                 state_for_actor = state  # Use same state from standard buffer
 
             # Compute actor loss: -Q1(s, μ_φ(s))
-            actor_loss = -self.critic.Q1(state_for_actor, self.actor(state_for_actor)).mean()
+            # 🔍 CRITICAL DIAGNOSTIC: Compute Q-values BEFORE taking mean
+            # This reveals the ACTUAL Q-values driving policy learning
+            # If actor_loss = -2.4M, then actor_q_values should average +2.4M
+            actor_q_values = self.critic.Q1(state_for_actor, self.actor(state_for_actor))
+            actor_loss = -actor_q_values.mean()
 
             # DEBUG: Log actor loss every 100 training steps
             # OPTIMIZATION: Throttled to reduce logging overhead (was every delayed update)
@@ -734,7 +768,12 @@ class TD3Agent:
                 self.logger.debug(
                     f"   TRAINING STEP {self.total_it} - ACTOR UPDATE (delayed, freq={self.policy_freq}):\n"
                     f"   Actor loss: {actor_loss.item():.4f}\n"
-                    f"   Q-value under current policy: {-actor_loss.item():.2f}"
+                    f"   Q-value under current policy: {-actor_loss.item():.2f}\n"
+                    f"   🔍 ACTUAL Q-values driving policy:\n"
+                    f"      mean={actor_q_values.mean().item():.2f}, std={actor_q_values.std().item():.2f}\n"
+                    f"      min={actor_q_values.min().item():.2f}, max={actor_q_values.max().item():.2f}\n"
+                    f"   (If mean ≈ +2.4M and actor_loss ≈ -2.4M → Critic overestimation confirmed)\n"
+                    f"   (If mean ≈ +90 → Scaling/logging issue, not critic problem)"
                 )
 
             # FIX: Optimize actor AND actor's CNN (gradients flow through state_for_actor → actor_cnn)
@@ -860,6 +899,15 @@ class TD3Agent:
                 )
 
             metrics['actor_loss'] = actor_loss.item()
+
+            # 🔍 DIAGNOSTIC #6: ACTUAL Q-values fed to actor (THE SMOKING GUN)
+            # These are the Q-values that drive policy learning
+            # If actor_loss = -2.4M, these should average +2.4M
+            # Compare with debug/target_q_mean to check consistency
+            metrics['debug/actor_q_mean'] = actor_q_values.mean().item()
+            metrics['debug/actor_q_std'] = actor_q_values.std().item()
+            metrics['debug/actor_q_min'] = actor_q_values.min().item()
+            metrics['debug/actor_q_max'] = actor_q_values.max().item()
 
         return metrics
 
