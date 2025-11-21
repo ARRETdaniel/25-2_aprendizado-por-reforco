@@ -1,6 +1,6 @@
 # 5K Step Training Run - Validation Report
-**Date**: November 20, 2025  
-**Analysis Script**: `scripts/analyze_5k_run.py`  
+**Date**: November 20, 2025
+**Analysis Script**: `scripts/analyze_5k_run.py`
 **Log Directory**: `data/logs/TD3_scenario_0_npcs_20_20251120-133459`
 
 ---
@@ -25,7 +25,7 @@ The 5K step training run reveals **catastrophic Q-value explosion** and **perfor
 
 #### Metrics Extracted:
 - **agent**: 15 metrics
-- **alerts**: 2 metrics  
+- **alerts**: 2 metrics
 - **debug**: 22 metrics (includes Q-values)
 - **eval**: 5 metrics
 - **gradients**: 4 metrics
@@ -70,7 +70,7 @@ Mean:     103.99 ± 179.68
 Trend:    -0.3619 (negative slope)
 ```
 
-**Interpretation**: 
+**Interpretation**:
 - ❌ **CATASTROPHIC PERFORMANCE DEGRADATION**
 - Rewards dropped 94.4% (from 721 → 7.6)
 - Negative trend = agent is **unlearning** / getting worse over time
@@ -160,7 +160,7 @@ Unclipped CNN gradients → Large CNN weight updates → Visual features diverge
 ## Comparison with Baselines
 
 ### TD3 Paper (Fujimoto et al., 2018)
-**Environment**: MuJoCo Hopper-v1  
+**Environment**: MuJoCo Hopper-v1
 **Hyperparameters**:
 - batch_size = 100
 - γ = 0.99
@@ -283,13 +283,13 @@ Check:
 ```python
 # Actor CNN clipping
 torch.nn.utils.clip_grad_norm_(
-    self.actor.cnn.parameters(), 
+    self.actor.cnn.parameters(),
     max_norm=1.0
 )
 
 # Critic CNN clipping
 torch.nn.utils.clip_grad_norm_(
-    self.critic.cnn.parameters(), 
+    self.critic.cnn.parameters(),
     max_norm=10.0
 )
 ```
@@ -353,7 +353,7 @@ TD3_CONFIG = {
 
 1. **Visualization**: `docs/day-20/5k_training_analysis.png`
    - 4-panel plot showing Q-values, rewards, losses, episode length over time
-   
+
 2. **CSV Exports**:
    - `docs/day-20/5k_q_values.csv` (Q-value trajectory)
    - `docs/day-20/5k_rewards.csv` (Episode rewards and lengths)
@@ -414,6 +414,6 @@ Fix the gradient clipping, update hyperparameters, and validate with another 5K 
 
 ---
 
-**Analysis Date**: November 20, 2025 11:38:03  
-**Analysis Script**: `scripts/analyze_5k_run.py`  
+**Analysis Date**: November 20, 2025 11:38:03
+**Analysis Script**: `scripts/analyze_5k_run.py`
 **TensorBoard Log**: `data/logs/TD3_scenario_0_npcs_20_20251120-133459`

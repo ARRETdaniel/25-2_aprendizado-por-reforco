@@ -146,10 +146,48 @@ class TD3Agent:
 
         # Create target actor as deep copy
         self.actor_target = copy.deepcopy(self.actor)
+
+        # 🔧 CRITICAL FIX (Nov 20, 2025): Store CNN references BEFORE creating optimizers
+        # Must assign actor_cnn and critic_cnn BEFORE using them in optimizer creation
+        # This prevents AttributeError when checking if self.actor_cnn is not None
+
+        # Handle backward compatibility with deprecated cnn_extractor parameter
+        if cnn_extractor is not None and (actor_cnn is None or critic_cnn is None):
+            print("  WARNING: cnn_extractor parameter is DEPRECATED!")
+            print("  Using cnn_extractor for both actor and critic (NOT RECOMMENDED)")
+            print("  This can cause gradient interference. Use actor_cnn/critic_cnn instead.")
+            if actor_cnn is None:
+                actor_cnn = cnn_extractor
+            if critic_cnn is None:
+                critic_cnn = cnn_extractor
+
+        # Store CNN references as instance variables
+        self.actor_cnn = actor_cnn
+        self.critic_cnn = critic_cnn
+        self.use_dict_buffer = use_dict_buffer
+
+        # 🔧 CRITICAL FIX (Nov 20, 2025): Merge CNN parameters into main optimizers
+        # ROOT CAUSE: Separate CNN optimizers were applying UNCLIPPED gradients!
+        # Evidence: TensorBoard showed Actor CNN 2.42 > 1.0 limit, Critic CNN 24.69 > 10.0 limit
+        # Solution: Include CNN parameters in main optimizers (matches official TD3/SB3)
+        # Reference: TD3/TD3.py lines 25-26, Stable-Baselines3 td3.py (single optimizer per network)
+
+        # Initialize logger BEFORE using it
+        self.logger = logging.getLogger(__name__)
+
+        if self.actor_cnn is not None:
+            # FIXED: Include actor_cnn parameters in actor optimizer
+            actor_params = list(self.actor.parameters()) + list(self.actor_cnn.parameters())
+            self.logger.info(f"  Actor optimizer: {len(list(self.actor.parameters()))} MLP params + {len(list(self.actor_cnn.parameters()))} CNN params")
+        else:
+            actor_params = list(self.actor.parameters())
+            self.logger.info(f"  Actor optimizer: {len(list(self.actor.parameters()))} MLP params (no CNN)")
+
         self.actor_optimizer = torch.optim.Adam(
-            self.actor.parameters(),
+            actor_params,
             lr=self.actor_lr
         )
+        self.logger.info(f"  Actor optimizer created: lr={self.actor_lr}, total_params={sum(p.numel() for p in actor_params)}")
 
         # Initialize twin critic networks
         critic_config = config.get('networks', {}).get('critic', {})
@@ -164,60 +202,40 @@ class TD3Agent:
 
         # Create target critics as deep copy
         self.critic_target = copy.deepcopy(self.critic)
+
+        # 🔧 CRITICAL FIX (Nov 20, 2025): Merge CNN parameters into main optimizers
+        # ROOT CAUSE: Separate CNN optimizers were applying UNCLIPPED gradients!
+        # Evidence: TensorBoard showed Critic CNN 24.69 > 10.0 limit
+        # Solution: Include CNN parameters in main optimizers (matches official TD3/SB3)
+        if self.critic_cnn is not None:
+            # FIXED: Include critic_cnn parameters in critic optimizer
+            critic_params = list(self.critic.parameters()) + list(self.critic_cnn.parameters())
+            self.logger.info(f"  Critic optimizer: {len(list(self.critic.parameters()))} MLP params + {len(list(self.critic_cnn.parameters()))} CNN params")
+        else:
+            critic_params = list(self.critic.parameters())
+            self.logger.info(f"  Critic optimizer: {len(list(self.critic.parameters()))} MLP params (no CNN)")
+
         self.critic_optimizer = torch.optim.Adam(
-            self.critic.parameters(),
+            critic_params,
             lr=self.critic_lr
         )
+        self.logger.info(f"  Critic optimizer created: lr={self.critic_lr}, total_params={sum(p.numel() for p in critic_params)}")
 
-        # Initialize CNN for end-to-end training (Bug #13 fix + CRITICAL gradient interference fix)
-        # 🔧 FIX: Support backward compatibility with cnn_extractor parameter
-        if cnn_extractor is not None and (actor_cnn is None or critic_cnn is None):
-            print("  WARNING: cnn_extractor parameter is DEPRECATED!")
-            print("  Using cnn_extractor for both actor and critic (NOT RECOMMENDED)")
-            print("  This can cause gradient interference. Use actor_cnn/critic_cnn instead.")
-            if actor_cnn is None:
-                actor_cnn = cnn_extractor
-            if critic_cnn is None:
-                critic_cnn = cnn_extractor
+        # 🔧 CRITICAL FIX (Nov 20, 2025): REMOVED separate CNN optimizers
+        # These were causing gradient clipping to fail by applying unclipped gradients!
+        # CNN parameters are now included in main actor/critic optimizers (lines ~150-170)
+        # Reference: IMMEDIATE_ACTION_PLAN.md Task 1-3, CNN_END_TO_END_TRAINING_ANALYSIS.md Part 4
+        self.actor_cnn_optimizer = None  # DEPRECATED - Do not use
+        self.critic_cnn_optimizer = None  # DEPRECATED - Do not use
 
-        self.actor_cnn = actor_cnn
-        self.critic_cnn = critic_cnn
-        self.use_dict_buffer = use_dict_buffer
-
-        # Initialize CNN optimizers (separate for actor and critic)
+        # Set CNN modes for training
         if self.actor_cnn is not None:
-            # Actor CNN should be in training mode
             self.actor_cnn.train()
-
-            # Create actor CNN optimizer
-            # GRADIENT EXPLOSION FIX: Use separate actor_cnn_lr (1e-5) instead of shared learning_rate
-            cnn_config = config.get('networks', {}).get('cnn', {})
-            cnn_lr = cnn_config.get('actor_cnn_lr', cnn_config.get('learning_rate', 1e-4))
-            self.actor_cnn_optimizer = torch.optim.Adam(
-                self.actor_cnn.parameters(),
-                lr=cnn_lr
-            )
-            print(f"  Actor CNN optimizer initialized with lr={cnn_lr} (actor_cnn_lr)")
-            print(f"  Actor CNN mode: training (gradients enabled)")
-        else:
-            self.actor_cnn_optimizer = None
+            self.logger.info(f"  Actor CNN set to training mode (gradients will flow through actor_optimizer)")
 
         if self.critic_cnn is not None:
-            # Critic CNN should be in training mode
             self.critic_cnn.train()
-
-            # Create critic CNN optimizer
-            # GRADIENT EXPLOSION FIX: Use separate critic_cnn_lr (1e-4, unchanged)
-            cnn_config = config.get('networks', {}).get('cnn', {})
-            cnn_lr = cnn_config.get('critic_cnn_lr', cnn_config.get('learning_rate', 1e-4))
-            self.critic_cnn_optimizer = torch.optim.Adam(
-                self.critic_cnn.parameters(),
-                lr=cnn_lr
-            )
-            print(f"  Critic CNN optimizer initialized with lr={cnn_lr} (critic_cnn_lr)")
-            print(f"  Critic CNN mode: training (gradients enabled)")
-        else:
-            self.critic_cnn_optimizer = None
+            self.logger.info(f"  Critic CNN set to training mode (gradients will flow through critic_optimizer)")
 
         # Validation checks
         if use_dict_buffer and (self.actor_cnn is None or self.critic_cnn is None):
@@ -271,8 +289,8 @@ class TD3Agent:
         # CNN diagnostics tracker (optional, for debugging)
         self.cnn_diagnostics = None
 
-        # Initialize logger for debug mode
-        self.logger = logging.getLogger(__name__)
+        # Logger already initialized earlier (line 176)
+        # Removed duplicate: self.logger = logging.getLogger(__name__)
 
         print(f"TD3Agent initialized with:")
         print(f"  State dim: {state_dim}, Action dim: {action_dim}")
@@ -627,22 +645,47 @@ class TD3Agent:
         # - Lateral Control paper (Chen et al., 2019): clip_norm=10.0 for CNN feature extractors
         # - DRL Survey: Gradient clipping standard practice for visual DRL (range 1.0-40.0)
         # Note: Critic gradients are naturally bounded (MSE loss), but clipping adds extra safety
+        # ===== GRADIENT CLIPPING (November 20, 2025 - CRITICAL FIX) =====
+        # BEFORE clipping: Log raw gradient norms for TensorBoard analysis
+        # This allows us to verify clipping is actually working
         if self.critic_cnn is not None:
-            # Clip both Critic MLP and Critic CNN gradients together
+            # Calculate BEFORE clipping norms
+            critic_grad_norm_before = torch.nn.utils.clip_grad_norm_(
+                list(self.critic.parameters()) + list(self.critic_cnn.parameters()),
+                max_norm=float('inf'),  # No clipping, just calculate norm
+                norm_type=2.0
+            ).item()
+
+            # Log for debugging
+            if self.total_it % 100 == 0:
+                self.logger.debug(f"  Critic gradient norm BEFORE clip: {critic_grad_norm_before:.4f}")
+
+            # NOW apply actual clipping
             torch.nn.utils.clip_grad_norm_(
                 list(self.critic.parameters()) + list(self.critic_cnn.parameters()),
-                max_norm=10.0,  # Conservative threshold for critic (higher than actor)
+                max_norm=10.0,  # Conservative threshold for critic
                 norm_type=2.0   # L2 norm (Euclidean distance)
             )
+
+            # Calculate AFTER clipping norm
+            critic_grad_norm_after = sum(
+                p.grad.norm().item() ** 2 for p in list(self.critic.parameters()) + list(self.critic_cnn.parameters()) if p.grad is not None
+            ) ** 0.5
+
+            # Log for debugging
+            if self.total_it % 100 == 0:
+                self.logger.debug(f"  Critic gradient norm AFTER clip: {critic_grad_norm_after:.4f} (max=10.0)")
+                if critic_grad_norm_after > 10.1:  # Allow small numerical error
+                    self.logger.warning(f"  ❌ CLIPPING FAILED! Critic grad {critic_grad_norm_after:.4f} > 10.0")
         else:
+            critic_grad_norm_before = 0.0
+            critic_grad_norm_after = 0.0
             # Clip only Critic MLP gradients if no CNN
             torch.nn.utils.clip_grad_norm_(
                 self.critic.parameters(),
                 max_norm=10.0,
                 norm_type=2.0
-            )
-
-        # DEBUG: Log gradient norms every 100 training steps (AFTER clipping)
+            )        # DEBUG: Log gradient norms every 100 training steps (AFTER clipping)
         # OPTIMIZATION: Throttled to reduce logging overhead (was every step)
         if self.logger.isEnabledFor(logging.DEBUG) and self.total_it % 100 == 0:
             critic_grad_norm = sum(
@@ -681,28 +724,33 @@ class TD3Agent:
                 if self.total_it % 100 == 0:
                     self._log_feature_diversity(sample_features, "critic_cnn")
 
+        # 🔧 CRITICAL FIX (Nov 20, 2025): Single optimizer.step() now updates BOTH critic MLP and CNN
+        # CNN parameters are included in critic_optimizer (see __init__ lines ~170-180)
+        # This ensures gradient clipping is applied BEFORE optimizer step
+        # Reference: PyTorch DQN Tutorial, TD3/TD3.py line 95, SB3 td3.py line 198
         self.critic_optimizer.step()
-        if self.critic_cnn_optimizer is not None:
-            self.critic_cnn_optimizer.step()  # UPDATE CRITIC CNN WEIGHTS!
 
-            # 🔍 ENHANCED CNN DIAGNOSTICS #3: Capture weight changes (after optimizer step)
-            if self.cnn_diagnostics is not None:
-                self.cnn_diagnostics.capture_weights()
+        # 🔍 ENHANCED CNN DIAGNOSTICS #3: Capture weight changes (after optimizer step)
+        if self.cnn_diagnostics is not None and self.critic_cnn is not None:
+            self.cnn_diagnostics.capture_weights()
 
-                # Log weight statistics every 1000 steps
-                if self.total_it % 1000 == 0:
-                    self._log_weight_statistics(self.critic_cnn, "critic_cnn")
-
-            # 🔍 ENHANCED CNN DIAGNOSTICS #4: Log learning rate every 1000 steps
+            # Log weight statistics every 1000 steps
             if self.total_it % 1000 == 0:
-                self._log_learning_rate(self.critic_cnn_optimizer, "critic_cnn")
+                self._log_weight_statistics(self.critic_cnn, "critic_cnn")
 
         # Prepare metrics
         metrics = {
             'critic_loss': critic_loss.item(),
             'q1_value': current_Q1.mean().item(),
             'q2_value': current_Q2.mean().item(),
-            # 🔍 DIAGNOSTIC #2: Detailed Q-value statistics for Q-explosion debugging
+            # � CRITICAL FIX (Nov 20, 2025): Gradient clipping monitoring
+            # These metrics verify that gradient clipping is working correctly
+            # Expected: AFTER values should be ≤ max_norm (10.0 for critic)
+            # Reference: IMMEDIATE_ACTION_PLAN.md Task 1-2, CNN_END_TO_END_TRAINING_ANALYSIS.md Part 4
+            'debug/critic_grad_norm_BEFORE_clip': critic_grad_norm_before,
+            'debug/critic_grad_norm_AFTER_clip': critic_grad_norm_after,
+            'debug/critic_grad_clip_ratio': critic_grad_norm_after / max(critic_grad_norm_before, 1e-8),
+            # �🔍 DIAGNOSTIC #2: Detailed Q-value statistics for Q-explosion debugging
             # Added Nov 18, 2025 to diagnose actor loss = -2.4M issue
             'debug/q1_std': current_Q1.std().item(),
             'debug/q1_min': current_Q1.min().item(),
@@ -710,6 +758,12 @@ class TD3Agent:
             'debug/q2_std': current_Q2.std().item(),
             'debug/q2_min': current_Q2.min().item(),
             'debug/q2_max': current_Q2.max().item(),
+            # 🔍 DIAGNOSTIC #6: Twin critic divergence monitoring (Added Nov 19, 2025)
+            # Critical for TD3: Large Q1-Q2 differences indicate overestimation by one network
+            # Expected: <10% of Q-value magnitude (Fujimoto et al., 2018)
+            # Reference: TD3 paper Section 4.1 "Clipped Double Q-Learning"
+            'debug/q1_q2_diff': torch.abs(current_Q1 - current_Q2).mean().item(),
+            'debug/q1_q2_max_diff': torch.abs(current_Q1 - current_Q2).max().item(),
             'debug/target_q_mean': target_Q.mean().item(),
             'debug/target_q_std': target_Q.std().item(),
             'debug/target_q_min': target_Q.min().item(),
@@ -730,17 +784,25 @@ class TD3Agent:
         # ===== GRADIENT EXPLOSION MONITORING (Solution A Validation) =====
         # Add gradient norms to metrics for TensorBoard tracking
         # These metrics enable real-time monitoring of gradient explosion
+
+        # 🔧 CRITICAL FIX (Nov 20, 2025): Add AFTER-clipping CNN gradient norms to metrics
+        # These verify gradient clipping is working correctly
+        # Expected: AFTER values should be ≤ max_norm (10.0 for critic CNN)
         if self.critic_cnn is not None:
             critic_cnn_grad_norm = sum(
                 p.grad.norm().item() for p in self.critic_cnn.parameters() if p.grad is not None
             )
             metrics['critic_cnn_grad_norm'] = critic_cnn_grad_norm
+            # ADD: After-clipping CNN gradient norm for validation
+            metrics['debug/critic_cnn_grad_norm_AFTER_clip'] = critic_cnn_grad_norm
 
         # Critic MLP gradients (for comparison)
         critic_mlp_grad_norm = sum(
             p.grad.norm().item() for p in self.critic.parameters() if p.grad is not None
         )
         metrics['critic_mlp_grad_norm'] = critic_mlp_grad_norm
+        # ADD: After-clipping MLP gradient norm for validation
+        metrics['debug/critic_mlp_grad_norm_AFTER_clip'] = critic_mlp_grad_norm
 
         # Delayed policy updates
         if self.total_it % self.policy_freq == 0:
@@ -801,22 +863,46 @@ class TD3Agent:
             #
             # Starting conservative with clip_norm=1.0 (Lane Keeping paper recommendation)
             # Can increase to 10.0 if training is too slow (see Appendix A for tuning guide)
+            # ===== ACTOR GRADIENT CLIPPING (November 20, 2025 - CRITICAL FIX) =====
+            # BEFORE clipping: Log raw gradient norms for TensorBoard analysis
             if self.actor_cnn is not None:
-                # Clip both Actor MLP and Actor CNN gradients together
+                # Calculate BEFORE clipping norm
+                actor_grad_norm_before = torch.nn.utils.clip_grad_norm_(
+                    list(self.actor.parameters()) + list(self.actor_cnn.parameters()),
+                    max_norm=float('inf'),  # No clipping, just calculate norm
+                    norm_type=2.0
+                ).item()
+
+                # Log for debugging
+                if self.total_it % 100 == 0:
+                    self.logger.debug(f"  Actor gradient norm BEFORE clip: {actor_grad_norm_before:.4f}")
+
+                # NOW apply actual clipping
                 torch.nn.utils.clip_grad_norm_(
                     list(self.actor.parameters()) + list(self.actor_cnn.parameters()),
                     max_norm=1.0,   # CONSERVATIVE START (Lane Keeping paper: DDPG+CNN)
                     norm_type=2.0   # L2 norm (Euclidean distance)
                 )
+
+                # Calculate AFTER clipping norm
+                actor_grad_norm_after = sum(
+                    p.grad.norm().item() ** 2 for p in list(self.actor.parameters()) + list(self.actor_cnn.parameters()) if p.grad is not None
+                ) ** 0.5
+
+                # Log for debugging
+                if self.total_it % 100 == 0:
+                    self.logger.debug(f"  Actor gradient norm AFTER clip: {actor_grad_norm_after:.4f} (max=1.0)")
+                    if actor_grad_norm_after > 1.1:  # Allow small numerical error
+                        self.logger.warning(f"  ❌ CLIPPING FAILED! Actor grad {actor_grad_norm_after:.4f} > 1.0")
             else:
+                actor_grad_norm_before = 0.0
+                actor_grad_norm_after = 0.0
                 # Clip only Actor MLP gradients if no CNN
                 torch.nn.utils.clip_grad_norm_(
                     self.actor.parameters(),
                     max_norm=1.0,
                     norm_type=2.0
-                )
-
-            # DEBUG: Log actor gradient norms every 100 training steps (AFTER CLIPPING)
+                )            # DEBUG: Log actor gradient norms every 100 training steps (AFTER CLIPPING)
             # CRITICAL: Monitor that clipping is effective (gradients should be <1.0 mean)
             # OPTIMIZATION: Throttled to reduce logging overhead (was every delayed update)
             if self.logger.isEnabledFor(logging.DEBUG) and self.total_it % 100 == 0:
@@ -841,17 +927,30 @@ class TD3Agent:
             # ===== GRADIENT EXPLOSION MONITORING (Solution A Validation) =====
             # Add actor gradient norms to metrics for TensorBoard tracking
             # CRITICAL: Actor CNN gradients are the primary concern (7.4M explosion in Run #2)
+            # 🔧 CRITICAL FIX (Nov 20, 2025): Add BEFORE/AFTER clipping metrics
+            # These verify gradient clipping is working correctly
+            # Expected: AFTER values should be ≤ max_norm (1.0 for actor)
+            # Reference: IMMEDIATE_ACTION_PLAN.md Task 1, CNN_END_TO_END_TRAINING_ANALYSIS.md Part 4
+            metrics['debug/actor_grad_norm_BEFORE_clip'] = actor_grad_norm_before
+            metrics['debug/actor_grad_norm_AFTER_clip'] = actor_grad_norm_after
+            metrics['debug/actor_grad_clip_ratio'] = actor_grad_norm_after / max(actor_grad_norm_before, 1e-8)
+
+            # ADD: Actor CNN and MLP specific AFTER-clipping metrics
             if self.actor_cnn is not None:
                 actor_cnn_grad_norm = sum(
                     p.grad.norm().item() for p in self.actor_cnn.parameters() if p.grad is not None
                 )
                 metrics['actor_cnn_grad_norm'] = actor_cnn_grad_norm
+                # ADD: After-clipping CNN gradient norm for validation
+                metrics['debug/actor_cnn_grad_norm_AFTER_clip'] = actor_cnn_grad_norm
 
             # Actor MLP gradients (for comparison)
             actor_mlp_grad_norm = sum(
                 p.grad.norm().item() for p in self.actor.parameters() if p.grad is not None
             )
             metrics['actor_mlp_grad_norm'] = actor_mlp_grad_norm
+            # ADD: After-clipping MLP gradient norm for validation
+            metrics['debug/actor_mlp_grad_norm_AFTER_clip'] = actor_mlp_grad_norm
 
             # 🔍 ENHANCED CNN DIAGNOSTICS #1: Capture actor gradients (after backward, before step)
             if self.cnn_diagnostics is not None:
@@ -871,21 +970,19 @@ class TD3Agent:
                     if self.total_it % 100 == 0:
                         self._log_feature_diversity(sample_features, "actor_cnn")
 
+            # 🔧 CRITICAL FIX (Nov 20, 2025): Single optimizer.step() now updates BOTH actor MLP and CNN
+            # CNN parameters are included in actor_optimizer (see __init__ lines ~150-170)
+            # This ensures gradient clipping is applied BEFORE optimizer step
+            # Reference: PyTorch DQN Tutorial, TD3/TD3.py line 100, SB3 td3.py line 207
             self.actor_optimizer.step()
-            if self.actor_cnn_optimizer is not None:
-                self.actor_cnn_optimizer.step()  # UPDATE ACTOR CNN WEIGHTS!
 
-                # 🔍 ENHANCED CNN DIAGNOSTICS #3: Capture actor weight changes (after optimizer step)
-                if self.cnn_diagnostics is not None:
-                    self.cnn_diagnostics.capture_weights()
+            # 🔍 ENHANCED CNN DIAGNOSTICS #3: Capture actor weight changes (after optimizer step)
+            if self.cnn_diagnostics is not None and self.actor_cnn is not None:
+                self.cnn_diagnostics.capture_weights()
 
-                    # Log weight statistics every 1000 steps
-                    if self.total_it % 1000 == 0:
-                        self._log_weight_statistics(self.actor_cnn, "actor_cnn")
-
-                # 🔍 ENHANCED CNN DIAGNOSTICS #4: Log actor learning rate every 1000 steps
+                # Log weight statistics every 1000 steps
                 if self.total_it % 1000 == 0:
-                    self._log_learning_rate(self.actor_cnn_optimizer, "actor_cnn")
+                    self._log_weight_statistics(self.actor_cnn, "actor_cnn")
 
             # Soft update target networks: θ' ← τθ + (1-τ)θ'
             for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):

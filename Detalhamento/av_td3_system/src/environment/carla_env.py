@@ -667,6 +667,11 @@ class CARLANavigationEnv(Env):
         if collision_info is not None and "impulse" in collision_info:
             collision_impulse = collision_info["impulse"]
 
+        # CRITICAL FIX (Nov 19, 2025): Get per-step sensor counts BEFORE reward calculation
+        # Previously lane_invasion_count was only tracked in info dict but NOT passed to reward calculator
+        collision_count = self.sensors.get_step_collision_count()
+        lane_invasion_count = self.sensors.get_step_lane_invasion_count()
+
         # Calculate reward with new dense safety guidance
         reward_dict = self.reward_calculator.calculate(
             velocity=vehicle_state["velocity"],
@@ -677,6 +682,7 @@ class CARLANavigationEnv(Env):
             collision_detected=self.sensors.is_collision_detected(),
             offroad_detected=self.sensors.is_lane_invaded(),
             wrong_way=vehicle_state["wrong_way"],
+            lane_invasion_detected=(lane_invasion_count > 0),  # CRITICAL FIX: Pass lane invasion events
             distance_to_goal=distance_to_goal,
             waypoint_reached=waypoint_reached,
             goal_reached=goal_reached,
@@ -703,19 +709,15 @@ class CARLANavigationEnv(Env):
         truncated = (self.current_step >= self.max_episode_steps) and not done
         terminated = done and not truncated
 
-        # P0 FIX #2 & #3: Get per-step sensor counts for TensorBoard metrics
-        collision_count = self.sensors.get_step_collision_count()
-        lane_invasion_count = self.sensors.get_step_lane_invasion_count()
-
-        # Prepare info dict
+        # Prepare info dict (using counts retrieved before reward calculation)
         info = {
             "step": self.current_step,
             "reward_breakdown": reward_dict["breakdown"],
             "termination_reason": termination_reason,
             "vehicle_state": vehicle_state,
             "collision_info": collision_info,  # Already retrieved above
-            "collision_count": collision_count,  # P0 FIX #2: Per-step collision count
-            "lane_invasion_count": lane_invasion_count,  # P0 FIX #3: Per-step lane invasion count
+            "collision_count": collision_count,  # P0 FIX #2: Per-step collision count (retrieved before reward calc)
+            "lane_invasion_count": lane_invasion_count,  # P0 FIX #3 + CRITICAL FIX (Nov 19): Used in reward & logged
             "distance_to_goal": distance_to_goal,
             "progress_percentage": self.waypoint_manager.get_progress_percentage(),
             "current_waypoint_idx": self.waypoint_manager.get_current_waypoint_index(),
@@ -803,7 +805,7 @@ class CARLANavigationEnv(Env):
             Tuple compatible with step() return: (obs, reward, terminated, truncated, info)
         """
         self.logger.warning(
-            f"⚠️ Forcing episode termination due to CARLA tick timeout\n"
+            f"   Forcing episode termination due to CARLA tick timeout\n"
             f"   Episode: {self.episode_count}, Step: {self.current_step}\n"
             f"   Last waypoint: {self.waypoint_manager.current_waypoint_index}/{len(self.waypoint_manager.waypoints)}\n"
             f"   Recommendation: Check CARLA server logs for deadlock/error"

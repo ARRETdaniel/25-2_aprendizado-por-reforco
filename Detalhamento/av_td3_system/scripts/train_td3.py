@@ -954,29 +954,81 @@ class TD3TrainingPipeline:
 
                     # ===== GRADIENT EXPLOSION MONITORING (Solution A Validation) =====
                     # Track gradient norms to detect potential explosion
+
+                    # 🔧 CRITICAL FIX (Nov 20, 2025): Log AFTER-clipping metrics for validation
+                    # These verify gradient clipping is working correctly
+                    # Expected: AFTER values should be ≤ max_norm (1.0 for actor, 10.0 for critic)
+                    if 'debug/actor_grad_norm_BEFORE_clip' in metrics:
+                        self.writer.add_scalar('debug/actor_grad_norm_BEFORE_clip', metrics['debug/actor_grad_norm_BEFORE_clip'], t)
+                    if 'debug/actor_grad_norm_AFTER_clip' in metrics:
+                        self.writer.add_scalar('debug/actor_grad_norm_AFTER_clip', metrics['debug/actor_grad_norm_AFTER_clip'], t)
+                    if 'debug/actor_grad_clip_ratio' in metrics:
+                        self.writer.add_scalar('debug/actor_grad_clip_ratio', metrics['debug/actor_grad_clip_ratio'], t)
+
+                    if 'debug/critic_grad_norm_BEFORE_clip' in metrics:
+                        self.writer.add_scalar('debug/critic_grad_norm_BEFORE_clip', metrics['debug/critic_grad_norm_BEFORE_clip'], t)
+                    if 'debug/critic_grad_norm_AFTER_clip' in metrics:
+                        self.writer.add_scalar('debug/critic_grad_norm_AFTER_clip', metrics['debug/critic_grad_norm_AFTER_clip'], t)
+                    if 'debug/critic_grad_clip_ratio' in metrics:
+                        self.writer.add_scalar('debug/critic_grad_clip_ratio', metrics['debug/critic_grad_clip_ratio'], t)
+
+                    # ADD: CNN-specific AFTER-clipping metrics
+                    if 'debug/actor_cnn_grad_norm_AFTER_clip' in metrics:
+                        self.writer.add_scalar('debug/actor_cnn_grad_norm_AFTER_clip', metrics['debug/actor_cnn_grad_norm_AFTER_clip'], t)
+                    if 'debug/critic_cnn_grad_norm_AFTER_clip' in metrics:
+                        self.writer.add_scalar('debug/critic_cnn_grad_norm_AFTER_clip', metrics['debug/critic_cnn_grad_norm_AFTER_clip'], t)
+
+                    if 'debug/actor_mlp_grad_norm_AFTER_clip' in metrics:
+                        self.writer.add_scalar('debug/actor_mlp_grad_norm_AFTER_clip', metrics['debug/actor_mlp_grad_norm_AFTER_clip'], t)
+                    if 'debug/critic_mlp_grad_norm_AFTER_clip' in metrics:
+                        self.writer.add_scalar('debug/critic_mlp_grad_norm_AFTER_clip', metrics['debug/critic_mlp_grad_norm_AFTER_clip'], t)
+
+                    # Original gradient metrics (BEFORE clipping - kept for backward compatibility)
                     if 'actor_cnn_grad_norm' in metrics:
                         actor_cnn_grad = metrics['actor_cnn_grad_norm']
                         self.writer.add_scalar('gradients/actor_cnn_norm', actor_cnn_grad, t)
 
-                        # ALERT: Gradient explosion detection (threshold from GRADIENT_EXPLOSION_FIX.md)
-                        if actor_cnn_grad > 50000:
+                        # 🔧 CRITICAL FIX (Nov 20, 2025): Updated alert thresholds
+                        # OLD: 50,000 critical, 10,000 warning (designed for extreme Day-18 explosions)
+                        # NEW: 2.0 critical, 1.5 warning (detect 2× violations of 1.0 limit)
+                        # Rationale: Actor CNN should be clipped to ≤1.0, so >2.0 means clipping failed
+                        if actor_cnn_grad > 2.0:  # 2× over limit
                             self.writer.add_scalar('alerts/gradient_explosion_critical', 1, t)
                             print(f"\n{'!'*70}")
-                            print(f"🔴 CRITICAL ALERT: Actor CNN gradient explosion detected!")
+                            print(f"🔴 CRITICAL ALERT: Actor CNN gradient violation detected!")
                             print(f"   Step: {t:,}")
-                            print(f"   Actor CNN grad norm: {actor_cnn_grad:,.2f}")
-                            print(f"   Threshold: 50,000")
-                            print(f"   Recommendation: Stop training, implement Solution B (gradient clipping)")
+                            print(f"   Actor CNN grad norm: {actor_cnn_grad:.4f}")
+                            print(f"   Limit: 1.0, Critical threshold: 2.0 (2× violation)")
+                            print(f"   Recommendation: Check gradient clipping implementation")
                             print(f"{'!'*70}\n")
-                        elif actor_cnn_grad > 10000:
+                        elif actor_cnn_grad > 1.5:  # 1.5× over limit
                             self.writer.add_scalar('alerts/gradient_explosion_warning', 1, t)
-                            print(f"\n⚠️  WARNING: Actor CNN gradient elevated at step {t:,}: {actor_cnn_grad:,.2f}")
+                            print(f"\n⚠️  WARNING: Actor CNN gradient elevated at step {t:,}: {actor_cnn_grad:.4f} (limit: 1.0)")
                         else:
                             self.writer.add_scalar('alerts/gradient_explosion_critical', 0, t)
                             self.writer.add_scalar('alerts/gradient_explosion_warning', 0, t)
 
                     if 'critic_cnn_grad_norm' in metrics:
-                        self.writer.add_scalar('gradients/critic_cnn_norm', metrics['critic_cnn_grad_norm'], t)
+                        critic_cnn_grad = metrics['critic_cnn_grad_norm']
+                        self.writer.add_scalar('gradients/critic_cnn_norm', critic_cnn_grad, t)
+
+                        # 🔧 CRITICAL FIX (Nov 20, 2025): Alert for critic CNN gradient violations
+                        # Critic CNN should be clipped to ≤10.0
+                        if critic_cnn_grad > 20.0:  # 2× over limit
+                            self.writer.add_scalar('alerts/critic_gradient_explosion_critical', 1, t)
+                            print(f"\n{'!'*70}")
+                            print(f"🔴 CRITICAL ALERT: Critic CNN gradient violation detected!")
+                            print(f"   Step: {t:,}")
+                            print(f"   Critic CNN grad norm: {critic_cnn_grad:.4f}")
+                            print(f"   Limit: 10.0, Critical threshold: 20.0 (2× violation)")
+                            print(f"   Recommendation: Check gradient clipping implementation")
+                            print(f"{'!'*70}\n")
+                        elif critic_cnn_grad > 15.0:  # 1.5× over limit
+                            self.writer.add_scalar('alerts/critic_gradient_explosion_warning', 1, t)
+                            print(f"\n⚠️  WARNING: Critic CNN gradient elevated at step {t:,}: {critic_cnn_grad:.4f} (limit: 10.0)")
+                        else:
+                            self.writer.add_scalar('alerts/critic_gradient_explosion_critical', 0, t)
+                            self.writer.add_scalar('alerts/critic_gradient_explosion_warning', 0, t)
 
                     if 'actor_mlp_grad_norm' in metrics:
                         self.writer.add_scalar('gradients/actor_mlp_norm', metrics['actor_mlp_grad_norm'], t)

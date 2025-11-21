@@ -1,9 +1,9 @@
 # 🚨 FROZEN TRAINING DIAGNOSTIC ANALYSIS - Day 20 Run 1
-**Run**: validation_5k_post_all_fixes  
-**Date**: November 20, 2025  
-**Status**: ❌ CATASTROPHIC FAILURE - Q-VALUE EXPLOSION RETURNED  
-**Training Duration**: 5 minutes 2 seconds (12:08:54 → 12:13:56)  
-**Steps Completed**: 1,700 / 5,000 (34% complete)  
+**Run**: validation_5k_post_all_fixes
+**Date**: November 20, 2025
+**Status**: ❌ CATASTROPHIC FAILURE - Q-VALUE EXPLOSION RETURNED
+**Training Duration**: 5 minutes 2 seconds (12:08:54 → 12:13:56)
+**Steps Completed**: 1,700 / 5,000 (34% complete)
 **Root Cause**: **Q-VALUE EXPLOSION - Gradient clipping INEFFECTIVE**
 
 ---
@@ -41,8 +41,8 @@
    Speed: 0.63 km/h
 ```
 
-**Total Duration**: 5 minutes 2 seconds  
-**Log Lines**: 153,232 lines  
+**Total Duration**: 5 minutes 2 seconds
+**Log Lines**: 153,232 lines
 **TensorBoard Steps**: 1,700 (stopped mid-episode)
 
 ---
@@ -111,7 +111,7 @@ Step 1700: actor_mlp_norm = 0.000004 (DECREASED!)
 | **Critic CNN** | 21.772 | 23.854 | +9.6% | max_norm=10.0 | ✅ Clipped |
 | **Critic MLP** | 5.252 | 2.118 | -59.7% | max_norm=10.0 | ✅ Well below |
 
-**Analysis**: 
+**Analysis**:
 - ✅ All gradients are **WITHIN CLIPPING LIMITS**
 - ✅ Actor MLP gradients are **DECREASING** (not exploding)
 - ❌ **BUT Q-VALUES STILL EXPLODE**
@@ -192,7 +192,7 @@ Step 1700: actor_mlp_norm = 0.000004 (DECREASED!)
 
 ### The REAL Problem
 
-**Hypothesis**: The actor is learning to take actions that **maximize Q-values in a numerically unstable region** of the critic's value surface. 
+**Hypothesis**: The actor is learning to take actions that **maximize Q-values in a numerically unstable region** of the critic's value surface.
 
 **Mechanism**:
 1. Critic learns a value function with some numerical instability
@@ -655,8 +655,7 @@ The Day-20 Run-1 training **did not freeze** - it **experienced catastrophic Q-v
 
 ---
 
-**Report Generated**: November 20, 2025  
-**Analysis Duration**: 45 minutes  
-**Status**: ❌ SYSTEM UNSTABLE - FIXES REQUIRED  
+**Report Generated**: November 20, 2025
+**Analysis Duration**: 45 minutes
+**Status**: ❌ SYSTEM UNSTABLE - FIXES REQUIRED
 **Recommendation**: **IMPLEMENT PHASE-1 FIXES BEFORE ANY FURTHER TRAINING**
-
