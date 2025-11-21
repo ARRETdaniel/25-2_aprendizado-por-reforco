@@ -1,14 +1,14 @@
 # CNN Architecture Explanation: Why We Have CNNs in Multiple Files
 
-**Date:** November 20, 2025  
-**Question:** "Why do we have CNN in train_td3.py, td3_agent.py, and cnn_extractor.py?"  
+**Date:** November 20, 2025
+**Question:** "Why do we have CNN in train_td3.py, td3_agent.py, and cnn_extractor.py?"
 **Answer:** We DON'T have duplicate CNN implementations. We have a SINGLE CNN architecture used in TWO SEPARATE INSTANCES.
 
 ---
 
 ## Executive Summary
 
-**TL;DR:** 
+**TL;DR:**
 - **One CNN Architecture:** `NatureCNN` class in `cnn_extractor.py` (the blueprint)
 - **Two CNN Instances:** Created in `train_td3.py` (actor_cnn and critic_cnn)
 - **Used by:** `td3_agent.py` (for feature extraction during training)
@@ -29,7 +29,7 @@ This is the **CORRECT** design following Stable-Baselines3 TD3 (`share_features_
 class NatureCNN(nn.Module):
     """
     NatureCNN visual feature extractor for end-to-end deep reinforcement learning.
-    
+
     Architecture:
         Input:   (batch, 4, 84, 84) - 4 stacked grayscale frames
         Conv1:   (batch, 32, 20, 20) - 32 filters, 8×8 kernel, stride 4
@@ -41,7 +41,7 @@ class NatureCNN(nn.Module):
     """
     def __init__(self, input_channels=4, feature_dim=512):
         # Define CNN layers (Conv1, Conv2, Conv3, FC)
-        
+
     def forward(self, x):
         # Forward pass through CNN
         return features  # (batch, 512)
@@ -131,7 +131,7 @@ self.critic_cnn = critic_cnn  # Reference to critic's CNN instance
 # Set to training mode
 if self.actor_cnn is not None:
     self.actor_cnn.train()  # Enable gradient computation
-    
+
 if self.critic_cnn is not None:
     self.critic_cnn.train()  # Enable gradient computation
 ```
@@ -188,18 +188,18 @@ def extract_features(
 ) -> torch.Tensor:
     """
     Extract features from Dict observation with gradient support.
-    
+
     Args:
         obs_dict: {'image': (B,4,84,84), 'vector': (B,23)}
         enable_grad: If True, gradients flow through CNN (training)
         use_actor_cnn: If True, use actor's CNN; else use critic's CNN
-    
+
     Returns:
         state: (B, 565) = 512 (CNN features) + 53 (kinematic + waypoints)
     """
     # Select correct CNN
     cnn = self.actor_cnn if use_actor_cnn else self.critic_cnn
-    
+
     if enable_grad:
         # Training: Gradients ENABLED
         image_features = cnn(obs_dict['image'])  # (B, 512)
@@ -207,10 +207,10 @@ def extract_features(
         # Inference: Gradients DISABLED (more efficient)
         with torch.no_grad():
             image_features = cnn(obs_dict['image'])  # (B, 512)
-    
+
     # Concatenate visual + kinematic features
     state = torch.cat([image_features, obs_dict['vector']], dim=1)  # (B, 565)
-    
+
     return state
 ```
 
@@ -231,23 +231,23 @@ def select_action(self, state, noise=None, deterministic=False):
 def train(self, batch_size):
     # Sample batch from replay buffer
     batch = self.replay_buffer.sample(batch_size)
-    
+
     # Extract features WITH gradients for critic update
     state = self.extract_features(
         {'image': batch['image'], 'vector': batch['vector']},
         enable_grad=True,    # Gradients ENABLED
         use_actor_cnn=False  # Use critic's CNN
     )
-    
+
     # Compute critic loss
     current_Q1, current_Q2 = self.critic(state, action)
     critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
-    
+
     # Backpropagation through BOTH critic MLP and critic CNN
     self.critic_optimizer.zero_grad()
     critic_loss.backward()  # Gradients flow: loss → critic → state → critic_cnn
     self.critic_optimizer.step()  # Update critic MLP + critic CNN
-    
+
     # Actor update (delayed)
     if self.total_it % self.policy_freq == 0:
         # Extract features WITH gradients for actor update
@@ -256,10 +256,10 @@ def train(self, batch_size):
             enable_grad=True,   # Gradients ENABLED
             use_actor_cnn=True  # Use ACTOR's CNN
         )
-        
+
         # Compute actor loss
         actor_loss = -self.critic.Q1(state, self.actor(state)).mean()
-        
+
         # Backpropagation through BOTH actor MLP and actor CNN
         self.actor_optimizer.zero_grad()
         actor_loss.backward()  # Gradients flow: loss → actor → state → actor_cnn
@@ -294,7 +294,7 @@ def train(self, batch_size):
    │      return x  # (B, 512)            │
    └──────────────────────────────────────┘
                     ↓
-                    
+
 2. INSTANCE CREATION (train_td3.py)
    ┌──────────────────────────────────────┐
    │  self.actor_cnn = NatureCNN(...)     │  ← Instance 1
@@ -304,7 +304,7 @@ def train(self, batch_size):
    │  self.critic_cnn.train()             │  ← Enable gradients
    └──────────────────────────────────────┘
                     ↓
-                    
+
 3. PASS TO AGENT (train_td3.py → td3_agent.py)
    ┌──────────────────────────────────────┐
    │  self.agent = TD3Agent(              │
@@ -314,7 +314,7 @@ def train(self, batch_size):
    │  )                                   │
    └──────────────────────────────────────┘
                     ↓
-                    
+
 4. STORE REFERENCES (td3_agent.py)
    ┌──────────────────────────────────────┐
    │  self.actor_cnn = actor_cnn          │  ← Store reference
@@ -326,7 +326,7 @@ def train(self, batch_size):
    │  self.actor_optimizer = Adam(actor_params)        │
    └──────────────────────────────────────┘
                     ↓
-                    
+
 5. USE FOR FEATURE EXTRACTION (td3_agent.py)
    ┌──────────────────────────────────────┐
    │  def extract_features(obs_dict, use_actor_cnn): │
@@ -343,7 +343,7 @@ def train(self, batch_size):
    │    return state  # (B, 565)          │
    └──────────────────────────────────────┘
                     ↓
-                    
+
 6. TRAINING LOOP (td3_agent.py)
    ┌──────────────────────────────────────────────────────┐
    │  CRITIC UPDATE:                                      │
@@ -375,7 +375,7 @@ def train(self, batch_size):
 Shared CNN receives conflicting gradients:
   Actor: "Make lanes more visible to drive better" (maximize Q)
   Critic: "Ignore lanes to reduce Q-estimation error" (minimize TD error)
-  
+
 Result: CNN oscillates, learns nothing useful, training fails
 ```
 

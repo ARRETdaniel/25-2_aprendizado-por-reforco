@@ -6,11 +6,12 @@ We need to analyse using official documentation if our system is performing as e
 Fetch additional info about the problem in TD3 DRL paper in contextual folder and in CARLA and Gymnasium Documentation. In the folder e2e/stable-baselines3/stable_baselines3 you can find stable TD3 implementation for comparison.
 
 
-Before each analyse or decision you MUST fetch documentation information about the context of the specific problem we are  about to solve in order to find buges and improvements.
 
 Fetch Carla documentation, and read #contextual folder related papers for better analyze context and the #TD3 #file:TD3.py #file:utils.py  folder contains the orignal TD3 DRL proposed in the #file:Addressing Function Approximation Error in Actor-Critic Methods.tex  paper. Above all you must be 100% sure of your proposed conclusion/solution, and MUST back it up (validate) the conclusion/solution with official documentation for Carla 0.9.16 and TD3. The papers in contextual folder are a related works that uses TD3/CNN/DRL in CARLA, read it for context. The papers #file:Robust Adversarial Attacks Detection based on Explainable Deep Reinforcement Learning For UAV Guidance and Planning.tex and #file:End-to-End Race Driving with Deep Reinforcement Learning.tex and #file:Interpretable End-to-end Urban Autonomous Driving with Latent Deep Reinforcement Learning.tex  are ralated to ours, read it so we can validate our matrics and implementation.
 
-Our implementation should focus the simplicity in order to achieve our final paper #file:ourPaper.tex
+Before each analyse or decision you MUST fetch documentation information about the context of the specific problem we are  about to solve in order to find buges and improvements.
+
+Our implementation should focus the simplicity following official docs in order to achieve our final paper #file:ourPaper.tex
 
 Remember, you must ALWAYS fetch Latest documentation contextual information at docs in order to reference your analyses and codes implementation. Fetch docs related to the analyses we are about to do or the code we are about to implemented:
 
@@ -23,6 +24,22 @@ https://carla.readthedocs.io/en/latest/python_api/
 https://carla.readthedocs.io/en/latest/tutorials/
 
 https://stable-baselines3.readthedocs.io/en/master/modules/td3.html#
+
+https://spinningup.openai.com/en/latest/algorithms/td3.html#documentation
+
+https://www.tensorflow.org/guide
+
+https://docs.pytorch.org/docs/stable/index.html
+
+https://gymnasium.farama.org/
+
+https://d2l.ai/chapter_convolutional-neural-networks/
+
+https://www.tensorflow.org/tutorials/images/cnn
+
+https://coe379l-sp25.readthedocs.io/en/latest/unit03/cnn.html
+
+https://stable-baselines3.readthedocs.io/en/master/guide/custom_policy.html
 
 
 You MUST follow carla documentation:
@@ -59,3 +76,8 @@ e2e/stable-baselines3/stable_baselines3/td3/td3.py
 e2e/stable-baselines3/stable_baselines3/ddpg/ddpg.py
 
 e2e/stable-baselines3/stable_baselines3/common
+
+Docs about CNN:
+https://d2l.ai/chapter_convolutional-neural-networks/
+https://www.tensorflow.org/tutorials/images/cnn
+https://coe379l-sp25.readthedocs.io/en/latest/unit03/cnn.html

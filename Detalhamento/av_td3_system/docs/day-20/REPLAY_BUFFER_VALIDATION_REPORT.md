@@ -1,6 +1,6 @@
 # Replay Buffer Validation Report: TD3 System Analysis
-**Date:** November 20, 2025  
-**Validation Run:** 5,000-step training (run-1validation_5k_post_all_fixes_20251119_152829.log)  
+**Date:** November 20, 2025
+**Validation Run:** 5,000-step training (run-1validation_5k_post_all_fixes_20251119_152829.log)
 **Objective:** Verify replay buffer implementation correctness and usage patterns
 
 ---
@@ -79,7 +79,7 @@ class ReplayBuffer(object):
 # Lines 22-145 (same structure, with comprehensive documentation)
 class ReplayBuffer:
     """Experience replay buffer for off-policy RL algorithms."""
-    
+
     def __init__(self, state_dim: int, action_dim: int, max_size: int = int(1e6), device: str = None):
         self.max_size = max_size
         self.ptr = 0
@@ -129,41 +129,41 @@ class ReplayBuffer:
 class DictReplayBuffer:
     """
     Stores Dict observations: {'image': (4,84,84), 'vector': (53,)} instead of flattened states.
-    
+
     CRITICAL BENEFIT: Enables gradient flow through CNN during TD3 training.
     - Standard buffer: Stores CNN features (512-dim) → NO gradient to CNN
     - Dict buffer: Stores raw images (4×84×84) → FULL gradient to CNN
     """
-    
+
     def __init__(self, image_shape=(4, 84, 84), vector_dim=53, action_dim=2, max_size=int(1e6)):
         # Separate storage for images and vectors
         self.images = np.zeros((max_size, *image_shape), dtype=np.float32)       # (N, 4, 84, 84)
         self.next_images = np.zeros((max_size, *image_shape), dtype=np.float32)
-        
+
         self.vectors = np.zeros((max_size, vector_dim), dtype=np.float32)       # (N, 53)
         self.next_vectors = np.zeros((max_size, vector_dim), dtype=np.float32)
-        
+
         self.actions = np.zeros((max_size, action_dim), dtype=np.float32)
         self.rewards = np.zeros((max_size, 1), dtype=np.float32)
         self.not_dones = np.zeros((max_size, 1), dtype=np.float32)  # ✅ Same as standard buffer
-    
+
     def sample(self, batch_size):
         ind = np.random.randint(0, self.size, size=batch_size)  # ✅ Uniform random (same as original)
-        
+
         obs_dict = {
             'image': torch.FloatTensor(self.images[ind]).to(self.device),    # ✅ RAW images (not features!)
             'vector': torch.FloatTensor(self.vectors[ind]).to(self.device)
         }
-        
+
         next_obs_dict = {
             'image': torch.FloatTensor(self.next_images[ind]).to(self.device),
             'vector': torch.FloatTensor(self.next_vectors[ind]).to(self.device)
         }
-        
+
         actions = torch.FloatTensor(self.actions[ind]).to(self.device)
         rewards = torch.FloatTensor(self.rewards[ind]).to(self.device)
         not_dones = torch.FloatTensor(self.not_dones[ind]).to(self.device)  # ✅ For Bellman update
-        
+
         return obs_dict, actions, next_obs_dict, rewards, not_dones
 ```
 
@@ -381,30 +381,30 @@ From **Perot et al. (2017) - Race Driving** (#file:End-to-End Race Driving with 
 def sample(self, batch_size: int):
     """
     Sample a random mini-batch from the buffer.
-    
+
     Sampling is uniform random to break temporal correlations in the data.
     """
     if batch_size > self.size:
         raise ValueError(f"Cannot sample {batch_size} transitions from buffer with {self.size} transitions")
-    
+
     # Sample random indices (CRITICAL: Uniform distribution!)
     ind = np.random.randint(0, self.size, size=batch_size)  # ✅ Same as original TD3
-    
+
     # Convert to torch tensors and move to device
     obs_dict = {
         'image': torch.FloatTensor(self.images[ind]).to(self.device),    # (256, 4, 84, 84)
         'vector': torch.FloatTensor(self.vectors[ind]).to(self.device)   # (256, 53)
     }
-    
+
     next_obs_dict = {
         'image': torch.FloatTensor(self.next_images[ind]).to(self.device),  # (256, 4, 84, 84)
         'vector': torch.FloatTensor(self.next_vectors[ind]).to(self.device) # (256, 53)
     }
-    
+
     actions = torch.FloatTensor(self.actions[ind]).to(self.device)       # (256, 2)
     rewards = torch.FloatTensor(self.rewards[ind]).to(self.device)       # (256, 1)
     not_dones = torch.FloatTensor(self.not_dones[ind]).to(self.device)   # (256, 1)
-    
+
     return obs_dict, actions, next_obs_dict, rewards, not_dones
 ```
 
@@ -430,16 +430,16 @@ if t > start_timesteps:  # ✅ t=1,001 onwards (start_timesteps=1,000)
         print(f"[PHASE TRANSITION] Starting LEARNING phase at step {t:,}")
         print(f"[PHASE TRANSITION] Replay buffer size: {len(self.agent.replay_buffer):,}")
         first_training_logged = True
-    
+
     # ✅ CRITICAL: Sample batch and train networks
     metrics = self.agent.train(batch_size=batch_size)  # batch_size=256
-    
+
     # Log training metrics every 100 steps
     if t % 100 == 0:
         self.writer.add_scalar('train/critic_loss', metrics['critic_loss'], t)
         self.writer.add_scalar('train/q1_value', metrics['q1_value'], t)
         self.writer.add_scalar('train/q2_value', metrics['q2_value'], t)
-        
+
         if 'actor_loss' in metrics:  # Actor updated only on delayed steps
             self.writer.add_scalar('train/actor_loss', metrics['actor_loss'], t)
 ```
@@ -449,7 +449,7 @@ if t > start_timesteps:  # ✅ t=1,001 onwards (start_timesteps=1,000)
 def train(self, batch_size: Optional[int] = None) -> Dict[str, float]:
     """
     Perform one training step on the agent networks.
-    
+
     Samples a random batch from replay buffer and updates:
     1. Both Critic networks (every step)
     2. Actor network (delayed: every policy_freq steps)
@@ -457,18 +457,18 @@ def train(self, batch_size: Optional[int] = None) -> Dict[str, float]:
     """
     if batch_size is None:
         batch_size = self.batch_size
-    
+
     if self.use_dict_obs:
         # ✅ Sample batch from DictReplayBuffer
         obs_dict, action, next_obs_dict, reward, not_done = self.replay_buffer.sample(batch_size)
-        
+
         # Extract features from Dict observations (enables gradient flow through CNN)
         state = self.extract_features(obs_dict, mode='critic', requires_grad=False)
         next_state = self.extract_features(next_obs_dict, mode='critic', requires_grad=False)
     else:
         # Standard buffer (flattened states)
         state, action, next_state, reward, not_done = self.replay_buffer.sample(batch_size)
-    
+
     # ... TD3 training logic (clipped double-Q, delayed updates, target smoothing)
 ```
 
@@ -800,6 +800,6 @@ The replay buffer implementation is **architecturally sound** and follows best p
 
 ---
 
-**Report Generated:** November 20, 2025  
-**Validation Engineer:** GitHub Copilot (AI Assistant)  
+**Report Generated:** November 20, 2025
+**Validation Engineer:** GitHub Copilot (AI Assistant)
 **System Version:** TD3 AV System v2.0 (Python 3.10)

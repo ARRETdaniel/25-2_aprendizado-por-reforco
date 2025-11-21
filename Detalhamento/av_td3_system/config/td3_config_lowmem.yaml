@@ -89,13 +89,13 @@ action:
   scale_steering: 1.0
   scale_throttle_brake: 1.0
 
-# Reward function configuration (unchanged)
+# Reward function configuration (FIXED: safety weight sign)
 reward:
   weights:
     efficiency: 1.0
     lane_keeping: 2.0
     comfort: 0.5
-    safety: -100.0
+    safety: 1.0  # FIXED from -100.0: Penalties are already negative values!
 
   efficiency:
     target_speed: 10.0

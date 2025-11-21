@@ -39,10 +39,10 @@ reward:
   # FIXED: Weights must match validated reward fixes (FIXES_COMPLETED.md)
   weights:
     efficiency: 1.0      # Base weight (forward velocity reward, Fix #1)
-    lane_keeping: 2.0    # Lane centering
-    comfort: 0.5         # Smooth driving
+    lane_keeping: 5.0    # Lane centering
+    comfort: 0         # Smooth driving
     safety: 1.0          # 🔧 CRITICAL FIX: 1.0 weight (penalties are already negative!)
-    progress: 2.0        # Strong incentive for forward progress (with Fix #3: 10x distance_scale)
+    progress: 1.0        # Strong incentive for forward progress (with Fix #3: 10x distance_scale)
 
   # Efficiency reward parameters (target speed tracking)
   efficiency:
@@ -108,8 +108,8 @@ reward:
   # Rationale: Strong progress signal encourages forward movement and efficient
   # navigation while still respecting safety constraints via PBRS proximity guidance.
   progress:
-    waypoint_bonus: 10.0         # Bonus for reaching waypoints
-    distance_scale: 50.0         # 🔧 FIXED: 50.0 (was 1.0, originally 0.1) - 50x signal
+    waypoint_bonus: 5.0         # Bonus for reaching waypoints
+    distance_scale: 10.0         # 🔧 FIXED: 50.0 (was 1.0, originally 0.1) - 50x signal
     goal_reached_bonus: 100.0    # Bonus for reaching final goal
 
   # 🔧 NEW: PBRS (Potential-Based Reward Shaping) parameter (Medium Priority Fix #6)

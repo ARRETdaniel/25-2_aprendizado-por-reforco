@@ -644,7 +644,13 @@ class CARLANavigationEnv(Env):
 
         # Get progress metrics for reward calculation
         vehicle_location = self.vehicle.get_location()
-        distance_to_goal = self.waypoint_manager.get_distance_to_goal(vehicle_location)
+
+        # FIX #2: Use ROUTE DISTANCE instead of Euclidean to prevent off-road shortcuts
+        # Changed from: get_distance_to_goal() (Euclidean, rewards diagonal shortcuts)
+        # Changed to: get_route_distance_to_goal() (route-following, prevents shortcuts)
+        # Reference: #file:DIAGNOSIS_RIGHT_TURN_BIAS.md, #file:SYSTEMATIC_FIX_ANALYSIS.md
+        distance_to_goal = self.waypoint_manager.get_route_distance_to_goal(vehicle_location)
+
         waypoint_reached = self.waypoint_manager.check_waypoint_reached()
         goal_reached = self.waypoint_manager.check_goal_reached(vehicle_location)
 

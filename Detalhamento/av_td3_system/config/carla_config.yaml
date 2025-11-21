@@ -234,10 +234,10 @@ episode:
 reward:
   # Component weights (must match RewardCalculator expected structure)
   weights:
-    efficiency: 3.0      # INCREASED from 1.0 to strongly encourage movement
-    lane_keeping: 1.0   # REDUCED from 2.0 to balance with efficiency
-    comfort: 0.5
-    safety: -100.0
+    efficiency: 1.0      # INCREASED from 1.0 to strongly encourage movement
+    lane_keeping: 5.0   # REDUCED from 2.0 to balance with efficiency
+    comfort: 0
+    safety: 1.0  # FIXED from -100.0: Penalties are already negative, positive weight needed!
 
   # Efficiency reward parameters (target speed tracking)
   efficiency:
@@ -259,7 +259,16 @@ reward:
   safety:
     collision_penalty: -200.0  # Large negative reward
     off_road_penalty: -100.0
-    invasion_penalty: -10.0   # Lane invasion penalty
+
+    # FIX #3: Increased lane invasion penalty from -10.0 to -50.0
+    # Reference: CARLA research best practices (#file:SYSTEMATIC_FIX_ANALYSIS.md)
+    # Common values:
+    # - Conservative: -10.0 (old value, too weak)
+    # - Moderate: -50.0 (recommended for highway scenarios) ← NEW VALUE
+    # - Strict: -100.0 (dense urban traffic)
+    # Rationale: With Fix #2 (route distance), off-road becomes unprofitable
+    # even with -10.0 penalty. This is insurance against edge cases.
+    lane_invasion_penalty: -50.0  # INCREASED from -10.0
 
   # Time penalty (encourage efficiency)
   time_penalty: -0.01  # Small negative per step

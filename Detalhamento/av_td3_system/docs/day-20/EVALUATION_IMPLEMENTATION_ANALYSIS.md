@@ -1,7 +1,7 @@
 # TD3 Evaluation Implementation Analysis
 
-**Date**: November 20, 2025  
-**Author**: Daniel Terra & GitHub Copilot  
+**Date**: November 20, 2025
+**Author**: Daniel Terra & GitHub Copilot
 **Purpose**: Comprehensive analysis of evaluation implementation in our TD3 system
 
 ---
@@ -44,20 +44,20 @@
 
 **Evaluation** is a critical component of DRL training that serves to:
 
-1. **Monitor True Policy Performance**  
+1. **Monitor True Policy Performance**
    - During training, actions include exploration noise (Gaussian noise added to actor output)
    - Evaluation runs episodes **without exploration noise** (deterministic actions)
    - This shows the **true performance** of the learned policy, not the noisy exploratory behavior
 
-2. **Track Learning Progress**  
+2. **Track Learning Progress**
    - Evaluation metrics (reward, success rate, collisions) should **improve over time** as the agent learns
    - If metrics don't improve or regress, this indicates training issues (e.g., overfitting, reward hacking)
 
-3. **Prevent Overfitting**  
+3. **Prevent Overfitting**
    - Use a **separate evaluation environment** (different seed, potentially different NPC behaviors)
    - Ensures the policy generalizes beyond the specific training episodes
 
-4. **Enable Early Stopping**  
+4. **Enable Early Stopping**
    - Stop training when evaluation performance plateaus or reaches a target threshold
    - Saves compute time and prevents degradation from over-training
 
@@ -78,11 +78,11 @@
 > "We evaluate the policy without exploration noise every 5,000 timesteps..."
 
 **OpenAI Spinning Up**:
-> "At test time, to see how well the policy exploits what it has learned, we do not add noise to the actions."  
+> "At test time, to see how well the policy exploits what it has learned, we do not add noise to the actions."
 > - Parameter: `num_test_episodes=10` (default)
 
 **Stable-Baselines3 EvalCallback**:
-> "Evaluate periodically the performance of an agent, using a **separate test environment**. It will save the best model if `best_model_save_path` folder is specified."  
+> "Evaluate periodically the performance of an agent, using a **separate test environment**. It will save the best model if `best_model_save_path` folder is specified."
 > - Parameters: `eval_freq=10000`, `n_eval_episodes=5`, `deterministic=True`
 
 ---
@@ -124,7 +124,7 @@ evaluations = [eval_policy(policy, args.env, args.seed)]
 
 for t in range(int(args.max_timesteps)):
 	# ... training code ...
-	
+
 	# Evaluate episode (DEFAULT: every 5000 steps)
 	if (t + 1) % args.eval_freq == 0:
 		evaluations.append(eval_policy(policy, args.env, args.seed))
@@ -277,14 +277,14 @@ if t % self.eval_freq == 0:  # ⚠️ NOTE: No +1 (differs from original TD3)
 
 **⚠️ MINOR DIFFERENCE from Original TD3:**
 
-- **Original**: `if (t + 1) % eval_freq == 0:`  
+- **Original**: `if (t + 1) % eval_freq == 0:`
   → Evaluates at: 5000, 10000, 15000, ...
-- **Ours**: `if t % eval_freq == 0:`  
+- **Ours**: `if t % eval_freq == 0:`
   → Evaluates at: **0**, 5000, 10000, ... (includes initial untrained evaluation)
 
 **Impact**: Our approach evaluates the **untrained** policy at step 0, providing a baseline. Original TD3 evaluates before training starts (`evaluations = [eval_policy(...)]` before loop), then at 5000, 10000, etc.
 
-**Which is Better?**  
+**Which is Better?**
 Both are valid. Our approach is **slightly better** for tracking because:
 - Initial eval at `t=0` captures untrained baseline
 - Consistent interval (every 5000 steps: 0, 5000, 10000, ...)
@@ -521,7 +521,7 @@ self.writer.add_scalar('eval/mean_reward', eval_metrics['mean_reward'], 0)
 # In training loop
 for t in range(1, max_timesteps + 1):  # Start from 1
 	# ... training code ...
-	
+
 	if t % self.eval_freq == 0:  # Now evaluates at 5K, 10K, ..., 1M
 		eval_metrics = self.evaluate()
 		# ... log metrics ...
@@ -556,7 +556,7 @@ self.writer.add_scalar('eval/mean_reward', eval_metrics['mean_reward'], 0)
 # INSIDE training loop
 for t in range(1, self.max_timesteps + 1):  # Start from 1, include max_timesteps
 	# ... training code ...
-	
+
 	if t % self.eval_freq == 0:  # Evaluates at 5K, 10K, ..., 1M
 		print(f"\n[EVAL] Evaluation at timestep {t:,}...")
 		eval_metrics = self.evaluate()
@@ -580,14 +580,14 @@ class TD3TrainingPipeline:
 		# ... existing code ...
 		self.best_eval_reward = -float('inf')
 		self.best_model_path = None
-	
+
 	def train(self):
 		for t in range(self.max_timesteps):
 			# ... training code ...
-			
+
 			if (t + 1) % self.eval_freq == 0:
 				eval_metrics = self.evaluate()
-				
+
 				# Save best model
 				if eval_metrics['mean_reward'] > self.best_eval_reward:
 					self.best_eval_reward = eval_metrics['mean_reward']
@@ -606,7 +606,7 @@ def train(self):
 	print(f"\n[EVAL] Initial evaluation (untrained policy)...")
 	eval_metrics = self.evaluate()
 	self._log_eval_metrics(eval_metrics, timestep=0)
-	
+
 	for t in range(self.max_timesteps):
 		# ... training code ...
 ```
@@ -651,16 +651,16 @@ print(f"  eval/success_rate = {eval_metrics['success_rate']:.2f} at step {t}")
 
 ### Answer to User's Questions
 
-**Q1: "What is EVAL used for?"**  
+**Q1: "What is EVAL used for?"**
 A: Evaluation measures **true policy performance** (without exploration noise) periodically during training. It tracks learning progress, prevents overfitting (separate env), and enables early stopping. Critical for monitoring reward, success rate, and safety metrics in AV applications.
 
-**Q2: "Is EVAL correctly implemented?"**  
+**Q2: "Is EVAL correctly implemented?"**
 A: **YES** ✅. Our implementation matches/exceeds TD3 paper, OpenAI Spinning Up, and Stable-Baselines3 patterns. We log more metrics (collisions, lane invasions) than original TD3, which is essential for autonomous driving safety validation.
 
-**Q3: "Why aren't EVAL metrics changing in TensorBoard?"**  
+**Q3: "Why aren't EVAL metrics changing in TensorBoard?"**
 A: Because only **ONE evaluation** occurred (at step 3,001 in Day-18 Run-3). TensorBoard cannot show "change" with a single data point. In the Day-19 Run-1 that user was analyzing, **ZERO evaluations** ran because the run terminated before `eval_freq=5000` was reached.
 
-**Q4: "Can we proceed to 1M training?"**  
+**Q4: "Can we proceed to 1M training?"**
 A: **YES** ✅. Evaluation is working correctly. During 1M training with `eval_freq=5000`, you will see **200 evaluation points** (0, 5K, 10K, ..., 1M), providing rich learning curves in TensorBoard. Minor bug fix recommended (change `t %` to `(t+1) %`) but not blocking.
 
 ### Next Steps
@@ -701,6 +701,6 @@ A: **YES** ✅. Evaluation is working correctly. During 1M training with `eval_f
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: November 20, 2025  
+**Document Version**: 1.0
+**Last Updated**: November 20, 2025
 **Status**: COMPLETE - Ready for implementation of recommendations

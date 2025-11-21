@@ -292,6 +292,12 @@ class TD3Agent:
         # Logger already initialized earlier (line 176)
         # Removed duplicate: self.logger = logging.getLogger(__name__)
 
+        # ✅ LOGGING FIX: Action statistics tracking for monitoring control commands
+        # Track recent actions to compute mean/std/min/max for steering and throttle
+        # Helps validate exploration noise, detect biases, and debug control generation
+        self.action_buffer = []  # Rolling buffer of recent actions
+        self.action_buffer_size = 100  # Track last 100 actions (negligible memory: 1.6KB)
+
         print(f"TD3Agent initialized with:")
         print(f"  State dim: {state_dim}, Action dim: {action_dim}")
         print(f"  Actor hidden size: {network_config.get('hidden_sizes', network_config.get('hidden_layers', [256, 256]))}")
@@ -300,6 +306,7 @@ class TD3Agent:
         print(f"  Policy freq: {self.policy_freq}, Policy noise: {self.policy_noise}")
         print(f"  Exploration noise: {self.expl_noise}")
         print(f"  Buffer size: {self.buffer_size}, Batch size: {self.batch_size}")
+        print(f"  Action statistics tracking: enabled (buffer size: {self.action_buffer_size})")
 
     def select_action(
         self,
@@ -363,6 +370,12 @@ class TD3Agent:
             action = action + noise_sample
             # Clip to valid action range
             action = np.clip(action, -self.max_action, self.max_action)
+
+        # ✅ LOGGING FIX: Track action for statistics (before returning)
+        # Enables monitoring of control command distribution via get_action_stats()
+        self.action_buffer.append(action.copy())
+        if len(self.action_buffer) > self.action_buffer_size:
+            self.action_buffer.pop(0)  # Remove oldest action (FIFO)
 
         return action
 
@@ -785,21 +798,29 @@ class TD3Agent:
         # Add gradient norms to metrics for TensorBoard tracking
         # These metrics enable real-time monitoring of gradient explosion
 
-        # 🔧 CRITICAL FIX (Nov 20, 2025): Add AFTER-clipping CNN gradient norms to metrics
+        # 🔧 CRITICAL FIX (Nov 21, 2025): Add AFTER-clipping CNN gradient norms to metrics
         # These verify gradient clipping is working correctly
         # Expected: AFTER values should be ≤ max_norm (10.0 for critic CNN)
+        # FIXED: Use PyTorch's clip_grad_norm_ to calculate (not clip) the TRUE global L2 norm
+        # Reference: https://pytorch.org/docs/stable/generated/torch.nn.utils.clip_grad_norm_.html
+        # This matches exactly what the clipping function sees (norm of stacked norms, not sum of norms)
         if self.critic_cnn is not None:
-            critic_cnn_grad_norm = sum(
-                p.grad.norm().item() for p in self.critic_cnn.parameters() if p.grad is not None
-            )
+            critic_cnn_grad_norm = torch.nn.utils.clip_grad_norm_(
+                self.critic_cnn.parameters(),
+                max_norm=float('inf'),  # Don't clip, just calculate global L2 norm
+                norm_type=2.0
+            ).item()
             metrics['critic_cnn_grad_norm'] = critic_cnn_grad_norm
             # ADD: After-clipping CNN gradient norm for validation
             metrics['debug/critic_cnn_grad_norm_AFTER_clip'] = critic_cnn_grad_norm
 
         # Critic MLP gradients (for comparison)
-        critic_mlp_grad_norm = sum(
-            p.grad.norm().item() for p in self.critic.parameters() if p.grad is not None
-        )
+        # FIXED: Use PyTorch's clip_grad_norm_ to calculate the TRUE global L2 norm
+        critic_mlp_grad_norm = torch.nn.utils.clip_grad_norm_(
+            self.critic.parameters(),
+            max_norm=float('inf'),  # Don't clip, just calculate global L2 norm
+            norm_type=2.0
+        ).item()
         metrics['critic_mlp_grad_norm'] = critic_mlp_grad_norm
         # ADD: After-clipping MLP gradient norm for validation
         metrics['debug/critic_mlp_grad_norm_AFTER_clip'] = critic_mlp_grad_norm
@@ -927,27 +948,34 @@ class TD3Agent:
             # ===== GRADIENT EXPLOSION MONITORING (Solution A Validation) =====
             # Add actor gradient norms to metrics for TensorBoard tracking
             # CRITICAL: Actor CNN gradients are the primary concern (7.4M explosion in Run #2)
-            # 🔧 CRITICAL FIX (Nov 20, 2025): Add BEFORE/AFTER clipping metrics
+            # 🔧 CRITICAL FIX (Nov 21, 2025): Add BEFORE/AFTER clipping metrics
             # These verify gradient clipping is working correctly
             # Expected: AFTER values should be ≤ max_norm (1.0 for actor)
-            # Reference: IMMEDIATE_ACTION_PLAN.md Task 1, CNN_END_TO_END_TRAINING_ANALYSIS.md Part 4
+            # FIXED: Use PyTorch's clip_grad_norm_ to calculate the TRUE global L2 norm
+            # Reference: GRADIENT_CLIPPING_FIX_IMPLEMENTATION.md, PyTorch docs
             metrics['debug/actor_grad_norm_BEFORE_clip'] = actor_grad_norm_before
             metrics['debug/actor_grad_norm_AFTER_clip'] = actor_grad_norm_after
             metrics['debug/actor_grad_clip_ratio'] = actor_grad_norm_after / max(actor_grad_norm_before, 1e-8)
 
             # ADD: Actor CNN and MLP specific AFTER-clipping metrics
+            # FIXED: Use PyTorch's clip_grad_norm_ to calculate (not clip) the TRUE global L2 norm
             if self.actor_cnn is not None:
-                actor_cnn_grad_norm = sum(
-                    p.grad.norm().item() for p in self.actor_cnn.parameters() if p.grad is not None
-                )
+                actor_cnn_grad_norm = torch.nn.utils.clip_grad_norm_(
+                    self.actor_cnn.parameters(),
+                    max_norm=float('inf'),  # Don't clip, just calculate global L2 norm
+                    norm_type=2.0
+                ).item()
                 metrics['actor_cnn_grad_norm'] = actor_cnn_grad_norm
                 # ADD: After-clipping CNN gradient norm for validation
                 metrics['debug/actor_cnn_grad_norm_AFTER_clip'] = actor_cnn_grad_norm
 
             # Actor MLP gradients (for comparison)
-            actor_mlp_grad_norm = sum(
-                p.grad.norm().item() for p in self.actor.parameters() if p.grad is not None
-            )
+            # FIXED: Use PyTorch's clip_grad_norm_ to calculate the TRUE global L2 norm
+            actor_mlp_grad_norm = torch.nn.utils.clip_grad_norm_(
+                self.actor.parameters(),
+                max_norm=float('inf'),  # Don't clip, just calculate global L2 norm
+                norm_type=2.0
+            ).item()
             metrics['actor_mlp_grad_norm'] = actor_mlp_grad_norm
             # ADD: After-clipping MLP gradient norm for validation
             metrics['debug/actor_mlp_grad_norm_AFTER_clip'] = actor_mlp_grad_norm
@@ -1252,6 +1280,66 @@ class TD3Agent:
             })
 
         return stats
+
+    def get_action_stats(self) -> Dict[str, float]:
+        """
+        Get statistics of recent actions for monitoring control commands.
+
+        Returns dictionary with steering and throttle statistics (mean/std/min/max).
+        Useful for validating exploration noise, detecting biases, and debugging
+        control command generation.
+
+        Returns:
+            Dictionary with:
+            - action_steering_mean: Mean steering command [-1, 1]
+            - action_steering_std: Std dev of steering (exploration indicator)
+            - action_steering_min: Minimum steering (should be near -1)
+            - action_steering_max: Maximum steering (should be near +1)
+            - action_throttle_mean: Mean throttle/brake command
+            - action_throttle_std: Std dev of throttle
+            - action_throttle_min: Minimum throttle (brake)
+            - action_throttle_max: Maximum throttle (acceleration)
+
+        Example usage:
+            ```python
+            stats = agent.get_action_stats()
+            print(f"Steering: {stats['action_steering_mean']:.3f} ± {stats['action_steering_std']:.3f}")
+            print(f"Throttle: {stats['action_throttle_mean']:.3f} ± {stats['action_throttle_std']:.3f}")
+            ```
+
+        Expected values during training:
+            - Steering mean: ~0.0 (no left/right bias)
+            - Steering std: 0.1-0.3 (exploration present)
+            - Throttle mean: 0.0-0.5 (forward bias expected)
+            - Throttle std: 0.1-0.3 (exploration present)
+        """
+        if len(self.action_buffer) == 0:
+            return {
+                'action_steering_mean': 0.0,
+                'action_steering_std': 0.0,
+                'action_steering_min': 0.0,
+                'action_steering_max': 0.0,
+                'action_throttle_mean': 0.0,
+                'action_throttle_std': 0.0,
+                'action_throttle_min': 0.0,
+                'action_throttle_max': 0.0,
+            }
+
+        actions = np.array(self.action_buffer)  # Shape: (N, 2)
+
+        return {
+            # Steering statistics (action[:, 0])
+            'action_steering_mean': float(actions[:, 0].mean()),
+            'action_steering_std': float(actions[:, 0].std()),
+            'action_steering_min': float(actions[:, 0].min()),
+            'action_steering_max': float(actions[:, 0].max()),
+
+            # Throttle/brake statistics (action[:, 1])
+            'action_throttle_mean': float(actions[:, 1].mean()),
+            'action_throttle_std': float(actions[:, 1].std()),
+            'action_throttle_min': float(actions[:, 1].min()),
+            'action_throttle_max': float(actions[:, 1].max()),
+        }
 
     def _get_param_stat(self, parameters, stat_type: str = 'mean') -> float:
         """

@@ -1,7 +1,7 @@
 # 🔍 ROOT CAUSE ANALYSIS: Q-Value Overestimation at 5K Steps
 
-**Date**: November 19, 2025  
-**Analysis Type**: Literature-Validated Root Cause Investigation  
+**Date**: November 19, 2025
+**Analysis Type**: Literature-Validated Root Cause Investigation
 **Status**: ✅ **ROOT CAUSE IDENTIFIED - HYPERPARAMETER MISMATCH**
 
 ---
@@ -288,7 +288,7 @@ Based on the evidence, the following hyperparameter changes are **MANDATORY**:
 1. **Episode Length Match**:
    ```
    Effective horizon = 1 / (1 - γ)
-   
+
    Current: 1 / (1 - 0.99) = 100 steps (10× longer than our episodes!)
    Proposed: 1 / (1 - 0.9) = 10 steps (matches our episode length!)
    ```
@@ -525,6 +525,6 @@ The Q-value explosion observed at 5,000 training steps is **NOT a bug in the TD3
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: November 19, 2025  
+**Document Version**: 1.0
+**Last Updated**: November 19, 2025
 **Author**: Analysis based on TensorBoard logs, official TD3 documentation, and related literature

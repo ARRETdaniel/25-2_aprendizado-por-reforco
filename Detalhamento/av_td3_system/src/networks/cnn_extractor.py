@@ -42,16 +42,29 @@ class NatureCNN(nn.Module):
     Architecture:
         Input:   (batch, 4, 84, 84) - 4 stacked grayscale frames, normalized to [-1, 1]
         Conv1:   (batch, 32, 20, 20) - 32 filters, 8×8 kernel, stride 4
+        LN1:     (batch, 32, 20, 20) - Layer normalization
         Conv2:   (batch, 64, 9, 9)   - 64 filters, 4×4 kernel, stride 2
+        LN2:     (batch, 64, 9, 9)   - Layer normalization
         Conv3:   (batch, 64, 7, 7)   - 64 filters, 3×3 kernel, stride 1
+        LN3:     (batch, 64, 7, 7)   - Layer normalization
         Flatten: (batch, 3136)       - 64 × 7 × 7 = 3136 features
         FC:      (batch, 512)        - Fully connected layer
+        LN4:     (batch, 512)        - Layer normalization
         Output:  512-dimensional feature vector for actor/critic networks
 
     Normalization Strategy:
         Input frames are zero-centered [-1, 1] following modern deep learning best practices.
         Leaky ReLU (negative_slope=0.01) is used instead of standard ReLU to preserve
         negative information and prevent "dying ReLU" problem, ensuring stable gradient flow.
+
+        LayerNorm is applied after each convolutional and FC layer (BEFORE activation):
+        - Prevents feature explosion (observed without: L2 norm = 7.36×10¹², expected: 10-100)
+        - Independent of batch size (critical for RL with variable-size replay buffers)
+        - Same statistics in train/eval mode (deterministic, no batch dependency)
+        - Normalizes over [C, H, W] for conv layers: y = (x - E[x]) / sqrt(Var[x] + eps)
+
+        Reference: Ba et al. (2016), "Layer Normalization" - https://arxiv.org/abs/1607.06450
+        PyTorch API: https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html
 
     References:
         - Mnih et al. (2015): "Human-level control through deep reinforcement learning," Nature
@@ -125,6 +138,20 @@ class NatureCNN(nn.Module):
             padding=0,
         )
 
+        # LayerNorm layers for feature stabilization
+        # Following PyTorch official documentation for image normalization:
+        # https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html
+        # For images: nn.LayerNorm([C, H, W]) normalizes over channel + spatial dimensions
+        #
+        # Reference: Ba et al. (2016), "Layer Normalization" - https://arxiv.org/abs/1607.06450
+        # Advantages for RL:
+        #   - Independent of batch size (stable with replay buffer)
+        #   - Same statistics in train/eval mode (deterministic)
+        #   - Prevents feature explosion (observed: 7.36×10¹² → expected: 10-100)
+        self.ln1 = nn.LayerNorm([32, 20, 20])  # After Conv1: (B, 32, 20, 20)
+        self.ln2 = nn.LayerNorm([64, 9, 9])    # After Conv2: (B, 64, 9, 9)
+        self.ln3 = nn.LayerNorm([64, 7, 7])    # After Conv3: (B, 64, 7, 7)
+
         # Activation: Leaky ReLU preserves negative values from zero-centered normalization
         # Standard ReLU would kill ~50% of pixels, severely limiting feature capacity
         # Reference: Maas et al. (2013), "Rectifier Nonlinearities Improve Neural Network Acoustic Models"
@@ -135,6 +162,9 @@ class NatureCNN(nn.Module):
 
         # Fully connected layer: Project spatial features to fixed-size representation
         self.fc = nn.Linear(self.flat_size, feature_dim)
+
+        # LayerNorm for FC layer output
+        self.ln4 = nn.LayerNorm(feature_dim)  # After FC: (B, 512)
 
         # Initialize weights for stable training
         self._initialize_weights()
@@ -235,52 +265,69 @@ class NatureCNN(nn.Module):
                 f"   Has Inf: {torch.isinf(x).any().item()}"
             )
 
-        # Convolutional layers with Leaky ReLU activations
+        # Convolutional layers with LayerNorm and Leaky ReLU activations
+        # Architecture: Conv → LayerNorm → Activation
+        # LayerNorm prevents feature explosion (7.36×10¹² → 10-100)
         # Preserves negative values from zero-centered normalization
-        out = self.activation(self.conv1(x))   # (batch, 32, 20, 20)
 
-        # DEBUG: Log after conv1 every 100 forward passes
+        # Layer 1: Low-level features (edges, textures)
+        out = self.conv1(x)        # (batch, 32, 20, 20)
+        out = self.ln1(out)        # Normalize to prevent explosion
+        out = self.activation(out) # Leaky ReLU
+
+        # DEBUG: Log after conv1+ln1 every 100 forward passes
         # OPTIMIZATION: Throttled to reduce logging overhead (was every forward pass)
         if self.logger.isEnabledFor(logging.DEBUG) and should_log:
             self.logger.debug(
-                f"   CNN LAYER 1 (Conv 32×8×8, stride=4):\n"
+                f"   CNN LAYER 1 (Conv 32×8×8, stride=4 + LayerNorm):\n"
                 f"   Output shape: {out.shape}\n"
                 f"   Range: [{out.min().item():.3f}, {out.max().item():.3f}]\n"
                 f"   Mean: {out.mean().item():.3f}, Std: {out.std().item():.3f}\n"
+                f"   L2 Norm: {torch.norm(out).item():.3f}\n"
                 f"   Active neurons: {(out > 0).float().mean().item()*100:.1f}%"
             )
 
-        out = self.activation(self.conv2(out))  # (batch, 64, 9, 9)
+        # Layer 2: Mid-level features
+        out = self.conv2(out)      # (batch, 64, 9, 9)
+        out = self.ln2(out)        # Normalize to prevent explosion
+        out = self.activation(out) # Leaky ReLU
 
-        # DEBUG: Log after conv2 every 100 forward passes
+        # DEBUG: Log after conv2+ln2 every 100 forward passes
         # OPTIMIZATION: Throttled to reduce logging overhead (was every forward pass)
         if self.logger.isEnabledFor(logging.DEBUG) and should_log:
             self.logger.debug(
-                f"   CNN LAYER 2 (Conv 64×4×4, stride=2):\n"
+                f"   CNN LAYER 2 (Conv 64×4×4, stride=2 + LayerNorm):\n"
                 f"   Output shape: {out.shape}\n"
                 f"   Range: [{out.min().item():.3f}, {out.max().item():.3f}]\n"
                 f"   Mean: {out.mean().item():.3f}, Std: {out.std().item():.3f}\n"
+                f"   L2 Norm: {torch.norm(out).item():.3f}\n"
                 f"   Active neurons: {(out > 0).float().mean().item()*100:.1f}%"
             )
 
-        out = self.activation(self.conv3(out))  # (batch, 64, 7, 7)
+        # Layer 3: High-level semantic features
+        out = self.conv3(out)      # (batch, 64, 7, 7)
+        out = self.ln3(out)        # Normalize to prevent explosion
+        out = self.activation(out) # Leaky ReLU
 
-        # DEBUG: Log after conv3 every 100 forward passes
+        # DEBUG: Log after conv3+ln3 every 100 forward passes
         # OPTIMIZATION: Throttled to reduce logging overhead (was every forward pass)
         if self.logger.isEnabledFor(logging.DEBUG) and should_log:
             self.logger.debug(
-                f"   CNN LAYER 3 (Conv 64×3×3, stride=1):\n"
+                f"   CNN LAYER 3 (Conv 64×3×3, stride=1 + LayerNorm):\n"
                 f"   Output shape: {out.shape}\n"
                 f"   Range: [{out.min().item():.3f}, {out.max().item():.3f}]\n"
                 f"   Mean: {out.mean().item():.3f}, Std: {out.std().item():.3f}\n"
+                f"   L2 Norm: {torch.norm(out).item():.3f}\n"
                 f"   Active neurons: {(out > 0).float().mean().item()*100:.1f}%"
             )
 
         # Flatten spatial dimensions
         out = out.view(out.size(0), -1)  # (batch, 3136)
 
-        # Fully connected projection to feature space
-        features = self.fc(out)  # (batch, 512)
+        # Fully connected projection to feature space with LayerNorm
+        features = self.fc(out)    # (batch, 512)
+        features = self.ln4(features)  # Normalize FC output
+        features = self.activation(features)  # Final activation
 
         # DEBUG: Log output features every 100 forward passes
         # OPTIMIZATION: Throttled to reduce logging overhead (was every forward pass)

@@ -63,7 +63,7 @@ class TD3TrainingPipeline:
         max_timesteps: int = int(1e6),
         eval_freq: int = 5000,
         checkpoint_freq: int = 10000,
-        num_eval_episodes: int = 10,
+        num_eval_episodes: int = 5, # manully decresed num of eval NOTE: we need to check baselines for reference
         carla_config_path: str = "config/carla_config.yaml",
         agent_config_path: str = "config/td3_config.yaml",
         training_config_path: str = "config/training_config.yaml",
@@ -104,6 +104,9 @@ class TD3TrainingPipeline:
         self.checkpoint_freq = checkpoint_freq
         self.num_eval_episodes = num_eval_episodes
         self.debug = debug
+
+        # Initialize logger for this class
+        self.logger = logging.getLogger(self.__class__.__name__)
 
         # Store config paths for creating eval environment
         self.carla_config_path = carla_config_path
@@ -146,14 +149,12 @@ class TD3TrainingPipeline:
             print(f"[WARNING] Invalid scenario index, will use default")
 
         # Traffic Manager port configuration
-        # Reference: EVALUATION_BUG_ANALYSIS.md - Option A (Separate TM Ports)
-        # Training and evaluation environments MUST use different TM ports
-        # to avoid "destroyed actor" errors during episode transitions
-        self.training_tm_port = 8000  # Training uses default TM port
-        self.eval_tm_port = 8050      # Evaluation uses separate TM port
-        print(f"[CONFIG] Traffic Manager ports:")
-        print(f"[CONFIG]   Training: {self.training_tm_port}")
-        print(f"[CONFIG]   Evaluation: {self.eval_tm_port}")
+        # CARLA Singleton World Architecture (per documentation):
+        # Client.get_world() returns SINGLE shared world instance.
+        # All environments MUST use the SAME TrafficManager to avoid actor lifecycle conflicts.
+        # Reference: EVAL_PHASE_SOLUTION_ANALYSIS.md - Unified Phase-Based Architecture
+        self.tm_port = 8000  # Single TM port for all phases (EXPLORATION, LEARNING, EVAL)
+        print(f"[CONFIG] Traffic Manager port: {self.tm_port} (unified for all phases)")
 
         # Initialize environment
         print(f"\n[ENVIRONMENT] Initializing CARLA environment...")
@@ -161,7 +162,7 @@ class TD3TrainingPipeline:
             carla_config_path,
             agent_config_path,
             training_config_path,  # Fixed: use training_config_path for scenarios
-            tm_port=self.training_tm_port  # Use training TM port
+            tm_port=self.tm_port  # Use unified TM port for all phases
         )
         print(f"[ENVIRONMENT] State space: {self.env.observation_space}")
         print(f"[ENVIRONMENT] Action space: {self.env.action_space}")
@@ -223,7 +224,7 @@ class TD3TrainingPipeline:
         # Without this, agent uses default start_timesteps (10k-25k) while training script
         # uses config value (2k for debugging), causing is_training flag to stay frozen at 0
         start_timesteps = self.agent_config.get('training', {}).get('learning_starts',
-                          self.agent_config.get('algorithm', {}).get('learning_starts', 2500))
+                          self.agent_config.get('algorithm', {}).get('learning_starts', 10000))
 
         self.agent = TD3Agent(
             state_dim=state_dim,  # Calculated: 565 (was hardcoded 535)
@@ -303,6 +304,10 @@ class TD3TrainingPipeline:
         self.episode_collision_count = 0
         self.episode_lane_invasion_count = 0  # P0 FIX #3: Per-episode lane invasion counter
         self.episode_steps_since_collision = 0
+
+        # EVAL phase tracking (EVAL_PHASE_SOLUTION_ANALYSIS.md)
+        # Track when we're in evaluation mode to avoid adding eval experiences to replay buffer
+        self.in_eval_phase = False
 
         # LITERATURE-VALIDATED FIX (WARNING-002): Track reward components per episode
         # Reference: Analysis shows progress dominated at 88.9%, need to track balance
@@ -660,7 +665,7 @@ class TD3TrainingPipeline:
             print(f"   Vector shape: {obs_dict['vector'].shape}")
             print(f"{'='*70}\n")
 
-        start_timesteps = self.agent_config.get('algorithm', {}).get('learning_starts', 2500)
+        start_timesteps = self.agent_config.get('algorithm', {}).get('learning_starts', 10000)
         batch_size = self.agent_config.get('algorithm', {}).get('batch_size', 256)
 
         # Phase logging
@@ -713,6 +718,29 @@ class TD3TrainingPipeline:
                 # Log exploration noise to TensorBoard (every 100 steps)
                 if t % 100 == 0:
                     self.writer.add_scalar('train/exploration_noise', current_noise, t)
+
+                    # ✅ LOGGING FIX: Log action statistics every 100 steps
+                    # Enables monitoring of control command distribution for debugging
+                    action_stats = self.agent.get_action_stats()
+                    for key, value in action_stats.items():
+                        self.writer.add_scalar(f'debug/{key}', value, t)
+
+                    # DEBUG: Print action stats to console every 1000 steps
+                    if self.logger.isEnabledFor(logging.DEBUG) and t % 1000 == 0 and t > 0:
+                        self.logger.debug(
+                            f"\n   ACTION STATISTICS (last 100 actions):\n"
+                            f"   ══════════════════════════════════════\n"
+                            f"   STEERING:\n"
+                            f"      Mean: {action_stats['action_steering_mean']:+.3f}  (expect ~0.0, no bias)\n"
+                            f"      Std:  {action_stats['action_steering_std']:.3f}   (expect 0.1-0.3, exploration)\n"
+                            f"      Range: [{action_stats['action_steering_min']:+.3f}, {action_stats['action_steering_max']:+.3f}]\n"
+                            f"   ──────────────────────────────────────\n"
+                            f"   THROTTLE/BRAKE:\n"
+                            f"      Mean: {action_stats['action_throttle_mean']:+.3f}  (expect 0.0-0.5, forward bias)\n"
+                            f"      Std:  {action_stats['action_throttle_std']:.3f}   (expect 0.1-0.3, exploration)\n"
+                            f"      Range: [{action_stats['action_throttle_min']:+.3f}, {action_stats['action_throttle_max']:+.3f}]\n"
+                            f"   ══════════════════════════════════════"
+                        )
 
                 # BUG FIX #14: Pass Dict observation directly (no flattening!)
                 # This enables gradient flow through CNN during training
@@ -1051,7 +1079,7 @@ class TD3TrainingPipeline:
 
                 # ===== LOG AGENT STATISTICS EVERY 1000 STEPS (RECOMMENDATION 4) =====
                 # Following Stable-Baselines3 and OpenAI Spinning Up best practices
-                if t % 100 == 0:
+                if t % 10 == 0:
                     agent_stats = self.agent.get_stats()
 
                     # Training progress
@@ -1102,7 +1130,7 @@ class TD3TrainingPipeline:
                         print(f"{'='*70}\n")
 
             # ALWAYS log progress every 100 steps (not just debug mode)
-            if t % 100 == 0:
+            if t % 10 == 0:
                 phase = "EXPLORATION" if t <= start_timesteps else "LEARNING"
                 vehicle_state = info.get('vehicle_state', {})
                 speed_kmh = vehicle_state.get('velocity', 0) * 3.6
@@ -1224,29 +1252,58 @@ class TD3TrainingPipeline:
                 }
 
             # Periodic evaluation
+            # UNIFIED PHASE-BASED ARCHITECTURE: EVAL is the third phase
+            # (EXPLORATION -> LEARNING -> EVAL -> LEARNING -> ...)
             if t % self.eval_freq == 0:
                 print(f"\n[EVAL] Evaluation at timestep {t:,}...")
-                eval_metrics = self.evaluate()
 
+                # Set EVAL phase flag
+                self.in_eval_phase = True
+
+                # Run evaluation (uses self.env, returns fresh obs_dict)
+                eval_metrics, obs_dict = self.evaluate()
+
+                # Clear EVAL phase flag (back to training)
+                self.in_eval_phase = False
+
+                # Log metrics to TensorBoard
                 self.writer.add_scalar('eval/mean_reward', eval_metrics['mean_reward'], t)
                 self.writer.add_scalar('eval/success_rate', eval_metrics['success_rate'], t)
                 self.writer.add_scalar('eval/avg_collisions', eval_metrics['avg_collisions'], t)
-                self.writer.add_scalar('eval/avg_lane_invasions', eval_metrics['avg_lane_invasions'], t)  # P0 FIX #3
+                self.writer.add_scalar('eval/avg_lane_invasions', eval_metrics['avg_lane_invasions'], t)
                 self.writer.add_scalar('eval/avg_episode_length', eval_metrics['avg_episode_length'], t)
 
+                # Store evaluation statistics
                 self.eval_rewards.append(eval_metrics['mean_reward'])
                 self.eval_success_rates.append(eval_metrics['success_rate'])
                 self.eval_collisions.append(eval_metrics['avg_collisions'])
-                self.eval_lane_invasions.append(eval_metrics['avg_lane_invasions'])  # P0 FIX #3
+                self.eval_lane_invasions.append(eval_metrics['avg_lane_invasions'])
 
                 print(
                     f"[EVAL] Mean Reward: {eval_metrics['mean_reward']:.2f} | "
                     f"Success Rate: {eval_metrics['success_rate']*100:.1f}% | "
                     f"Avg Collisions: {eval_metrics['avg_collisions']:.2f} | "
-                    f"Avg Lane Invasions: {eval_metrics['avg_lane_invasions']:.2f} | "  # P0 FIX #3
+                    f"Avg Lane Invasions: {eval_metrics['avg_lane_invasions']:.2f} | "
                     f"Avg Length: {eval_metrics['avg_episode_length']:.0f}"
                 )
                 print()
+
+                # CRITICAL: obs_dict is already updated by evaluate() (fresh episode)
+                # Continue training with this fresh observation
+                # Reset episode tracking for new training episode
+                done = False
+                self.episode_reward = 0
+                self.episode_timesteps = 0
+                self.episode_collision_count = 0
+                self.episode_lane_invasion_count = 0
+                self.episode_steps_since_collision = 0
+                self.episode_reward_components = {
+                    'efficiency': 0.0,
+                    'lane_keeping': 0.0,
+                    'comfort': 0.0,
+                    'safety': 0.0,
+                    'progress': 0.0
+                }
 
             # Checkpoint saving
             if t % self.checkpoint_freq == 0:
@@ -1257,57 +1314,71 @@ class TD3TrainingPipeline:
         print(f"\n[TRAINING] Training complete!")
         self.close()
 
-    def evaluate(self) -> dict:
+    def evaluate(self):
         """
         Evaluate agent on multiple episodes without exploration noise.
 
-        FIXED: Creates a separate evaluation environment with SEPARATE Traffic Manager port
-        to avoid "destroyed actor" errors during episode transitions.
+        UNIFIED PHASE-BASED ARCHITECTURE (EVAL_PHASE_SOLUTION_ANALYSIS.md):
+        - Uses TRAINING environment (self.env) - NO separate environment creation
+        - Respects CARLA singleton world architecture (no actor lifecycle conflicts)
+        - Deterministic policy (no exploration noise)
+        - Does NOT train during evaluation episodes
+        - Resets environment after EVAL for fresh training episode
 
-        Reference: EVALUATION_BUG_ANALYSIS.md - Option A (Separate TM Ports)
+        Reference:
+        - CARLA docs: Client.get_world() returns SINGLETON world instance
+        - TD3 paper: eval_policy() uses deterministic actions (no noise)
+        - EVAL_ARCHITECTURE_COMPARISON.md: Phase-based vs separate env
 
         Returns:
-            Dictionary with evaluation metrics:
-            - mean_reward: Average episode reward
-            - std_reward: Std dev of episode rewards
-            - success_rate: Fraction of successful episodes
-            - avg_collisions: Average collisions per episode
-            - avg_episode_length: Average episode length
+            tuple: (eval_metrics dict, fresh_obs_dict)
+            - eval_metrics: Dictionary with evaluation statistics
+            - fresh_obs_dict: Fresh observation after reset (for training continuation)
         """
-        # FIXED: Create separate eval environment with DIFFERENT TM port
-        # This prevents Traffic Manager registry conflicts when destroying/spawning NPCs
-        print(f"[EVAL] Creating temporary evaluation environment (TM port {self.eval_tm_port})...")
-        eval_env = CARLANavigationEnv(
-            self.carla_config_path,
-            self.agent_config_path,
-            self.training_config_path,  # Fixed: use training_config_path for scenarios
-            tm_port=self.eval_tm_port   # CRITICAL: Use separate TM port (8050)
-        )
+        print(f"\n[EVAL] Starting evaluation phase (deterministic policy, no training)...")
+
+        # CRITICAL: Validate vehicle state BEFORE evaluation
+        if hasattr(self.env, 'vehicle') and self.env.vehicle is not None:
+            vehicle_id_before_eval = self.env.vehicle.id
+            vehicle_alive_before = self.env.vehicle.is_alive
+            print(f"[EVAL] Vehicle state before evaluation:")
+            print(f"[EVAL]   ID: {vehicle_id_before_eval}")
+            print(f"[EVAL]   is_alive: {vehicle_alive_before}")
+        else:
+            print(f"[EVAL] Warning: Vehicle reference not available before evaluation")
+            vehicle_id_before_eval = None
+
+        # Save current episode count (EVAL episodes don't count as training episodes)
+        episode_num_before_eval = self.episode_num
 
         eval_rewards = []
         eval_successes = []
         eval_collisions = []
-        eval_lane_invasions = []  # P0 FIX #3: Lane invasion tracking
+        eval_lane_invasions = []
         eval_lengths = []
 
-        # FIXED: Use max_episode_steps from config, not max_timesteps (total training steps)
+        # Get max episode steps from config
         max_eval_steps = self.agent_config.get("training", {}).get("max_episode_steps", 1000)
 
         for episode in range(self.num_eval_episodes):
-            # Gymnasium v0.25+ compliance: reset() returns (observation, info) tuple
-            obs_dict, _ = eval_env.reset()  # Use eval_env, not self.env
-            # BUG FIX #14: No flattening! Pass Dict directly to select_action
+            # Reset TRAINING environment (NOT a separate eval environment)
+            # CARLA respects singleton world - this just respawns actors
+            obs_dict, reset_info = self.env.reset()
+
             episode_reward = 0
             episode_length = 0
             done = False
 
             while not done and episode_length < max_eval_steps:
-                # Deterministic action (no noise, no exploration)
+                # DETERMINISTIC action (NO exploration noise)
+                # This is the key difference between EVAL and LEARNING phases
                 action = self.agent.select_action(
-                    obs_dict,  # Dict observation
-                    deterministic=True  # Evaluation mode
+                    obs_dict,
+                    deterministic=True  # TD3 paper: evaluate with deterministic policy
                 )
-                next_obs_dict, reward, done, truncated, info = eval_env.step(action)  # Use eval_env
+
+                # Step TRAINING environment (same instance used in training loop)
+                next_obs_dict, reward, done, truncated, info = self.env.step(action)
 
                 episode_reward += reward
                 episode_length += 1
@@ -1316,28 +1387,62 @@ class TD3TrainingPipeline:
                 if truncated:
                     done = True
 
-            # Log if episode hit the safety limit
+            # Log if episode hit safety limit
             if episode_length >= max_eval_steps:
                 print(f"[EVAL] Warning: Episode {episode+1} reached max eval steps ({max_eval_steps})")
 
+            # Collect episode statistics
             eval_rewards.append(episode_reward)
             eval_successes.append(info.get('success', 0))
             eval_collisions.append(info.get('collision_count', 0))
-            eval_lane_invasions.append(info.get('lane_invasion_count', 0))  # P0 FIX #3
+            eval_lane_invasions.append(info.get('lane_invasion_count', 0))
             eval_lengths.append(episode_length)
 
-        # FIXED: Clean up eval environment
-        print(f"[EVAL] Closing evaluation environment...")
-        eval_env.close()
+        # CRITICAL: Restore episode count (EVAL doesn't count as training)
+        self.episode_num = episode_num_before_eval
 
-        return {
+        # CRITICAL: Reset environment after EVAL for fresh training episode
+        # This ensures training doesn't continue from last EVAL episode's final state
+        print(f"[EVAL] Resetting environment for fresh training episode...")
+        fresh_obs_dict, _ = self.env.reset()
+
+        # CRITICAL: Validate vehicle state AFTER evaluation
+        if hasattr(self.env, 'vehicle') and self.env.vehicle is not None:
+            vehicle_id_after_eval = self.env.vehicle.id
+            vehicle_alive_after = self.env.vehicle.is_alive
+            print(f"[EVAL] Vehicle state after evaluation:")
+            print(f"[EVAL]   ID: {vehicle_id_after_eval}")
+            print(f"[EVAL]   is_alive: {vehicle_alive_after}")
+
+            # Sanity check: Vehicle should be alive (just reset)
+            if not vehicle_alive_after:
+                print(f"[EVAL] ERROR: Vehicle destroyed during evaluation!")
+
+            # Note: Vehicle ID may change after reset (new spawn), this is EXPECTED
+            if vehicle_id_before_eval is not None and vehicle_id_before_eval != vehicle_id_after_eval:
+                print(f"[EVAL] Note: Vehicle ID changed ({vehicle_id_before_eval} -> {vehicle_id_after_eval})")
+                print(f"[EVAL]       This is EXPECTED after env.reset() (respawns actors)")
+
+        # Compute evaluation metrics
+        eval_metrics = {
             'mean_reward': np.mean(eval_rewards),
             'std_reward': np.std(eval_rewards),
             'success_rate': np.mean(eval_successes),
             'avg_collisions': np.mean(eval_collisions),
-            'avg_lane_invasions': np.mean(eval_lane_invasions),  # P0 FIX #3
+            'avg_lane_invasions': np.mean(eval_lane_invasions),
             'avg_episode_length': np.mean(eval_lengths)
         }
+
+        print(f"[EVAL] Evaluation complete:")
+        print(f"[EVAL]   Mean Reward: {eval_metrics['mean_reward']:.2f}")
+        print(f"[EVAL]   Success Rate: {eval_metrics['success_rate']*100:.1f}%")
+        print(f"[EVAL]   Avg Collisions: {eval_metrics['avg_collisions']:.2f}")
+        print(f"[EVAL]   Avg Lane Invasions: {eval_metrics['avg_lane_invasions']:.2f}")
+        print(f"[EVAL]   Avg Episode Length: {eval_metrics['avg_episode_length']:.0f}")
+        print(f"[EVAL] Returning to training...\n")
+
+        # Return both metrics AND fresh observation for training continuation
+        return eval_metrics, fresh_obs_dict
 
     def save_final_results(self):
         """Save final training results to JSON."""

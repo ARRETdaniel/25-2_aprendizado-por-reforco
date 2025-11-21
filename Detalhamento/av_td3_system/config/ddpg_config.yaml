@@ -109,7 +109,7 @@ reward:
     efficiency: 1.0  # Reward for maintaining target speed
     lane_keeping: 2.0  # Reward for staying centered in lane
     comfort: 0.5  # Penalty for high jerk (smooth driving)
-    safety: -100.0  # Large penalty for collisions/violations
+    safety: 1.0  # FIXED from -100.0: Penalties already negative, positive weight applies them correctly
 
   # Efficiency reward parameters
   efficiency:

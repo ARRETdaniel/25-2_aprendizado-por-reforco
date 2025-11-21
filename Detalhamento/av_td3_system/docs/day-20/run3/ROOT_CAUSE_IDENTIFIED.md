@@ -1,7 +1,7 @@
 # 🎯 ROOT CAUSE IDENTIFIED - Gradient Metrics Are BEFORE Clipping!
 
-**Date**: November 20, 2025 17:00  
-**Status**: ✅ **ROOT CAUSE FOUND**  
+**Date**: November 20, 2025 17:00
+**Status**: ✅ **ROOT CAUSE FOUND**
 **Severity**: HIGH (but fixable)
 
 ---
@@ -52,8 +52,8 @@ elif actor_cnn_grad > 10000:  # WARNING threshold
     alert_warning = 1
 ```
 
-**Our gradient**: ~1.92  
-**Critical threshold**: 50,000  
+**Our gradient**: ~1.92
+**Critical threshold**: 50,000
 **Warning threshold**: 10,000
 
 **Result**: No alerts because 1.92 << 10,000!
@@ -139,7 +139,7 @@ The AFTER metrics are logged to `self.logger.debug()`, **NOT to metrics dictiona
 grep "gradient norm AFTER clip" docs/day-20/run3/run-validation_10k_post_all_fixes_20251120_160520.log
 ```
 
-**If found**: Clipping IS running, check if norms ≤ limits  
+**If found**: Clipping IS running, check if norms ≤ limits
 **If NOT found**: Debug logging disabled OR clipping code not reached
 
 ### Step 2: Check if total_it Reached 100
@@ -148,7 +148,7 @@ grep "gradient norm AFTER clip" docs/day-20/run3/run-validation_10k_post_all_fix
 grep "total_it" docs/day-20/run3/run-validation_10k_post_all_fixes_20251120_160520.log | tail -5
 ```
 
-Debug messages only log every 100 steps (`if self.total_it % 100 == 0`).  
+Debug messages only log every 100 steps (`if self.total_it % 100 == 0`).
 With only 175 total steps, we should have 1-2 debug prints.
 
 ### Step 3: Add AFTER Metrics to TensorBoard
@@ -242,7 +242,7 @@ gradients/actor_mlp_norm: 0.0000 (ALL 27 updates)
    ```python
    # In train_td3.py, change from:
    if actor_cnn_grad > 50000:  # TOO HIGH
-   
+
    # To:
    if actor_cnn_grad > 2.0:  # Detect 2× violations
    ```
@@ -261,22 +261,22 @@ gradients/actor_mlp_norm: 0.0000 (ALL 27 updates)
 
 ### 1. Always Log BOTH Before AND After
 
-**Problem**: Only logged BEFORE clipping to TensorBoard  
+**Problem**: Only logged BEFORE clipping to TensorBoard
 **Solution**: Log BOTH to metrics dict, not just debug logs
 
 ### 2. Alert Thresholds Must Match Limits
 
-**Problem**: Alerts set to 10K, but limits are 1.0 and 10.0  
+**Problem**: Alerts set to 10K, but limits are 1.0 and 10.0
 **Solution**: Alert thresholds should be ~2× limits (2.0 and 20.0)
 
 ### 3. Text Logs ≠ TensorBoard Logs
 
-**Problem**: Debug info in text logs, but NOT in TensorBoard  
+**Problem**: Debug info in text logs, but NOT in TensorBoard
 **Solution**: Critical metrics MUST go to both
 
 ### 4. Verify Fixes with Metrics, Not Just Code
 
-**Problem**: Assumed fixes worked because code looked correct  
+**Problem**: Assumed fixes worked because code looked correct
 **Solution**: ALWAYS check TensorBoard metrics to verify behavior
 
 ---
@@ -295,7 +295,7 @@ gradients/actor_mlp_norm: 0.0000 (ALL 27 updates)
 - ❌ Actor MLP gradients = 0.0 (UNEXPLAINED)
 - ❓ AFTER-clipping norms NOT in TensorBoard (can't verify)
 
-**Conclusion**: 
+**Conclusion**:
 - Clipping MIGHT be working (code correct)
 - BUT actor loss explosion suggests it's NOT
 - Need to check text logs for debug messages
@@ -310,6 +310,6 @@ gradients/actor_mlp_norm: 0.0000 (ALL 27 updates)
 
 ---
 
-**Generated**: November 20, 2025 17:00  
-**Analysis**: Code inspection + TensorBoard metrics + alert thresholds  
+**Generated**: November 20, 2025 17:00
+**Analysis**: Code inspection + TensorBoard metrics + alert thresholds
 **Confidence**: 90% (need to verify with text logs)

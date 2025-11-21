@@ -1,8 +1,8 @@
 # 📊 FINAL COMPREHENSIVE ANALYSIS - Run 3 Post-Mortem
 
-**Date**: November 20, 2025 17:10  
-**Run**: av_td3_system/docs/day-20/run3/  
-**Duration**: 175/10,000 steps (1.75% complete)  
+**Date**: November 20, 2025 17:10
+**Run**: av_td3_system/docs/day-20/run3/
+**Duration**: 175/10,000 steps (1.75% complete)
 **Status**: ❌ **TRAINING FAILED - CARLA CRASH + ACTOR LOSS EXPLOSION**
 
 ---
@@ -15,7 +15,7 @@ Conducted systematic analysis of TensorBoard logs and training output to validat
 
 ✅ **GOOD NEWS**:
 1. Gradient clipping code IS implemented correctly
-2. CNN parameters ARE merged into main optimizers  
+2. CNN parameters ARE merged into main optimizers
 3. Separate CNN optimizers ARE removed
 4. Q-values moderate (not exploding to millions)
 5. Episode lengths stable (~21 steps, no collapse)
@@ -240,7 +240,7 @@ actor_loss = -Q(state_for_actor, actor(state_for_actor))
 **Error**:
 ```
 terminate called after throwing an instance of 'carla::client::TimeoutException'
-  what():  time-out of 5000ms while waiting for the simulator, 
+  what():  time-out of 5000ms while waiting for the simulator,
            make sure the simulator is ready and connected to localhost:2000
 ```
 
@@ -249,11 +249,11 @@ terminate called after throwing an instance of 'carla::client::TimeoutException'
 1. **Memory Overflow** (GPU 100% → 30%)
    - Actor loss -6T may have caused OOM
    - CARLA killed by system
-   
+
 2. **NaN/Inf Commands** (steering frequently +1.0)
    - Invalid gradients → NaN weights → NaN actions
    - CARLA can't handle NaN control inputs
-   
+
 3. **System Resource Exhaustion**
    - 20 NPCs + heavy CNN + rapid crashes
    - System unable to keep up
@@ -384,7 +384,7 @@ Crash:             CARLA timeout ❌
    # In train_td3.py command:
    --debug  # Add this flag
    ```
-   
+
 2. ✅ **Add AFTER Metrics to TensorBoard**
    ```python
    # In td3_agent.py, add to metrics dict:
@@ -487,7 +487,7 @@ Crash:             CARLA timeout ❌
 3. **MUST prevent actor loss explosion** (lower LR? Add NaN checks?)
 4. **MUST prevent CARLA crashes** (reduce load? Handle NaN inputs?)
 
-**Next Action**: 
+**Next Action**:
 **STOP ALL TRAINING** until:
 1. Actor MLP mystery solved
 2. AFTER-clipping metrics in TensorBoard
@@ -498,7 +498,7 @@ Crash:             CARLA timeout ❌
 
 ---
 
-**Analysis Completed**: November 20, 2025 17:15  
-**Analyst**: Automated + Manual Review  
-**Data Sources**: 54 TensorBoard metrics, 43,667 log lines, code inspection  
+**Analysis Completed**: November 20, 2025 17:15
+**Analyst**: Automated + Manual Review
+**Data Sources**: 54 TensorBoard metrics, 43,667 log lines, code inspection
 **Confidence**: 95% (verified with multiple tools and code inspection)

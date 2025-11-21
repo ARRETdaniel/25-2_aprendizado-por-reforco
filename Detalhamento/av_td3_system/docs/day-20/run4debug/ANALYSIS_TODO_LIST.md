@@ -1,8 +1,8 @@
 # Run 4 Debug Analysis - Critical Issues Todo List
 
-**Date**: 2025-11-21  
-**Debug Log**: `run-1validation_5k_post_all_fixes_20251120_170736.log` (433,508 lines)  
-**Issues**: Two critical runtime failures preventing training  
+**Date**: 2025-11-21
+**Debug Log**: `run-1validation_5k_post_all_fixes_20251120_170736.log` (433,508 lines)
+**Issues**: Two critical runtime failures preventing training
 
 ---
 
@@ -37,7 +37,7 @@ Line 61821 (FIRST EXPLOSION):
 
 Line 61800 (BEFORE EXPLOSION):
    Mode: CRITIC
-   Gradient: ENABLED  
+   Gradient: ENABLED
    Image features: Range [-5.481, 5.613]
    L2 norm: 33.842
    Status: NORMAL
@@ -193,7 +193,7 @@ Line 328742: Hand Brake: True, Reverse: True, Gear: 5649815
 Client.load_world(map_name, reset_settings=True):
   - "All actors present in the current world will be destroyed"
   - "Traffic manager instances will stay alive"
-  
+
 World.get_actor(actor_id):
   - "Returns None if actor_id does not exist"
 ```
@@ -356,8 +356,8 @@ def evaluate_policy(model, env, n_eval_episodes=10):
 ## 📝 Immediate Next Steps (Priority Order)
 
 ### Step 1: Actor Gradient Diagnostics (HIGH PRIORITY)
-**Duration**: 1-2 hours  
-**Owner**: AI/Developer  
+**Duration**: 1-2 hours
+**Owner**: AI/Developer
 
 1. ✅ Read `TD3/TD3.py` actor update (lines 115-130)
 2. ✅ Compare with `src/agents/td3_agent.py` actor training (lines 900-950)
@@ -372,8 +372,8 @@ def evaluate_policy(model, env, n_eval_episodes=10):
 ---
 
 ### Step 2: EVAL Environment Isolation Fix (HIGH PRIORITY)
-**Duration**: 2-3 hours  
-**Owner**: AI/Developer  
+**Duration**: 2-3 hours
+**Owner**: AI/Developer
 
 1. ✅ Read CARLA docs on `carla.Client` and `carla.World`
 2. ✅ Read `scripts/train_td3.py` EVAL environment creation
@@ -389,8 +389,8 @@ def evaluate_policy(model, env, n_eval_episodes=10):
 ---
 
 ### Step 3: Comprehensive Logging Enhancement (MEDIUM PRIORITY)
-**Duration**: 1 hour  
-**Owner**: AI/Developer  
+**Duration**: 1 hour
+**Owner**: AI/Developer
 
 1. ✅ Add actor/critic gradient norms to TensorBoard (BEFORE and AFTER clipping)
 2. ✅ Log replay buffer reward distribution every 1000 steps
@@ -498,6 +498,6 @@ After each fix attempt:
 
 ---
 
-**Last Updated**: 2025-11-21  
-**Status**: ANALYSIS COMPLETE - READY FOR FIX IMPLEMENTATION  
+**Last Updated**: 2025-11-21
+**Status**: ANALYSIS COMPLETE - READY FOR FIX IMPLEMENTATION
 **Next Action**: Implement Step 1 (Actor Gradient Diagnostics)

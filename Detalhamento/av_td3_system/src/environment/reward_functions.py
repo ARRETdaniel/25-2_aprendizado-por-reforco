@@ -42,11 +42,15 @@ class RewardCalculator:
         # Updated defaults to match config and prevent reward domination
         # Reference: Perot et al. (2017) - distance penalty critical for lane keeping
         # Reference: Chen et al. (2019) - balanced multi-component rewards
+        # CRITICAL FIX (Nov 21, 2025): Changed safety from -100.0 to +1.0
+        # Rationale: Safety penalties are ALREADY NEGATIVE (-10.0 for collision).
+        # Negative weight would INVERT them into positive rewards (+1000 for crash!).
+        # Pattern: Positive weights × signed components = correct reward direction.
         self.weights = config.get("weights", {
             "efficiency": 1.0,
             "lane_keeping": 5.0,  # INCREASED from 2.0: Prioritize staying in lane
             "comfort": 0.5,
-            "safety": -100.0,
+            "safety": 1.0,  # FIXED from -100.0: Penalties are already negative!
             "progress": 1.0,  # REDUCED from 5.0: Prevent domination (was 88.9%)
         })
 
@@ -908,35 +912,38 @@ class RewardCalculator:
         goal_reached: bool,
     ) -> float:
         """
-        Calculate progress reward with PBRS (Potential-Based Reward Shaping).
+        Calculate progress reward based on route distance reduction.
 
-        MEDIUM PRIORITY FIX #6: Added PBRS component for theoretically sound
-        dense reward signal.
+        FIX #1: REMOVED PBRS - Bug gave free reward proportional to distance from goal.
+        FIX #2: Uses ROUTE DISTANCE instead of Euclidean to prevent off-road shortcuts.
 
-        Implements dense reward shaping based on:
-        1. Distance reduction to goal (increased 10x via distance_scale)
-        2. PBRS: F(s,s') = γΦ(s') - Φ(s) where Φ(s) = -distance_to_goal
-        3. Waypoint milestone bonuses
-        4. Goal reached bonus
+        Implements reward based on:
+        1. Route distance reduction (following waypoints, not straight-line)
+        2. Waypoint milestone bonuses
+        3. Goal reached bonus
 
-        PBRS Theorem (Ng et al. 1999):
-        "Potential-based shaping functions ensure that policies learned with
-        shaped rewards remain effective in the original MDP, maintaining
-        near-optimal policies."
+        The distance_to_goal parameter now represents ROUTE DISTANCE (calculated by
+        WaypointManager.get_route_distance_to_goal), not Euclidean distance.
 
-        Mathematical guarantee: Adding F(s,s') = γΦ(s') - Φ(s) does NOT change
-        the optimal policy, but provides denser learning signal.
+        Why PBRS was removed:
+        - Bug: PBRS gave +1.15 reward per step for zero movement
+        - Formula reduced to: (1-γ) × distance_to_goal
+        - Perverse incentive: Further from goal = MORE free reward!
+        - Reference: #file:reward.md, #file:SYSTEMATIC_PROGRESS_REWARD_ANALYSIS.md
 
-        This addresses the sparse reward problem cited in arXiv:2408.10215:
-        "Sparse and delayed nature of rewards in many real-world scenarios can hinder learning progress"
+        Why Route Distance fixes shortcuts:
+        - Euclidean rewards diagonal movements off-road
+        - Route distance only decreases when following waypoints
+        - Off-road movement: route distance unchanged → zero reward
+        - Reference: #file:DIAGNOSIS_RIGHT_TURN_BIAS.md Section 2.2
 
         Args:
-            distance_to_goal: Current distance to final goal waypoint (meters)
+            distance_to_goal: Route distance to final goal (meters) - NOT Euclidean!
             waypoint_reached: Whether agent passed a waypoint this step
             goal_reached: Whether agent reached the final destination
 
         Returns:
-            Progress reward (positive for forward progress, includes PBRS term)
+            Progress reward (positive for forward progress along route)
         """
         # Safety check: If distance_to_goal is None, log warning and use default
         if distance_to_goal is None:
@@ -948,53 +955,45 @@ class RewardCalculator:
 
         prev_dist_str = f"{self.prev_distance_to_goal:.2f}" if self.prev_distance_to_goal is not None else "None"
         self.logger.debug(
-            f"[PROGRESS] Input: distance_to_goal={distance_to_goal:.2f}m, "
+            f"[PROGRESS] Input: route_distance={distance_to_goal:.2f}m, "
             f"waypoint_reached={waypoint_reached}, goal_reached={goal_reached}, "
-            f"prev_distance={prev_dist_str}m"
+            f"prev_route_distance={prev_dist_str}m"
         )
 
         progress = 0.0
 
-        # Component 1: Distance-based reward (dense, continuous)
-        # FIXED: Now uses distance_scale=1.0 (High Priority Fix #3)
-        # Reward = (prev_distance - current_distance) * scale
-        # Positive when moving toward goal, negative when moving away
+        # Component 1: Route distance-based reward (dense, continuous)
+        # Reward = (prev_route_distance - current_route_distance) * scale
+        # Positive when moving forward along route, zero/negative for off-road
         if self.prev_distance_to_goal is not None:
             distance_delta = self.prev_distance_to_goal - distance_to_goal
             distance_reward = distance_delta * self.distance_scale
             progress += distance_reward
 
-            #  DIAGNOSTIC: Log distance delta and reward contribution
+            # DIAGNOSTIC: Log distance delta and reward contribution
             self.logger.debug(
-                f"[PROGRESS] Distance Delta: {distance_delta:.3f}m "
+                f"[PROGRESS] Route Distance Delta: {distance_delta:.3f}m "
                 f"({'forward' if distance_delta > 0 else 'backward'}), "
                 f"Reward: {distance_reward:.2f} (scale={self.distance_scale})"
             )
 
-            # Component 1b: PBRS (Medium Priority Fix #6)
-            # Potential function: Φ(s) = -distance_to_goal
-            # Shaping: F(s,s') = γΦ(s') - Φ(s)
-            #                  = γ(-distance_to_goal') - (-distance_to_goal_prev)
-            #                  = -γ*distance_to_goal' + distance_to_goal_prev
-            potential_current = -distance_to_goal
-            potential_prev = -self.prev_distance_to_goal
-            pbrs_reward = self.gamma * potential_current - potential_prev
-            pbrs_weighted = pbrs_reward * 0.5
-
-            # Add PBRS with moderate weight (0.5x) to complement distance reward
-            # Total progress signal = direct distance + PBRS (both encourage forward movement)
-            progress += pbrs_weighted
-
-            #  DIAGNOSTIC: Log PBRS components
-            self.logger.debug(
-                f"[PROGRESS] PBRS: Φ(s')={potential_current:.3f}, Φ(s)={potential_prev:.3f}, "
-                f"F(s,s')={pbrs_reward:.3f}, weighted={pbrs_weighted:.3f} (γ={self.gamma}, weight=0.5)"
-            )
+            # Component 1b: PBRS - DISABLED (Bug: gives free reward for zero movement)
+            # The route distance reward already provides the shaping we need!
+            # PBRS as implemented violated Ng et al. theorem by using γ incorrectly.
+            # Evidence: Vehicle stationary → PBRS = +1.15 reward per step
+            # See: #file:reward.md, #file:SYSTEMATIC_PROGRESS_REWARD_ANALYSIS.md
+            #
+            # if self.prev_distance_to_goal is not None:
+            #     potential_current = -distance_to_goal
+            #     potential_prev = -self.prev_distance_to_goal
+            #     pbrs_reward = self.gamma * potential_current - potential_prev  # ← (1-γ) × distance!
+            #     pbrs_weighted = pbrs_reward * 0.5
+            #     progress += pbrs_weighted  # ← BUG: Free reward proportional to distance from goal
 
         else:
             # First step of episode - no previous distance for comparison
             self.logger.debug(
-                f"[PROGRESS] First step: initializing prev_distance_to_goal={distance_to_goal:.2f}m"
+                f"[PROGRESS] First step: initializing prev_route_distance={distance_to_goal:.2f}m"
             )
 
         # Update tracking
@@ -1029,14 +1028,12 @@ class RewardCalculator:
 
         # Build debug string safely to avoid format errors
         distance_rew_str = f"{distance_reward:.2f}" if self.prev_distance_to_goal is not None and 'distance_reward' in locals() else "0.00"
-        pbrs_str = f"{pbrs_weighted:.2f}" if self.prev_distance_to_goal is not None and 'pbrs_weighted' in locals() else "0.00"
         waypoint_str = f"{self.waypoint_bonus:.1f}" if waypoint_reached else "0.0"
         goal_str = f"{self.goal_reached_bonus:.1f}" if goal_reached else "0.0"
 
         self.logger.debug(
             f"[PROGRESS] Final: progress={clipped_progress:.2f} "
-            f"(distance: {distance_rew_str}, "
-            f"PBRS: {pbrs_str}, "
+            f"(route_distance_reward: {distance_rew_str}, "
             f"waypoint: {waypoint_str}, "
             f"goal: {goal_str})"
         )
