@@ -2,7 +2,7 @@
 
 # CARLA ROS 2 Bridge Integration Test
 # This script tests the connection between CARLA 0.9.16 and ROS 2 Humble bridge
-# 
+#
 # Prerequisites:
 #   - CARLA server running: docker ps | grep carla-server
 #   - ROS 2 bridge image built: ros2-carla-bridge:humble
