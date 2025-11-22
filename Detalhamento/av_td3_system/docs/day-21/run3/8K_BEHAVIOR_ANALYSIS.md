@@ -1,9 +1,9 @@
 # 8K Training Run Behavior Analysis
 ## Systematic Validation Against Official TD3 Documentation
 
-**Date**: 2025-11-21  
-**Run**: Post-Logger & CNN Fixes (8,300 steps total)  
-**Goal**: Determine if "turning right + lane invasions" behavior is expected or indicates a problem  
+**Date**: 2025-11-21
+**Run**: Post-Logger & CNN Fixes (8,300 steps total)
+**Goal**: Determine if "turning right + lane invasions" behavior is expected or indicates a problem
 **Status**: 🔴 **REWARD IMBALANCE CONFIRMED - AGENT LEARNING WRONG BEHAVIOR**
 
 ---
@@ -406,7 +406,7 @@ def calculate(self, ...):
     # Normalize BEFORE weighting
     progress_norm = self._normalize_component(progress_raw, 0, 10)  # From diagnostic
     lane_keeping_norm = self._normalize_component(lane_keeping_raw, -0.5, 0.5)
-    
+
     # Then apply weights
     weighted_progress = self.weights['progress'] * progress_norm
     weighted_lane_keeping = self.weights['lane_keeping'] * lane_keeping_norm
@@ -653,9 +653,9 @@ control tasks.
 
 ---
 
-**Status**: 🔴 **BLOCKING 1M RUN**  
-**Next Action**: Implement reward normalization (3.5 hours)  
-**Expected Outcome**: Unbiased control commands, balanced learning objectives  
+**Status**: 🔴 **BLOCKING 1M RUN**
+**Next Action**: Implement reward normalization (3.5 hours)
+**Expected Outcome**: Unbiased control commands, balanced learning objectives
 **Go/No-Go for 1M**: Re-evaluate after 1K validation passes ✅
 
 ---

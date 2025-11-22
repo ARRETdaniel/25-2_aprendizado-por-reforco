@@ -50,7 +50,7 @@ algorithm:
   # Original: 25,000 (OpenAI Spinning Up default: 10,000)
   # CRITICAL FIX (Nov 17, 2025): Reduced from 2500 to 1000 to match OpenAI standard
   # use 25k for full training runs
-  learning_starts: 10000  # Start learning after 1K steps (OpenAI Spinning Up default)
+  learning_starts: 25000  # Start learning after 1K steps (OpenAI Spinning Up default)
 
   # CRITICAL FIX (Nov 17, 2025): Changed from train_freq=1 to match OpenAI Spinning Up
   # Root Cause: train_freq=1 caused 31× more gradient updates than recommended
@@ -259,7 +259,7 @@ training:
   save_replay_buffer: true  # Save replay buffer with checkpoint
 
   # Evaluation during training
-  eval_freq: 5000  # Evaluate every N timesteps
+  eval_freq: 10000  # Evaluate every N timesteps
   n_eval_episodes: 10  # Number of episodes for evaluation
   eval_deterministic: true  # Use deterministic policy (no exploration noise)
 

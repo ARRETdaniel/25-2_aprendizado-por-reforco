@@ -1,7 +1,7 @@
 # CRITICAL BUG: Safety Weight Sign Inversion
 
-**Date**: 2025-11-21  
-**Severity**: 🔴 **CRITICAL - AGENT REWARDED FOR COLLISIONS**  
+**Date**: 2025-11-21
+**Severity**: 🔴 **CRITICAL - AGENT REWARDED FOR COLLISIONS**
 **Status**: ✅ **IDENTIFIED** - Requires immediate fix
 
 ---
@@ -297,13 +297,13 @@ Two valid patterns:
 
 ---
 
-**Status**: 🔴 **CRITICAL BUG IDENTIFIED**  
-**Fix Required**: Change 1 number (line 49: -100.0 → 1.0)  
-**Impact**: May completely explain right-turn bias and reward imbalance  
+**Status**: 🔴 **CRITICAL BUG IDENTIFIED**
+**Fix Required**: Change 1 number (line 49: -100.0 → 1.0)
+**Impact**: May completely explain right-turn bias and reward imbalance
 **Priority**: **HIGHEST** - Fix before any further training
 
 ---
 
-**Discovered by**: User observation of negative weight value  
-**Root Cause**: Sign convention inconsistency between weights and components  
+**Discovered by**: User observation of negative weight value
+**Root Cause**: Sign convention inconsistency between weights and components
 **Lesson**: Always trace through the math for reward calculation end-to-end

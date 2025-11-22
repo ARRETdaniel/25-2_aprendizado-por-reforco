@@ -1,6 +1,6 @@
 # Quick Decision Summary - 8K Run Analysis
 
-**Date**: 2025-11-21  
+**Date**: 2025-11-21
 **Status**: 🔴 **CRITICAL ISSUE FOUND - DO NOT PROCEED TO 1M**
 
 ---
@@ -36,11 +36,11 @@ From your metrics:
 - **Steering mean = +0.88** (should be ~0.0)
   - Agent always turns right
   - Bias INCREASING over time (+0.34 trend)
-  
+
 - **Reward imbalance = 92.9% progress**
   - Progress dominates at 92.9% (should be 33%)
   - Lane keeping only 5% (should be 40-50%)
-  
+
 - **Performance degrading**
   - Episode rewards: -73% worse
   - Episode length: -60% shorter (crashing faster)
@@ -228,8 +228,8 @@ TD3 against DDPG and IDM+MOBIL baselines across 20 evaluation runs...
 
 ---
 
-**Status**: 🔴 **BLOCKING 1M RUN**  
-**ETA to Ready**: 3.5 hours  
+**Status**: 🔴 **BLOCKING 1M RUN**
+**ETA to Ready**: 3.5 hours
 **Confidence**: HIGH (well-understood problem, documented solution)
 
 ---

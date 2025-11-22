@@ -1,10 +1,10 @@
 # Fix #4: Projection-Based Route Distance Implementation
 
-**Date**: 2025-01-XX  
-**Status**: ✅ IMPLEMENTED  
-**Priority**: P0 - CRITICAL  
-**Author**: AI Assistant  
-**References**: 
+**Date**: 2025-01-XX
+**Status**: ✅ IMPLEMENTED
+**Priority**: P0 - CRITICAL
+**Author**: AI Assistant
+**References**:
 - `BUG_ROUTE_DISTANCE_INCREASES.md` (bug analysis)
 - `SYSTEMATIC_INVESTIGATION_SUMMARY.md` (investigation report)
 - `SYSTEMATIC_FIX_ANALYSIS.md` (CARLA documentation alignment)
@@ -54,14 +54,14 @@ Cumulative: +85.0 reward for 10 steps of forward movement
 def get_route_distance_to_goal(self, vehicle_location):
     # 1. Find nearest waypoint ahead
     nearest_idx = self._find_nearest_waypoint_index(vehicle_location)
-    
+
     # 2. Point-to-point distance: vehicle → waypoint ❌ BUG HERE!
     total_distance = sqrt((wp[0] - vx)² + (wp[1] - vy)²)
-    
+
     # 3. Sum remaining waypoint segments
     for i in range(nearest_idx, len(waypoints) - 1):
         total_distance += distance(waypoint[i], waypoint[i+1])
-    
+
     return total_distance
 ```
 
@@ -72,20 +72,20 @@ def get_route_distance_to_goal(self, vehicle_location):
 def get_route_distance_to_goal(self, vehicle_location):
     # 1. Find nearest route SEGMENT (waypoint[i] to waypoint[i+1])
     segment_idx = self._find_nearest_segment(vehicle_location)
-    
+
     # 2. PROJECT vehicle onto segment ✅ FIX: Uses projection, not point-to-point
     projection = self._project_onto_segment(
         vehicle_location,
         waypoints[segment_idx],
         waypoints[segment_idx + 1]
     )
-    
+
     # 3. Distance from PROJECTION to segment end
     dist_to_end = distance(projection, waypoints[segment_idx + 1])
-    
+
     # 4. Sum remaining waypoint segments
     remaining = sum(distances for remaining waypoints)
-    
+
     return dist_to_end + remaining
 ```
 
@@ -96,7 +96,7 @@ def get_route_distance_to_goal(self, vehicle_location):
 
 ### 2. Added Helper Method: `_find_nearest_segment()`
 
-**Lines**: ~510-590  
+**Lines**: ~510-590
 **Purpose**: Find route segment (waypoint[i] to waypoint[i+1]) nearest to vehicle
 
 **Algorithm**:
@@ -104,25 +104,25 @@ def get_route_distance_to_goal(self, vehicle_location):
 def _find_nearest_segment(self, vehicle_location) -> Optional[int]:
     """
     Find index of nearest route segment.
-    
+
     Returns segment index i where segment is waypoint[i] → waypoint[i+1]
     """
     for i in range(search_start, search_end):
         wp_start = self.waypoints[i]
         wp_end = self.waypoints[i + 1]
-        
+
         # Calculate perpendicular distance to line segment
         seg_vector = (wp_end - wp_start)
         t = dot(vehicle - wp_start, seg_vector) / |seg_vector|²
         t = clamp(t, 0, 1)  # Keep within segment bounds
-        
+
         closest_point = wp_start + t * seg_vector
         dist = |vehicle - closest_point|
-        
+
         if dist < min_distance:
             min_distance = dist
             nearest_segment_idx = i
-    
+
     return nearest_segment_idx if min_distance < 20m else None
 ```
 
@@ -134,7 +134,7 @@ def _find_nearest_segment(self, vehicle_location) -> Optional[int]:
 
 ### 3. Added Helper Method: `_project_onto_segment()`
 
-**Lines**: ~592-665  
+**Lines**: ~592-665
 **Purpose**: Project vehicle position onto line segment using vector math
 
 **Algorithm** (Vector Projection):
@@ -147,7 +147,7 @@ def _project_onto_segment(
 ) -> (proj_x, proj_y):
     """
     Project point onto line segment.
-    
+
     Formula:
         v = B - A          (segment direction vector)
         w = P - A          (point relative to start)
@@ -158,19 +158,19 @@ def _project_onto_segment(
     # Vector v = B - A
     vx = bx - ax
     vy = by - ay
-    
+
     # Vector w = P - A
     wx = px - ax
     wy = py - ay
-    
+
     # Projection parameter: t = (w · v) / (v · v)
     t = (wx * vx + wy * vy) / (vx * vx + vy * vy)
     t = max(0.0, min(1.0, t))  # Clamp to [0, 1]
-    
+
     # Projected point: Q = A + t × v
     proj_x = ax + t * vx
     proj_y = ay + t * vy
-    
+
     return (proj_x, proj_y)
 ```
 
@@ -184,7 +184,7 @@ def _project_onto_segment(
 
 ### 4. Added Diagnostic Logging
 
-**Lines**: ~459-469  
+**Lines**: ~459-469
 **Purpose**: Debug and verify projection behavior
 
 ```python
@@ -640,10 +640,10 @@ reward = progress_along_route  # Rewards forward movement, ignores drift!
 
 ## Approval Status
 
-**Implementation**: ✅ COMPLETE  
-**Unit Tests**: ⏳ PENDING  
-**Integration Tests**: ⏳ PENDING  
-**Full Training**: ⏳ PENDING  
+**Implementation**: ✅ COMPLETE
+**Unit Tests**: ⏳ PENDING
+**Integration Tests**: ⏳ PENDING
+**Full Training**: ⏳ PENDING
 
 **Sign-off**:
 - [ ] Unit tests pass

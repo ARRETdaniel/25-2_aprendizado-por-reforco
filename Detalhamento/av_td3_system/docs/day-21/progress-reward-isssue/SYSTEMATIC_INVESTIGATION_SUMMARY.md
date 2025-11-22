@@ -1,7 +1,7 @@
 # SYSTEMATIC INVESTIGATION: Negative Progress Rewards During Forward Movement
 
-**Date**: November 21, 2025  
-**Investigation**: Post-fix validation (after FIXES_IMPLEMENTED.md)  
+**Date**: November 21, 2025
+**Investigation**: Post-fix validation (after FIXES_IMPLEMENTED.md)
 **Status**: 🔴 **NEW CRITICAL BUG DISCOVERED**
 
 ---
@@ -109,14 +109,14 @@ Step 44:      progress +110.00 (waypoint reached!) ✅
 def get_route_distance_to_goal(self, vehicle_location) -> float:
     # Step 1: Find nearest waypoint ahead
     nearest_idx = self._find_nearest_waypoint_index(vehicle_location)
-    
+
     # Step 2: Distance from vehicle to next waypoint
     total_distance = sqrt((next_wp[0] - vx)² + (next_wp[1] - vy)²)
-    
+
     # Step 3: Sum distances between remaining waypoints
     for i in range(nearest_idx, len(waypoints) - 1):
         total_distance += distance(waypoint[i], waypoint[i+1])
-    
+
     return total_distance
 ```
 
@@ -173,26 +173,26 @@ When waypoint threshold is crossed:
 ```python
 def get_route_distance_to_goal(self, vehicle_location) -> float:
     """Calculate distance using projection onto route path."""
-    
+
     # Step 1: Find nearest route segment (between waypoint[i] and waypoint[i+1])
     segment_idx = self._find_nearest_segment(vehicle_location)
-    
+
     # Step 2: Project vehicle onto that segment
     projection = self._project_point_onto_segment(
         vehicle_location,
         self.waypoints[segment_idx],
         self.waypoints[segment_idx + 1]
     )
-    
+
     # Step 3: Distance from projection to end of segment
     dist_to_segment_end = distance(projection, self.waypoints[segment_idx + 1])
-    
+
     # Step 4: Sum remaining waypoint segments
     remaining = sum(
         distance(self.waypoints[i], self.waypoints[i+1])
         for i in range(segment_idx + 1, len(self.waypoints) - 1)
     )
-    
+
     return dist_to_segment_end + remaining
 ```
 
@@ -321,7 +321,7 @@ All values match `training_config.yaml` exactly. No conflicts detected.
 - **Log File**: `av_td3_system/docs/day-21/run6/run_RewardProgress4.log`
 - **Bug Analysis**: `BUG_ROUTE_DISTANCE_INCREASES.md`
 - **Previous Fixes**: `FIXES_IMPLEMENTED.md`
-- **Code**: 
+- **Code**:
   - `src/environment/waypoint_manager.py` (lines 374-445)
   - `src/environment/reward_functions.py` (lines 960-1041)
   - `src/environment/carla_env.py` (line 652)

@@ -1,7 +1,7 @@
 # EVAL Phase Solution - Unified Training Architecture
 
-**Date**: 2025-11-20  
-**Issue Reference**: ANALYSIS_TODO_LIST.md - Issue #2 (CARLA Vehicle State Corruption Post-EVAL)  
+**Date**: 2025-11-20
+**Issue Reference**: ANALYSIS_TODO_LIST.md - Issue #2 (CARLA Vehicle State Corruption Post-EVAL)
 **Documentation**: CARLA 0.9.16 API, TD3 Paper (Fujimoto et al.), Stable-Baselines3
 
 ---
@@ -33,7 +33,7 @@ From `https://carla.readthedocs.io/en/latest/python_api/#carla.Client`:
 Client.get_world(self)
     Returns the world object currently active in the simulation.
     Return: carla.World
-    
+
     Note: This world will be later used for example to load maps.
 ```
 
@@ -55,7 +55,7 @@ From `https://carla.readthedocs.io/en/latest/python_api/#carla.Actor`:
 ```python
 Actor.is_alive (bool)
     Returns whether this object was destroyed using this actor handle.
-    
+
 Actor.is_active (bool)
     Returns whether this actor is active (True) or not (False).
 ```
@@ -70,7 +70,7 @@ From `https://carla.readthedocs.io/en/latest/python_api/#carla.TrafficManager`:
 Client.get_trafficmanager(self, client_connection=8000)
     Returns an instance of the traffic manager related to the specified port.
     If it does not exist, this will be created.
-    
+
 TrafficManager.shut_down(self)
     Shuts down the traffic manager.
 ```
@@ -85,7 +85,7 @@ From `TD3/main.py` (Fujimoto et al. official code):
 def eval_policy(policy, env_name, seed, eval_episodes=10):
     eval_env = gym.make(env_name)  # ✅ Creates NEW environment
     eval_env.seed(seed + 100)      # ✅ Different seed for determinism
-    
+
     avg_reward = 0.
     for _ in range(eval_episodes):
         state, done = eval_env.reset(), False
@@ -93,7 +93,7 @@ def eval_policy(policy, env_name, seed, eval_episodes=10):
             action = policy.select_action(np.array(state))  # ⚠️ Deterministic (no noise)
             state, reward, done, _ = eval_env.step(action)
             avg_reward += reward
-    
+
     avg_reward /= eval_episodes
     return avg_reward
 ```
@@ -242,7 +242,7 @@ for t in range(int(self.max_timesteps)):
         eval_metrics = self.evaluate()  # Run EVAL phase
         self.in_eval_phase = False
         # Log eval metrics...
-    
+
     # EXPLORATION phase
     if t < self.start_timesteps:
         action = self.env.action_space.sample()
@@ -259,57 +259,57 @@ for t in range(int(self.max_timesteps)):
 def evaluate(self):
     """
     Evaluate agent on num_eval_episodes using the TRAINING environment.
-    
+
     CRITICAL: Uses self.env (no separate environment creation).
     Disables exploration noise for deterministic evaluation.
     Does NOT train during evaluation episodes.
-    
+
     Returns:
         dict: Evaluation metrics
     """
     print(f"\n[EVAL] Starting evaluation phase (deterministic policy)...")
-    
+
     eval_rewards = []
     eval_successes = []
     eval_collisions = []
     eval_lane_invasions = []
     eval_lengths = []
-    
+
     max_eval_steps = self.agent_config.get("training", {}).get("max_episode_steps", 1000)
-    
+
     for episode in range(self.num_eval_episodes):
         # ✅ Reset TRAINING environment (not a separate eval env)
         obs_dict, _ = self.env.reset()
-        
+
         episode_reward = 0
         episode_length = 0
         done = False
-        
+
         while not done and episode_length < max_eval_steps:
             # ✅ Deterministic action (NO exploration noise)
             action = self.agent.select_action(obs_dict, deterministic=True)
-            
+
             # ✅ Step TRAINING environment
             next_obs_dict, reward, done, truncated, info = self.env.step(action)
-            
+
             episode_reward += reward
             episode_length += 1
             obs_dict = next_obs_dict
-            
+
             if truncated:
                 done = True
-        
+
         # Collect metrics
         eval_rewards.append(episode_reward)
         eval_successes.append(info.get('success', 0))
         eval_collisions.append(info.get('collision_count', 0))
         eval_lane_invasions.append(info.get('lane_invasion_count', 0))
         eval_lengths.append(episode_length)
-    
+
     # ✅ NO env.close() - environment stays alive for training!
-    
+
     print(f"[EVAL] Evaluation complete. Mean Reward: {np.mean(eval_rewards):.2f}")
-    
+
     return {
         'mean_reward': np.mean(eval_rewards),
         'std_reward': np.std(eval_rewards),
@@ -365,15 +365,15 @@ def evaluate(self):
     # Before eval
     vehicle_id_before = self.env.vehicle.id
     print(f"[EVAL] Vehicle ID before eval: {vehicle_id_before}")
-    
+
     # ... run eval episodes ...
-    
+
     # After eval
     vehicle_id_after = self.env.vehicle.id
     vehicle_is_alive = self.env.vehicle.is_alive
     print(f"[EVAL] Vehicle ID after eval: {vehicle_id_after}")
     print(f"[EVAL] Vehicle is_alive: {vehicle_is_alive}")
-    
+
     # Verify consistency
     assert vehicle_id_before == vehicle_id_after, "Vehicle ID changed during EVAL!"
     assert vehicle_is_alive, "Vehicle destroyed during EVAL!"
@@ -423,9 +423,9 @@ def evaluate(self):
 def evaluate(self):
     # Save current episode count
     episode_num_before = self.episode_num
-    
+
     # ... run eval episodes ...
-    
+
     # Restore episode count (EVAL doesn't count as training episodes)
     self.episode_num = episode_num_before
 ```
@@ -452,7 +452,7 @@ def evaluate(self):
 ```python
 def evaluate(self):
     # ... run eval episodes ...
-    
+
     # ✅ Reset environment after EVAL to start fresh training episode
     obs_dict, _ = self.env.reset()
     return eval_metrics, obs_dict  # Return fresh observation
@@ -506,5 +506,5 @@ if t % self.eval_freq == 0:
 
 ---
 
-**Status**: ✅ SOLUTION PROPOSED - READY FOR IMPLEMENTATION  
+**Status**: ✅ SOLUTION PROPOSED - READY FOR IMPLEMENTATION
 **Next**: Implement changes in `train_td3.py` and validate with micro-test

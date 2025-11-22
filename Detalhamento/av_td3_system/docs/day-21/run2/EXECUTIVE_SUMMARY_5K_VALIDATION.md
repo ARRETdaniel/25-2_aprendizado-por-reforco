@@ -1,8 +1,8 @@
 # Executive Summary: 5K Training Run Validation
 
-**Date**: 2025-01-21  
-**Run**: Post-CNN Fix (LayerNorm) Validation  
-**Timesteps**: 5,000 (187 episodes, 29 training updates)  
+**Date**: 2025-01-21
+**Run**: Post-CNN Fix (LayerNorm) Validation
+**Timesteps**: 5,000 (187 episodes, 29 training updates)
 **Status**: ⚠️ **CNN FIX VALIDATED ✅** | **TRAINING DYNAMICS EXPLAINED 🔍**
 
 ---
@@ -159,7 +159,7 @@ Range: 9.43 - 621.32
 Progression: [112.8, 59.3, 18.4, 16.5, 9.4] → [621.3, 131.3, 188.5, 79.2, 314.2]
 ```
 
-**Interpretation**: 
+**Interpretation**:
 - Initial decrease (112→9) shows learning started
 - Later spikes (621) from exploration noise causing large TD errors
 - **Expected** for early training with high exploration
@@ -173,7 +173,7 @@ Progression: [112.8, 59.3, 18.4, 16.5, 9.4] → [621.3, 131.3, 188.5, 79.2, 314.
 | **Critic Total (before clip)** | 946.40 ± 1138.80 (↑+501%) | ⚠️ GROWING |
 | **Critic Total (after clip)** | 10.0000 (clipped) | ✅ CONTROLLED |
 
-**Key Insight**: 
+**Key Insight**:
 - ✅ Gradient clipping working perfectly (no explosions reach networks)
 - ⚠️ Pre-clip gradients growing 6× (monitor in extended runs)
 
@@ -278,15 +278,15 @@ if episode_reward < -500:  # Catastrophic failure
 ```latex
 \subsection{Training Stabilization via Layer Normalization}
 
-To address feature explosion observed in preliminary experiments, we 
-implemented Layer Normalization \citep{ba2016layer} after each convolutional 
-layer. Without normalization, CNN feature L2 norms grew to $7.36 \times 10^{12}$ 
-by step 5000, causing training instability and gradient explosions. 
+To address feature explosion observed in preliminary experiments, we
+implemented Layer Normalization \citep{ba2016layer} after each convolutional
+layer. Without normalization, CNN feature L2 norms grew to $7.36 \times 10^{12}$
+by step 5000, causing training instability and gradient explosions.
 
-Following PyTorch documentation, we applied \texttt{nn.LayerNorm([C, H, W])} 
-to normalize over channel and spatial dimensions after each convolutional 
-and fully-connected layer. This stabilized feature norms at 15-30 throughout 
-training, representing an $8.13 \times 10^{10}\times$ reduction. Gradient 
+Following PyTorch documentation, we applied \texttt{nn.LayerNorm([C, H, W])}
+to normalize over channel and spatial dimensions after each convolutional
+and fully-connected layer. This stabilized feature norms at 15-30 throughout
+training, representing an $8.13 \times 10^{10}\times$ reduction. Gradient
 clipping ($\max_{\text{grad}} = 10$) was maintained for additional stability.
 ```
 
@@ -295,21 +295,21 @@ clipping ($\max_{\text{grad}} = 10$) was maintained for additional stability.
 ```latex
 \subsection{5K Validation Results}
 
-After implementing Layer Normalization, we conducted a 5,000-step validation 
-run to verify system stability (Table~\ref{tab:5k_metrics}). CNN features 
-remained stable (L2 norm: $15.7 \pm 8.1$), confirming the fix effectiveness. 
+After implementing Layer Normalization, we conducted a 5,000-step validation
+run to verify system stability (Table~\ref{tab:5k_metrics}). CNN features
+remained stable (L2 norm: $15.7 \pm 8.1$), confirming the fix effectiveness.
 
-Training metrics showed patterns consistent with TD3's exploration phase: 
-Q-values at $33.20 \pm 14.07$, TD errors at $3.63 \pm 2.40$, and episode 
-rewards at $154.71 \pm 269.42$. The high reward variance ($\sigma = 269.42$) 
-in early episodes (0-46) reflected random exploration, which stabilized 
+Training metrics showed patterns consistent with TD3's exploration phase:
+Q-values at $33.20 \pm 14.07$, TD errors at $3.63 \pm 2.40$, and episode
+rewards at $154.71 \pm 269.42$. The high reward variance ($\sigma = 269.42$)
+in early episodes (0-46) reflected random exploration, which stabilized
 ($\sigma = 9.16$) by episode 140-187 as the exploration policy emerged.
 
-Given that learning commenced only after 1,000 random exploration steps, 
-the 5K run included merely 4,000 training steps—insufficient for convergence 
-in vision-based control tasks \citep{mnih2015humanlevel}. Extended validation 
-(10K-100K steps) confirmed that episode rewards improved to [TO BE FILLED] 
-once the exploration phase transitioned to policy learning, validating the 
+Given that learning commenced only after 1,000 random exploration steps,
+the 5K run included merely 4,000 training steps—insufficient for convergence
+in vision-based control tasks \citep{mnih2015humanlevel}. Extended validation
+(10K-100K steps) confirmed that episode rewards improved to [TO BE FILLED]
+once the exploration phase transitioned to policy learning, validating the
 system for full-scale 1M training.
 ```
 
@@ -364,8 +364,8 @@ Day 7:    Document findings for paper
 
 ---
 
-**Document Version**: 1.0  
-**Author**: AI Analysis System  
-**Last Updated**: 2025-01-21  
-**Next Review**: After 10K validation run  
+**Document Version**: 1.0
+**Author**: AI Analysis System
+**Last Updated**: 2025-01-21
+**Next Review**: After 10K validation run
 **Status**: ✅ **APPROVED FOR 1M RUN (with monitoring)**

@@ -1,6 +1,6 @@
 # Action Plan: Next Steps for 1M Production Run
 
-**Date**: 2025-01-21  
+**Date**: 2025-01-21
 **Status**: 5K Validation Complete ✅ | Ready for Extended Validation ⏭️
 
 ---
@@ -37,7 +37,7 @@ grep "EXPLORATION\|LEARNING" av_td3_system/docs/day-21/run2/run-CNNfixes_post_al
 grep "learning_starts" av_td3_system/config/td3_config.yaml
 ```
 
-**Expected Outcome**: 
+**Expected Outcome**:
 - Logs show "EXPLORATION" for steps 1-1000
 - Logs show "LEARNING" for steps 1001-5000
 - Only 4K training steps explains concerning patterns
@@ -200,23 +200,23 @@ python av_td3_system/scripts/train_ddpg.py \
 class TrainingMonitor:
     def __init__(self):
         self.best_reward_100k = -float('inf')
-        
+
     def check_anomalies(self, metrics, step):
         # Alert on TD error explosion
         if metrics['td_error'] > 50:
             logger.critical(f"[ALERT] TD error explosion at step {step}: {metrics['td_error']:.2f}")
             return 'halt'
-        
+
         # Alert on Q-value divergence
         if metrics['q_value'] > 1000:
             logger.critical(f"[ALERT] Q-value divergence at step {step}: {metrics['q_value']:.2f}")
             return 'halt'
-        
+
         # Alert on reward collapse
         if metrics['episode_reward'] < -500:
             logger.critical(f"[ALERT] Reward collapse at step {step}: {metrics['episode_reward']:.2f}")
             return 'halt'
-        
+
         # Check for improvement stagnation (every 100K)
         if step % 100000 == 0:
             current_reward = np.mean(recent_rewards[-100:])
@@ -224,14 +224,14 @@ class TrainingMonitor:
                 logger.warning(f"[WARNING] No improvement in last 100K steps")
                 return 'checkpoint'
             self.best_reward_100k = max(self.best_reward_100k, current_reward)
-        
+
         return 'continue'
 
 # In training loop
 monitor = TrainingMonitor()
 for t in range(max_timesteps):
     # ... training step ...
-    
+
     if t % 100 == 0:  # Check every 100 steps
         status = monitor.check_anomalies(metrics, t)
         if status == 'halt':
@@ -251,25 +251,25 @@ class CheckpointManager:
     def __init__(self, max_keep=5):
         self.checkpoints = []
         self.max_keep = max_keep
-    
+
     def save(self, step, agent, path_template):
         checkpoint_path = path_template.format(step=step)
         agent.save(checkpoint_path)
         self.checkpoints.append(checkpoint_path)
-        
+
         # Keep only last max_keep checkpoints
         if len(self.checkpoints) > self.max_keep:
             old_checkpoint = self.checkpoints.pop(0)
             os.remove(old_checkpoint)
             logger.info(f"Removed old checkpoint: {old_checkpoint}")
-        
+
         logger.info(f"Saved checkpoint: {checkpoint_path}")
 
 # In training loop
 ckpt_mgr = CheckpointManager(max_keep=5)
 for t in range(max_timesteps):
     # ... training step ...
-    
+
     if t % 25000 == 0:  # Every 25K
         ckpt_mgr.save(t, agent, 'checkpoints/td3_{step}k.pt')
 ```
@@ -507,7 +507,7 @@ Day 5-7: 1M production run (if 100K successful)
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: 2025-01-21  
-**Next Review**: After 10K validation  
+**Document Version**: 1.0
+**Last Updated**: 2025-01-21
+**Next Review**: After 10K validation
 **Status**: ⏭️ READY TO EXECUTE (awaiting user confirmation)

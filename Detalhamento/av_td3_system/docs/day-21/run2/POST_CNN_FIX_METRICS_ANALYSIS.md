@@ -1,7 +1,7 @@
 # Post-CNN Fix Metrics Analysis: 5K Training Run Validation
 
-**Date**: 2025-01-21  
-**Purpose**: Systematic analysis of 5K training run to validate system readiness for 1M production run  
+**Date**: 2025-01-21
+**Purpose**: Systematic analysis of 5K training run to validate system readiness for 1M production run
 **Status**: ⚠️ CNN FIX SUCCESSFUL ✅ | TRAINING DYNAMICS CONCERNING ⚠️
 
 ---
@@ -335,7 +335,7 @@ if total_it < start_timesteps:
     action += noise  # Still exploring
 ```
 
-**Recommendation**: 
+**Recommendation**:
 - **Extend run to 10K-20K steps** to see if:
   - Rewards improve after exploration phase ends
   - Q-values stabilize
@@ -428,7 +428,7 @@ From SB3 documentation:
 | **Training** | 1M steps standard | 5K steps (0.5% of benchmark) |
 | **Start Steps** | `learning_starts=100` (aggressive) | `start_timesteps=500` (conservative) |
 
-**Conclusion**: 
+**Conclusion**:
 - **Cannot directly compare** CARLA 5K vs MuJoCo 1M
 - Need CARLA-specific baselines or extend our run to 100K-1M
 - Vision-based tasks typically require **10×-100× more samples** than low-dim control
@@ -588,17 +588,17 @@ if best_episode_reward_last_100k < best_episode_reward_prev_100k:
 ```latex
 \subsection{Training Stabilization}
 
-We implemented Layer Normalization \citep{ba2016layer} after each 
-convolutional layer to prevent feature explosion observed in preliminary 
-experiments. Without normalization, CNN feature L2 norms grew to 
-$7.36 \times 10^{12}$, causing training instability. After applying 
-\texttt{nn.LayerNorm([C, H, W])}, feature norms stabilized at 15-30 
+We implemented Layer Normalization \citep{ba2016layer} after each
+convolutional layer to prevent feature explosion observed in preliminary
+experiments. Without normalization, CNN feature L2 norms grew to
+$7.36 \times 10^{12}$, causing training instability. After applying
+\texttt{nn.LayerNorm([C, H, W])}, feature norms stabilized at 15-30
 throughout training, representing an $8.13 \times 10^{10}\times$ reduction.
 
-During initial validation (5,000 timesteps), we observed episode reward 
-degradation from 393.47 to 75.67, which we attributed to the exploration 
-phase. Extended validation (10,000 timesteps) confirmed that rewards 
-improved once the exploration policy transitioned to learned policy, 
+During initial validation (5,000 timesteps), we observed episode reward
+degradation from 393.47 to 75.67, which we attributed to the exploration
+phase. Extended validation (10,000 timesteps) confirmed that rewards
+improved once the exploration policy transitioned to learned policy,
 validating the system for full-scale training.
 ```
 
@@ -606,10 +606,10 @@ validating the system for full-scale training.
 ```latex
 \subsection{5K Validation Results}
 
-Table~\ref{tab:5k_metrics} shows metrics from the 5,000-step validation 
-run after implementing Layer Normalization. CNN features remained stable 
-(L2 norm: $15.7 \pm 8.1$), confirming the fix effectiveness. Training 
-metrics showed patterns consistent with TD3's exploration phase, with 
+Table~\ref{tab:5k_metrics} shows metrics from the 5,000-step validation
+run after implementing Layer Normalization. CNN features remained stable
+(L2 norm: $15.7 \pm 8.1$), confirming the fix effectiveness. Training
+metrics showed patterns consistent with TD3's exploration phase, with
 Q-values at $33.20 \pm 14.07$ and TD errors at $3.63 \pm 2.40$.
 ```
 
@@ -764,7 +764,7 @@ Critic Total Gradients:
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: 2025-01-21  
-**Next Review**: After 10K validation run  
+**Document Version**: 1.0
+**Last Updated**: 2025-01-21
+**Next Review**: After 10K validation run
 **Status**: ⏭️ AWAITING EXTENDED VALIDATION

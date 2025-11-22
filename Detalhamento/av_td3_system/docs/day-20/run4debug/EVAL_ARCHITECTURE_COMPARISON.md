@@ -1,6 +1,6 @@
 # EVAL Architecture Comparison: Current vs Proposed
 
-**Date**: 2025-11-20  
+**Date**: 2025-11-20
 **Purpose**: Visual comparison of evaluation architectures
 
 ---
@@ -131,16 +131,16 @@ vehicle_ref = env.vehicle                        # Reference to ID=123
 
 # Training loop with EVAL phase
 for t in range(max_timesteps):
-    
+
     # ──────────────────────────────────────────
     # EVAL PHASE (t % eval_freq == 0)
     # ──────────────────────────────────────────
     if t > 0 and t % eval_freq == 0:
         in_eval_phase = True
-        
+
         # Run evaluation using SAME environment
         eval_metrics = evaluate(env, agent)     # ✅ Uses env (not eval_env!)
-        
+
         # evaluate() implementation:
         for eval_ep in range(num_eval_episodes):
             obs, _ = env.reset()                # ✅ Reset SAME environment
@@ -148,17 +148,17 @@ for t in range(max_timesteps):
                 action = agent.select_action(obs, deterministic=True)  # ✅ No noise
                 obs, reward, done, _, info = env.step(action)
                 # No training, just collect metrics
-        
+
         # Reset after eval for fresh training episode
         obs, _ = env.reset()                    # ✅ Fresh start
         in_eval_phase = False
-    
+
     # ──────────────────────────────────────────
     # EXPLORATION PHASE (t < start_timesteps)
     # ──────────────────────────────────────────
     if t < start_timesteps:
         action = env.action_space.sample()      # ✅ Random action
-    
+
     # ──────────────────────────────────────────
     # LEARNING PHASE (t >= start_timesteps)
     # ──────────────────────────────────────────
@@ -166,14 +166,14 @@ for t in range(max_timesteps):
         action = agent.select_action(obs, deterministic=False)
         noise = np.random.normal(...)           # ✅ Exploration noise
         action = (action + noise).clip(...)
-    
+
     # Execute action (ALL phases use same vehicle_ref)
     next_obs, reward, done, _, info = env.step(action)  # ✅ Always valid
-    
+
     # Store transition (LEARNING phase only)
     if not in_eval_phase and t >= start_timesteps:
         replay_buffer.add(obs, action, next_obs, reward, done)
-    
+
     # Train agent (LEARNING phase only)
     if not in_eval_phase and t >= start_timesteps:
         agent.train(replay_buffer, batch_size)
@@ -271,15 +271,15 @@ def evaluate(self):
         self.training_config_path,
         tm_port=self.eval_tm_port  # Port 8050
     )
-    
+
     for episode in range(self.num_eval_episodes):
         obs_dict, _ = eval_env.reset()  # Uses eval_env
         # ... run episode ...
         next_obs_dict, reward, done, _, info = eval_env.step(action)
-    
+
     # ❌ Destroys EVAL actors (corrupts training env)
     eval_env.close()
-    
+
     return eval_metrics
 ```
 
@@ -289,27 +289,27 @@ def evaluate(self):
 def evaluate(self):
     """Evaluate using TRAINING environment (no separate instance)."""
     print(f"[EVAL] Entering evaluation phase...")
-    
+
     # ✅ Save current episode count (EVAL doesn't count as training episodes)
     episode_num_before = self.episode_num
-    
+
     for episode in range(self.num_eval_episodes):
         obs_dict, _ = self.env.reset()  # ✅ Uses TRAINING env (self.env)
-        
+
         while not done:
             # ✅ Deterministic action (no exploration noise)
             action = self.agent.select_action(obs_dict, deterministic=True)
             next_obs_dict, reward, done, _, info = self.env.step(action)
             # ... collect metrics ...
-    
+
     # ✅ Restore episode count
     self.episode_num = episode_num_before
-    
+
     # ✅ Reset after EVAL for fresh training episode
     obs_dict, _ = self.env.reset()
-    
+
     print(f"[EVAL] Exiting evaluation phase")
-    
+
     # ✅ Return metrics AND fresh observation
     return eval_metrics, obs_dict
 ```
@@ -379,6 +379,6 @@ self.in_eval_phase = False  # Track evaluation mode
 
 ---
 
-**Status**: ✅ **ANALYSIS COMPLETE - READY TO IMPLEMENT**  
-**Next**: Modify `scripts/train_td3.py` according to proposed changes  
+**Status**: ✅ **ANALYSIS COMPLETE - READY TO IMPLEMENT**
+**Next**: Modify `scripts/train_td3.py` according to proposed changes
 **Validation**: Run 100-step micro-test, then 5K validation

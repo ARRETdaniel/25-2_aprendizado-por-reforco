@@ -114,7 +114,7 @@ After running, verify:
 ## Troubleshooting
 
 ### Issue: Still Getting AttributeError
-**Cause**: Volume mount isn't reflecting host changes  
+**Cause**: Volume mount isn't reflecting host changes
 **Solution**: Use `docker exec` to verify the file inside the container:
 ```bash
 # Start container in background
@@ -139,5 +139,5 @@ If the grep **doesn't find the line**, the volume mount is not working. Check:
 3. Try absolute path: `-v /absolute/path/to/av_td3_system:/workspace`
 
 ### Issue: Action Statistics Not Showing
-**Cause**: Buffer needs 100 actions before stats are meaningful  
+**Cause**: Buffer needs 100 actions before stats are meaningful
 **Expected**: Stats appear after step 100 for TensorBoard, step 1000 for console

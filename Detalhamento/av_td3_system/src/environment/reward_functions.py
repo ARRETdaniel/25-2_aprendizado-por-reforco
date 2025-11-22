@@ -97,7 +97,7 @@ class RewardCalculator:
         # Penalty severity hierarchy: offroad (-500) > wrong_way (-200) > collision (-100) > lane_invasion (-50)
         # Rationale: Lane crossing is unsafe but less severe than full lane departure or collision
         self.lane_invasion_penalty = config.get("safety", {}).get(
-            "lane_invasion_penalty", -50.0
+            "lane_invasion_penalty", -10.0
         )
 
         # Progress parameters (NEW: Goal-directed navigation rewards)

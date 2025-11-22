@@ -1,7 +1,7 @@
 # BUG ANALYSIS: Route Distance Increases During Forward Movement
 
-**Date**: November 21, 2025  
-**Run**: run6 (after implementing fixes from FIXES_IMPLEMENTED.md)  
+**Date**: November 21, 2025
+**Run**: run6 (after implementing fixes from FIXES_IMPLEMENTED.md)
 **Status**: 🔴 **CRITICAL BUG DISCOVERED**
 
 ---
@@ -60,14 +60,14 @@ Step 28: route_distance=262.32m, prev=262.48m, delta=+0.161m → reward=+8.06   
 def get_route_distance_to_goal(self, vehicle_location) -> float:
     # Step 1: Find nearest waypoint ahead
     nearest_idx = self._find_nearest_waypoint_index(vehicle_location)
-    
+
     # Step 2: Distance from vehicle to next waypoint
     total_distance = sqrt((next_wp[0] - vx)² + (next_wp[1] - vy)²)
-    
+
     # Step 3: Sum distances between remaining waypoints
     for i in range(nearest_idx, len(waypoints) - 1):
         total_distance += sqrt((wp2[0] - wp1[0])² + (wp2[1] - wp1[1])²)
-    
+
     return total_distance
 ```
 
@@ -160,26 +160,26 @@ Calculate vehicle's position PROJECTED onto the route path, then measure distanc
 ```python
 def get_route_distance_to_goal(self, vehicle_location) -> float:
     """Calculate distance along route from vehicle's PROJECTED position to goal."""
-    
+
     # Step 1: Find nearest waypoint segment (between waypoint[i] and waypoint[i+1])
     nearest_segment_idx = self._find_nearest_segment(vehicle_location)
-    
+
     # Step 2: Project vehicle onto that segment
     projection_point = self._project_onto_segment(
         vehicle_location,
         self.waypoints[nearest_segment_idx],
         self.waypoints[nearest_segment_idx + 1]
     )
-    
+
     # Step 3: Calculate distance from projection to next waypoint
     dist_to_next_wp = distance(projection_point, self.waypoints[nearest_segment_idx + 1])
-    
+
     # Step 4: Sum remaining waypoint segments
     remaining_dist = sum(
         distance(self.waypoints[i], self.waypoints[i+1])
         for i in range(nearest_segment_idx + 1, len(self.waypoints) - 1)
     )
-    
+
     return dist_to_next_wp + remaining_dist
 ```
 
@@ -196,14 +196,14 @@ Parameterize the route by arc-length, find vehicle's nearest arc-length paramete
 ```python
 def get_route_distance_to_goal(self, vehicle_location) -> float:
     """Calculate distance using arc-length parameterization."""
-    
+
     # Step 1: Build cumulative distance array for each waypoint
     if not hasattr(self, 'cumulative_distances'):
         self._compute_cumulative_distances()
-    
+
     # Step 2: Find vehicle's arc-length parameter (progress along route)
     vehicle_arc_length = self._find_arc_length_parameter(vehicle_location)
-    
+
     # Step 3: Distance to goal = total route length - vehicle arc length
     total_route_length = self.cumulative_distances[-1]
     return total_route_length - vehicle_arc_length
@@ -221,7 +221,7 @@ Exploration phase (random actions):
   - Negative rewards dominate: -0.13, -1.79, -3.15, -4.00...
   - Only positive rewards at waypoint milestones (+108.61)
   - Agent learns: "Forward movement = bad, waypoint bonus = good"
-  
+
 Result: Agent tries to reach waypoints as fast as possible,
         ignoring smooth forward progress (random jerky movements)
 ```
@@ -234,7 +234,7 @@ Exploration phase (random actions):
   - Vehicle drifts sideways → distance UNCHANGED → zero reward
   - Vehicle moves backward → distance INCREASES → negative reward
   - Waypoint bonus still applies when reached
-  
+
 Result: Agent learns: "Forward progress = good, backward = bad"
         Smooth forward-directed policy emerges naturally
 ```

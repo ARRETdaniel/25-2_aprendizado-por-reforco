@@ -1,8 +1,8 @@
 # Investigation: Hard Left Steering Bias After Projection-Based Fix
 
-**Date**: November 21, 2025  
-**Run**: run_RewardProgress5.log  
-**Status**: 🔍 INVESTIGATION IN PROGRESS  
+**Date**: November 21, 2025
+**Run**: run_RewardProgress5.log
+**Status**: 🔍 INVESTIGATION IN PROGRESS
 **Priority**: P0 - CRITICAL
 
 ---
@@ -48,7 +48,7 @@ Step 7965: Input Action: steering=-0.9995 (MAXIMUM left!)
 Step 29:
    Input Action: steering=-0.8493 (requested left)
    Applied Control: steer=0.1446  (actual = SLIGHT RIGHT!)
-   
+
 Step 30:
    Input Action: steering=-0.6182 (requested left)
    Applied Control: steer=-0.8493 (actual = PREVIOUS step's input!)
@@ -80,7 +80,7 @@ Route Distance:
 Progress Reward:
   Raw: 8.76 (delta × scale: 0.175 × 50)
   Weighted: 17.53 (raw × weight: 8.76 × 2.0)
-  
+
 TOTAL REWARD: +18.82  ✅ POSITIVE FOR FORWARD MOVEMENT!
 ```
 
@@ -229,7 +229,7 @@ Step 1500: -315.88
 4. **Progress**: Smooth distance reduction reward (continuous projection)
 
 **Discrete Components** ⚠️:
-5. **Safety**: 
+5. **Safety**:
    - Off-road: -10.0 (sudden jump when leaving road)
    - Lane invasion: -50.0 (sudden jump at lane boundary)
    - Collision: -200.0 (sudden jump on impact)
@@ -389,7 +389,7 @@ Step with 0.175m forward progress:
   Lane Keeping: ~0.94
   Efficiency: ~0.50
   Total: ~3.19 (vs 18.82 before)
-  
+
 Progress contribution: 1.75 / 3.19 = 54.9% (vs 91.7%)  ✅ Better!
 ```
 

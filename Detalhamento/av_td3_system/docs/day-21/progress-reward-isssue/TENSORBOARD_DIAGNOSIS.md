@@ -1,8 +1,8 @@
 # TensorBoard Metrics Diagnosis: TD3 Training Failure Analysis
 
-**Date**: November 21, 2025  
-**Training Run**: TD3_scenario_0_npcs_20_20251121-215524  
-**Steps Analyzed**: 1000-5000 (learning phase)  
+**Date**: November 21, 2025
+**Training Run**: TD3_scenario_0_npcs_20_20251121-215524
+**Steps Analyzed**: 1000-5000 (learning phase)
 **Status**: 🔴 **CRITICAL FAILURES DETECTED - AGENT NOT LEARNING**
 
 ---
@@ -67,7 +67,7 @@ Trend: +1425.68 (+361% increase!)
 **Interpretation**:
 - **Expected**: Critic loss < 100 and **decreasing** (standard benchmarks show ~10-50)
 - **Actual**: Loss > 1000 and **increasing rapidly**
-- **Root Cause**: 
+- **Root Cause**:
   1. Target Q-values are **unstable** (diverging from true returns)
   2. Bellman residuals **not converging** (large TD errors confirmed)
   3. Function approximation error **accumulating**
@@ -129,7 +129,7 @@ TD Error Q2: Mean = +13.38, Std = 7.63
 **Interpretation**:
 - **Expected**: TD errors < 5 (indicates converged value function)
 - **Actual**: TD errors > 13 (**2.6× too high**)
-- **Root Cause**: 
+- **Root Cause**:
   1. Q-values and target Q-values are **misaligned**
   2. Bootstrap targets are **inaccurate** (due to overestimation)
   3. Value function is **diverging** instead of converging
@@ -161,7 +161,7 @@ Exploration Noise: 0.2267 (should decay from 0.3 → 0.1)
 - **Steering**: ✅ **OK** - Mean close to 0.0, no extreme bias
   - **This is INTERESTING**: Previous diagnostics showed hard left/right bias
   - **Explanation**: Bias may be **episodic** (happens in specific situations, not overall)
-  
+
 - **Throttle**: ⚠️ **WARNING** - Mean 0.89 is high
   - Agent is driving **aggressively** (near full throttle)
   - May be trying to maximize **progress reward** (confirmed in previous analysis)
@@ -207,7 +207,7 @@ Comfort: 0.8%
 - We cannot measure **success rate** or **goal completion**
 - We cannot see if rewards are **improving** over time
 
-**Recommendation**: 
+**Recommendation**:
 1. Check if episodes are **terminating early** (collisions, lane invasions)
 2. Verify `CarlaEnv._log_episode_metrics()` is being called
 3. Increase logging frequency for episode-level metrics
@@ -358,7 +358,7 @@ Training Time: Unknown
 # training_config.yaml
 progress:
   distance_scale: 50.0  # ← TOO HIGH!
-  
+
 # Reward calculation
 progress_reward = delta × scale × weight
                 = 0.1m × 50.0 × 2.0 = +10.0 per 0.1m
@@ -461,14 +461,14 @@ critic_lr = 3e-4  # 0.0003
 - Steering mean = +0.10 (only 10% right bias, acceptable)
 - Previous logs showed **episodic** hard left/right (not consistent)
 
-**Conclusion**: 
+**Conclusion**:
 - Steering bias is **NOT the primary learning failure**
 - Bias may be a **symptom** of Q-overestimation:
   - Agent selects extreme actions (left/right) because they have inflated Q-values
   - In reality, these actions lead to lane invasion → negative reward
   - But Q-function has not learned this yet (due to overestimation)
 
-**Fix**: 
+**Fix**:
 - Fixing Q-overestimation should also **reduce steering bias**
 - No additional changes needed for steering
 
@@ -489,7 +489,7 @@ progress:
   distance_scale: 5.0  # Changed from 50.0 (10× reduction)
   waypoint_bonus: 1.0  # Changed from 10.0
 
-# carla_config.yaml  
+# carla_config.yaml
 weights:
   progress: 1.0  # Changed from 2.0
   efficiency: 1.0  # Keep same
@@ -527,10 +527,10 @@ noise_clip = 0.5       # Target noise clipping
 # Log these metrics to TensorBoard
 self.logger.record('debug/num_actor_updates', self.actor_updates)
 self.logger.record('debug/num_critic_updates', self.critic_updates)
-self.logger.record('debug/policy_delay_ratio', 
+self.logger.record('debug/policy_delay_ratio',
                    self.critic_updates / max(1, self.actor_updates))  # Should be ~2.0
 
-self.logger.record('debug/target_q_stability', 
+self.logger.record('debug/target_q_stability',
                    np.std(target_q_values))  # Should decrease over time
 ```
 
@@ -544,10 +544,10 @@ self.logger.record('debug/target_q_stability',
 
 def step(self, action):
     # ... existing step logic ...
-    
+
     if done:
         self._log_episode_metrics()  # ← Verify this is being called!
-    
+
     return state, reward, done, info
 
 def _log_episode_metrics(self):
@@ -619,17 +619,17 @@ def check_divergence(q_values, window=100):
     """Detect if Q-values are diverging."""
     if len(q_values) < window:
         return False
-    
+
     recent_q = q_values[-window:]
     q_trend = np.mean(recent_q[-window//2:]) - np.mean(recent_q[:window//2])
     q_mean = np.mean(recent_q)
-    
+
     # Divergence criteria
     if q_mean > 100:  # Q-values unreasonably high
         return True
     if q_trend > 20:  # Q-values increasing too rapidly
         return True
-    
+
     return False
 
 # In training loop
@@ -649,10 +649,10 @@ if check_divergence(q_history):
 
 def step(self, action):
     # ... calculate reward ...
-    
+
     # Clip reward to prevent extreme values
     reward = np.clip(reward, -10.0, +10.0)  # ← ADD THIS
-    
+
     return state, reward, done, info
 ```
 

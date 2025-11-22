@@ -643,27 +643,25 @@ class TD3TrainingPipeline:
         # BUG FIX #14: No flattening! Keep Dict observations for gradient flow
         done = False
 
-        # DEBUG: Verify CNN → TD3 data flow at initialization
-        if self.debug:
-            print(f"\n{'='*70}")
-            print(f"[DEBUG] CNN -> TD3 DATA FLOW VERIFICATION (Initialization)")
-            print(f"{'='*70}")
-            print(f"[DEBUG] Camera Input:")
-            print(f"   Shape: {obs_dict['image'].shape}")  # (4, 84, 84)
-            print(f"   Range: [{obs_dict['image'].min():.3f}, {obs_dict['image'].max():.3f}]")
-            print(f"   Mean: {obs_dict['image'].mean():.3f}, Std: {obs_dict['image'].std():.3f}")
-            print(f"\n[DEBUG] Vector State (Kinematic + Waypoints):")
-            print(f"   Shape: {obs_dict['vector'].shape}")  # (23,)
-            print(f"   Velocity: {obs_dict['vector'][0]:.3f} m/s")
-            print(f"   Lateral Deviation: {obs_dict['vector'][1]:.3f} m")
-            print(f"   Heading Error: {obs_dict['vector'][2]:.3f} rad")
-            print(f"   Waypoints: {obs_dict['vector'][3:23].shape} (10 waypoints × 2)")
-            print(f"\n[DEBUG] Dict Observation Structure:")
-            print(f"   Type: {type(obs_dict)}")
-            print(f"   Keys: {list(obs_dict.keys())}")
-            print(f"   Image shape: {obs_dict['image'].shape}")
-            print(f"   Vector shape: {obs_dict['vector'].shape}")
-            print(f"{'='*70}\n")
+        print(f"\n{'='*70}")
+        print(f"[DEBUG] CNN -> TD3 DATA FLOW VERIFICATION (Initialization)")
+        print(f"{'='*70}")
+        print(f"[DEBUG] Camera Input:")
+        print(f"   Shape: {obs_dict['image'].shape}")  # (4, 84, 84)
+        print(f"   Range: [{obs_dict['image'].min():.3f}, {obs_dict['image'].max():.3f}]")
+        print(f"   Mean: {obs_dict['image'].mean():.3f}, Std: {obs_dict['image'].std():.3f}")
+        print(f"\n[DEBUG] Vector State (Kinematic + Waypoints):")
+        print(f"   Shape: {obs_dict['vector'].shape}")  # (23,)
+        print(f"   Velocity: {obs_dict['vector'][0]:.3f} m/s")
+        print(f"   Lateral Deviation: {obs_dict['vector'][1]:.3f} m")
+        print(f"   Heading Error: {obs_dict['vector'][2]:.3f} rad")
+        print(f"   Waypoints: {obs_dict['vector'][3:23].shape} (was 10 waypoints × 2)")
+        print(f"\n[DEBUG] Dict Observation Structure:")
+        print(f"   Type: {type(obs_dict)}")
+        print(f"   Keys: {list(obs_dict.keys())}")
+        print(f"   Image shape: {obs_dict['image'].shape}")
+        print(f"   Vector shape: {obs_dict['vector'].shape}")
+        print(f"{'='*70}\n")
 
         start_timesteps = self.agent_config.get('algorithm', {}).get('learning_starts', 10000)
         batch_size = self.agent_config.get('algorithm', {}).get('batch_size', 256)
@@ -686,6 +684,7 @@ class TD3TrainingPipeline:
             if t % 100 == 0:
                 phase = "EXPLORATION" if t <= start_timesteps else "LEARNING"
                 print(f"[{phase}] Processing step {t:6d}/{self.max_timesteps:,}...", flush=True)
+
 
             # Select action based on training phase
             if t < start_timesteps:
@@ -716,7 +715,7 @@ class TD3TrainingPipeline:
                 current_noise = noise_min + (noise_max - noise_min) * np.exp(-decay_rate * steps_since_learning_start)
 
                 # Log exploration noise to TensorBoard (every 100 steps)
-                if t % 100 == 0:
+                if t % 10 == 0:
                     self.writer.add_scalar('train/exploration_noise', current_noise, t)
 
                     # ✅ LOGGING FIX: Log action statistics every 100 steps
@@ -772,7 +771,7 @@ class TD3TrainingPipeline:
 
             # BUG FIX: Debug visualization should use NEXT observation (current frame after action)
             # Previous bug: Used obs_dict (old frame before action) causing 1-frame delay
-            if self.debug:
+            if t % 100 == 0:
                 self._visualize_debug(next_obs_dict, action, reward, info, t)
 
                 # DEBUG: Print detailed step info to terminal every 100 steps
@@ -928,7 +927,7 @@ class TD3TrainingPipeline:
                 metrics = self.agent.train(batch_size=batch_size)
 
                 # Log training metrics every 100 steps
-                if t % 100 == 0:
+                if t % 10 == 0:
                     self.writer.add_scalar('train/critic_loss', metrics['critic_loss'], t)
                     self.writer.add_scalar('train/q1_value', metrics['q1_value'], t)
                     self.writer.add_scalar('train/q2_value', metrics['q2_value'], t)
