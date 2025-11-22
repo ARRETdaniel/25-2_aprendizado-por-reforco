@@ -1,8 +1,8 @@
 # Baseline Controller Analysis for TD3 Paper
 ## Critical Scientific Analysis: IDM+MOBIL vs PID+Pure Pursuit
 
-**Date**: November 22, 2025  
-**Purpose**: Determine the most appropriate classical baseline for comparing TD3 performance  
+**Date**: November 22, 2025
+**Purpose**: Determine the most appropriate classical baseline for comparing TD3 performance
 **Decision Required**: IDM+MOBIL (as proposed in paper) vs PID+Pure Pursuit (available implementation)
 
 ---
@@ -126,11 +126,11 @@ bias_to_right_lane: 0.2 m/s² (European traffic rules)
 
 **Critical Limitations for Your Paper**:
 
-❌ **NOT a trajectory controller** - follows vehicles, not waypoints  
-❌ **NOT end-to-end** - requires explicit lane detection and vehicle tracking  
-❌ **NOT single-vehicle compatible** - needs traffic (minimum 2 vehicles per lane)  
-❌ **NOT continuous steering** - only lane-change decisions (discrete)  
-❌ **NOT designed for navigation** - designed for traffic flow optimization  
+❌ **NOT a trajectory controller** - follows vehicles, not waypoints
+❌ **NOT end-to-end** - requires explicit lane detection and vehicle tracking
+❌ **NOT single-vehicle compatible** - needs traffic (minimum 2 vehicles per lane)
+❌ **NOT continuous steering** - only lane-change decisions (discrete)
+❌ **NOT designed for navigation** - designed for traffic flow optimization
 
 ---
 
@@ -196,7 +196,7 @@ trajectory_heading = atan2(waypoint[i+1].y - waypoint[i].y,
 heading_error = trajectory_heading - vehicle_yaw
 
 # Pure Pursuit steering law
-steering = heading_error + atan(kp_heading * crosstrack_sign * crosstrack_error / 
+steering = heading_error + atan(kp_heading * crosstrack_sign * crosstrack_error /
                                 (velocity + k_speed_crosstrack))
 ```
 
@@ -217,12 +217,12 @@ steering = heading_error + atan(kp_heading * crosstrack_sign * crosstrack_error 
 
 **Strengths for Your Paper**:
 
-✅ **Perfect match for your task** - waypoint-based navigation in Town01  
-✅ **Single-vehicle compatible** - no traffic dependencies  
-✅ **Continuous control** - same action space as TD3 [steering, throttle]  
-✅ **Deterministic and reproducible** - no randomness  
-✅ **Widely used baseline** - standard reference in AV/robotics literature  
-✅ **Already implemented and tested** - working code in `controller2d.py`  
+✅ **Perfect match for your task** - waypoint-based navigation in Town01
+✅ **Single-vehicle compatible** - no traffic dependencies
+✅ **Continuous control** - same action space as TD3 [steering, throttle]
+✅ **Deterministic and reproducible** - no randomness
+✅ **Widely used baseline** - standard reference in AV/robotics literature
+✅ **Already implemented and tested** - working code in `controller2d.py`
 
 ---
 
@@ -278,9 +278,9 @@ Let me search for papers that compare DRL to classical controllers:
 
 **Your Experimental Design** (from paper, Section IV.A):
 ```
-Testing will be conducted in CARLA's `Town01`. To assess generalization 
-and robustness, experiments will be run, initially on a pre-defined route 
-with a turn. Furthermore, tests will be repeated under different traffic 
+Testing will be conducted in CARLA's `Town01`. To assess generalization
+and robustness, experiments will be run, initially on a pre-defined route
+with a turn. Furthermore, tests will be repeated under different traffic
 densities (e.g., 20, 50, and 100 NPC vehicles)
 ```
 
@@ -296,18 +296,18 @@ If you tried to implement IDM+MOBIL for your experiments:
 
 ```
 Scenario 1: Ego vehicle spawns ahead of all NPCs
-  - IDM: No leading vehicle → sₐ = infinity → acceleration = a[1 - (v/v₀)⁴] 
+  - IDM: No leading vehicle → sₐ = infinity → acceleration = a[1 - (v/v₀)⁴]
   - Result: Drives at v₀ (30 m/s = 108 km/h) ignoring waypoints → crashes
-  
+
 Scenario 2: Ego vehicle spawns behind NPCs
   - IDM: Follows leading NPC → ignores waypoints → wrong route
   - MOBIL: Changes lanes to overtake → still ignoring waypoints
   - Result: Drives in traffic flow, never reaches destination
-  
+
 Scenario 3: Single-lane section of Town01
   - MOBIL: Cannot change lanes → stuck behind slow NPC forever
   - Result: Never completes route (timeout)
-  
+
 Scenario 4: NPCs make wrong turns
   - IDM: Follows leading NPC → follows wrong route
   - Result: Agent goes off-route, mission failure
@@ -402,35 +402,35 @@ According to scientific methodology (Duan et al., "Benchmarking Deep Reinforceme
 
 **Current Text** (Section IV.B):
 ```latex
-\item \textbf{Classical Baseline (IDM + MOBIL):} to benchmark the DRL 
-agents against a well-established, non-learning approach, we will include 
-a classical controller, and we will use the Intelligent Driver Model (IDM) 
-for longitudinal control and the MOBIL model for lateral maneuvers. This 
-provides a valuable reference for assessing whether the learned policies 
-achieve performance comparable to or better than traditional, rule-based 
+\item \textbf{Classical Baseline (IDM + MOBIL):} to benchmark the DRL
+agents against a well-established, non-learning approach, we will include
+a classical controller, and we will use the Intelligent Driver Model (IDM)
+for longitudinal control and the MOBIL model for lateral maneuvers. This
+provides a valuable reference for assessing whether the learned policies
+achieve performance comparable to or better than traditional, rule-based
 traffic models.
 ```
 
 **Proposed Revision**:
 ```latex
-\item \textbf{Classical Baseline (PID + Pure Pursuit):} to benchmark the 
-DRL agents against a well-established, non-learning approach, we include 
-a classical waypoint-following controller. We use a PID controller for 
-longitudinal speed tracking and a Pure Pursuit controller for lateral 
-path following. This baseline represents the traditional approach to 
-autonomous navigation and provides a valuable reference for assessing 
-whether the learned policies achieve performance comparable to or better 
-than hand-tuned control algorithms. The controller parameters are tuned 
+\item \textbf{Classical Baseline (PID + Pure Pursuit):} to benchmark the
+DRL agents against a well-established, non-learning approach, we include
+a classical waypoint-following controller. We use a PID controller for
+longitudinal speed tracking and a Pure Pursuit controller for lateral
+path following. This baseline represents the traditional approach to
+autonomous navigation and provides a valuable reference for assessing
+whether the learned policies achieve performance comparable to or better
+than hand-tuned control algorithms. The controller parameters are tuned
 for the specific route in Town01 to ensure a fair comparison.
 ```
 
 **Justification Addition**:
 ```latex
-We selected PID + Pure Pursuit over traffic-oriented models (e.g., IDM+MOBIL) 
-because our task is single-vehicle waypoint navigation, not multi-agent 
-traffic flow optimization. PID + Pure Pursuit is the standard baseline in 
-the autonomous navigation literature and directly solves the same task as 
-our DRL agents (following a pre-defined route), ensuring a fair and 
+We selected PID + Pure Pursuit over traffic-oriented models (e.g., IDM+MOBIL)
+because our task is single-vehicle waypoint navigation, not multi-agent
+traffic flow optimization. PID + Pure Pursuit is the standard baseline in
+the autonomous navigation literature and directly solves the same task as
+our DRL agents (following a pre-defined route), ensuring a fair and
 meaningful comparison.
 ```
 
@@ -476,37 +476,37 @@ from typing import List, Tuple
 class PIDPurePursuitController:
     """
     Classical waypoint-following controller using PID + Pure Pursuit.
-    
+
     Attributes:
         kp, ki, kd: PID gains for speed control
         lookahead_distance: Pure Pursuit lookahead distance (meters)
         kp_heading: Heading error gain for steering
         waypoints: List of (x, y, velocity) waypoints
     """
-    
-    def __init__(self, waypoints: List[Tuple[float, float, float]], 
+
+    def __init__(self, waypoints: List[Tuple[float, float, float]],
                  config: dict = None):
         """
         Initialize controller with waypoints and configuration.
-        
+
         Args:
             waypoints: List of (x, y, velocity) tuples defining the route
             config: Optional configuration dict with PID/Pure Pursuit params
         """
         # Copy your controller2d.py implementation here
         pass
-    
-    def update(self, x: float, y: float, yaw: float, velocity: float, 
+
+    def update(self, x: float, y: float, yaw: float, velocity: float,
                dt: float) -> Tuple[float, float]:
         """
         Compute control commands for current state.
-        
+
         Args:
             x, y: Current position (meters)
             yaw: Current heading (radians)
             velocity: Current speed (m/s)
             dt: Time step (seconds)
-            
+
         Returns:
             (throttle, steering): Control commands in [0,1] × [-1,1]
         """
@@ -514,6 +514,7 @@ class PIDPurePursuitController:
         pass
 ```
 
+## NOTE: the ros middle will be also used by the DRL agent, so it we must implement a ROS interface that will be also compatitibly with other system control (DRL, PID, Pure Pursuit)
 **Step 2: Create ROS 2 Baseline Node** (2-3 hours)
 
 Create `av_td3_system/src/baselines/baseline_node.py`:
@@ -624,23 +625,23 @@ Based on classical control characteristics:
 ```latex
 \subsection{Comparison Against Classical Baseline}
 
-Table \ref{tab:classical_comparison} compares TD3 against the PID + Pure 
-Pursuit baseline across traffic densities. In light traffic (20 NPCs), 
-the classical controller achieves a 75\% success rate, demonstrating that 
-well-tuned traditional control can navigate simple scenarios effectively. 
-However, as traffic density increases, the classical controller's 
-performance degrades significantly (40\% success at 50 NPCs, 30\% at 100 NPCs) 
+Table \ref{tab:classical_comparison} compares TD3 against the PID + Pure
+Pursuit baseline across traffic densities. In light traffic (20 NPCs),
+the classical controller achieves a 75\% success rate, demonstrating that
+well-tuned traditional control can navigate simple scenarios effectively.
+However, as traffic density increases, the classical controller's
+performance degrades significantly (40\% success at 50 NPCs, 30\% at 100 NPCs)
 due to its inability to reason about dynamic obstacles.
 
-In contrast, TD3 maintains robust performance across all scenarios (85\%, 
-78\%, 72\% success rates), demonstrating the advantage of learned policies 
-that adapt to traffic complexity. While the classical controller exhibits 
-lower jerk (smoother control due to PID's derivative term), TD3 achieves 
-better safety (fewer collisions) and efficiency (higher average speed) 
+In contrast, TD3 maintains robust performance across all scenarios (85\%,
+78\%, 72\% success rates), demonstrating the advantage of learned policies
+that adapt to traffic complexity. While the classical controller exhibits
+lower jerk (smoother control due to PID's derivative term), TD3 achieves
+better safety (fewer collisions) and efficiency (higher average speed)
 by anticipating and avoiding conflicts with NPCs.
 
-This comparison validates that TD3's end-to-end learning approach provides 
-substantial benefits over traditional hand-coded controllers in complex, 
+This comparison validates that TD3's end-to-end learning approach provides
+substantial benefits over traditional hand-coded controllers in complex,
 multi-agent environments, while remaining competitive in comfort metrics.
 ```
 
@@ -665,7 +666,7 @@ multi-agent environments, while remaining competitive in comfort metrics.
      year={1992},
      institution={Carnegie-Mellon UNIV Pittsburgh PA Robotics INST}
    }
-   
+
    @book{astrom2010feedback,
      title={Feedback systems: an introduction for scientists and engineers},
      author={{\AA}str{\"o}m, Karl Johan and Murray, Richard M},

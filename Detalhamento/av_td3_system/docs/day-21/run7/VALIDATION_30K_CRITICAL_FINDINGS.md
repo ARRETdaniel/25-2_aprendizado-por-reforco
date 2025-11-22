@@ -1,8 +1,8 @@
 # 30K Training Run - Critical Validation Analysis
 
-**Date:** November 21, 2025  
-**Training Steps:** 30,000  
-**TensorBoard:** `docs/day-21/run7/TD3_scenario_0_npcs_20_20251121-230112/`  
+**Date:** November 21, 2025
+**Training Steps:** 30,000
+**TensorBoard:** `docs/day-21/run7/TD3_scenario_0_npcs_20_20251121-230112/`
 **Text Logs:** `docs/day-21/run7/run-validation_30k_post_all_fixes_20251121_200106.log`
 
 ---
@@ -328,7 +328,7 @@ PROGRESS REWARD PARAMETERS:
 
 ### Available Metrics:
 Unfortunately, no CNN-specific metrics were logged:
-- ❌ No `gradients/actor_cnn_norm` 
+- ❌ No `gradients/actor_cnn_norm`
 - ❌ No `gradients/critic_cnn_norm`
 - ❌ No `agent/actor_cnn_param_std`
 - ❌ No CNN layer activation statistics
@@ -755,7 +755,7 @@ tensorboard --logdir docs/day-21/run7/TD3_scenario_0_npcs_20_20251121-230112
 
 ---
 
-**Generated:** November 21, 2025  
-**Analysis Tool:** TensorBoard event_accumulator + NumPy statistics  
-**Baseline:** 5K training diagnostic (TENSORBOARD_DIAGNOSIS.md)  
+**Generated:** November 21, 2025
+**Analysis Tool:** TensorBoard event_accumulator + NumPy statistics
+**Baseline:** 5K training diagnostic (TENSORBOARD_DIAGNOSIS.md)
 **References:** OpenAI Spinning Up TD3, Stable-Baselines3, Fujimoto et al. (2018)

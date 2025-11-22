@@ -1,9 +1,9 @@
 # Configuration Analysis - 30K Training Run
 ## Post-Validation Analysis & Root Cause Identification
 
-**Date**: November 21, 2025  
-**Run**: 30K steps training (20 NPCs, scenario 0)  
-**Status**: ⚠️ **CRITICAL CONFIGURATION ERROR IDENTIFIED**  
+**Date**: November 21, 2025
+**Run**: 30K steps training (20 NPCs, scenario 0)
+**Status**: ⚠️ **CRITICAL CONFIGURATION ERROR IDENTIFIED**
 **Companion Document**: `VALIDATION_30K_CRITICAL_FINDINGS.md`
 
 ---
@@ -276,7 +276,7 @@ PROGRESS REWARD PARAMETERS:
 4. **This is the OPPOSITE of the recommended fix**
 
 **Possible Causes**:
-1. **Configuration file version confusion**: 
+1. **Configuration file version confusion**:
    - 5K run may have used `distance_scale: 50.0` (overcorrected)
    - 30K run reverted to older config with different baseline
    - Applied fix relative to wrong baseline (0.1 instead of 50.0)
@@ -349,10 +349,10 @@ PROGRESS REWARD PARAMETERS:
 ### P0 - CRITICAL (Fix IMMEDIATELY)
 
 #### Fix #1: Correct `distance_scale` ✅ IDENTIFIED
-**File**: `config/training_config.yaml`  
-**Line**: 149  
-**Current**: `distance_scale: 10.0`  
-**Required**: `distance_scale: 5.0`  
+**File**: `config/training_config.yaml`
+**Line**: 149
+**Current**: `distance_scale: 10.0`
+**Required**: `distance_scale: 5.0`
 
 **Change**:
 ```yaml
@@ -370,10 +370,10 @@ progress:
 ---
 
 #### Fix #2: Correct `waypoint_bonus` ✅ IDENTIFIED
-**File**: `config/training_config.yaml`  
-**Line**: 148  
-**Current**: `waypoint_bonus: 5.0`  
-**Required**: `waypoint_bonus: 1.0`  
+**File**: `config/training_config.yaml`
+**Line**: 148
+**Current**: `waypoint_bonus: 5.0`
+**Required**: `waypoint_bonus: 1.0`
 
 **Change**:
 ```yaml
@@ -390,10 +390,10 @@ progress:
 ---
 
 #### Fix #3: Increase `exploration_noise` ✅ IDENTIFIED
-**File**: `config/td3_config.yaml`  
-**Line**: 48  
-**Current**: `exploration_noise: 0.1`  
-**Required**: `exploration_noise: 0.2`  
+**File**: `config/td3_config.yaml`
+**Line**: 48
+**Current**: `exploration_noise: 0.1`
+**Required**: `exploration_noise: 0.2`
 
 **Change**:
 ```yaml
@@ -410,8 +410,8 @@ exploration_noise: 0.2  # CHANGE FROM 0.1
 ### P1 - HIGH (After P0 Validation)
 
 #### Fix #4: Verify Reward Calculation Logic ✅ VERIFIED
-**File**: `src/environment/reward_functions.py`  
-**Status**: **CORRECT** - Code implementation matches intended design  
+**File**: `src/environment/reward_functions.py`
+**Status**: **CORRECT** - Code implementation matches intended design
 **Action**: Read code to confirm no implementation bugs (COMPLETED)
 
 **Findings**:
@@ -423,27 +423,27 @@ exploration_noise: 0.2  # CHANGE FROM 0.1
 ---
 
 #### Fix #5: Add Configuration Validation ⏳ PENDING
-**File**: `src/environment/reward_functions.py` (or new `validate_config.py`)  
-**Action**: Add sanity checks for configuration values  
+**File**: `src/environment/reward_functions.py` (or new `validate_config.py`)
+**Action**: Add sanity checks for configuration values
 
 **Proposed Checks**:
 ```python
 def validate_reward_config(config: Dict) -> None:
     """Validate reward configuration parameters."""
-    
+
     # Check distance_scale is in expected range
     distance_scale = config.get("progress", {}).get("distance_scale", 1.0)
     assert 1.0 <= distance_scale <= 10.0, \
         f"distance_scale={distance_scale} out of range [1.0, 10.0]"
-    
+
     # Check waypoint_bonus is reasonable
     waypoint_bonus = config.get("progress", {}).get("waypoint_bonus", 1.0)
     assert 0.1 <= waypoint_bonus <= 2.0, \
         f"waypoint_bonus={waypoint_bonus} out of range [0.1, 2.0]"
-    
+
     # Check exploration_noise is sufficient
     # (This would go in TD3 config validation)
-    
+
     # Log validated config
     logger.info("✅ Configuration validation passed")
     logger.info(f"  distance_scale: {distance_scale}")

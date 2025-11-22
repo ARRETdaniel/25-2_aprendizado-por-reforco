@@ -1,0 +1,233 @@
+# Docker Compose Configuration for CARLA 0.9.16 + ROS 2 + Baseline Controller
+# Phase 2: Baseline Controller System
+# Architecture: Multi-container system for autonomous vehicle simulation
+# Target: Supercomputer deployment with GPU support
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # Service 1: CARLA Simulation Server
+  # ==========================================================================
+  carla-server:
+    image: carlasim/carla:0.9.16
+    container_name: carla-server
+    runtime: nvidia
+    network_mode: host
+
+    environment:
+      # GPU configuration
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      # Display (for visualization, optional)
+      - DISPLAY=${DISPLAY:-}
+      # CARLA configuration
+      - SDL_VIDEODRIVER=offscreen
+      - SDL_HINT_CUDA_DEVICE=0
+
+    # Launch CARLA in headless mode
+    # -RenderOffScreen: No display required (supercomputer compatible)
+    # -nosound: Disable audio
+    # -carla-rpc-port=2000: Default RPC port
+    # -quality-level=Low: Faster simulation (can be changed to Epic for visual quality)
+    command: >
+      bash CarlaUE4.sh
+      -RenderOffScreen
+      -nosound
+      -carla-rpc-port=2000
+      -quality-level=Low
+
+    # Health check: Verify CARLA server is listening on port 2000
+    healthcheck:
+      test: ["CMD", "bash", "-c", "netstat -tuln | grep :2000"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+
+    restart: unless-stopped
+
+    # Resource limits (adjust for supercomputer)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ==========================================================================
+  # Service 2: ROS 2 Bridge (Humble - Python 3.10 compatible with CARLA 0.9.16)
+  # ==========================================================================
+  ros2-bridge:
+    image: ros2-carla-bridge:humble
+    container_name: ros2-bridge
+    network_mode: host
+
+    environment:
+      # ROS 2 configuration
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      # CARLA Python API is installed via pip in site-packages, no PYTHONPATH needed
+
+    # Launch bridge with synchronous mode
+    # host: CARLA server hostname (localhost via host network)
+    # port: CARLA RPC port
+    # synchronous_mode: Enable for deterministic simulation
+    # fixed_delta_seconds: 0.05 = 20 Hz simulation frequency
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+               source /opt/carla-ros-bridge/install/setup.bash &&
+               ros2 launch carla_ros_bridge carla_ros_bridge_with_example_ego_vehicle.launch.py
+               host:=localhost
+               port:=2000
+               synchronous_mode:=True
+               fixed_delta_seconds:=0.05
+               town:=Town01
+               timeout:=10"
+
+    # Wait for CARLA server to be healthy
+    depends_on:
+      carla-server:
+        condition: service_healthy
+
+    restart: unless-stopped
+
+    # Health check: Verify bridge is publishing topics
+    healthcheck:
+      test: ["CMD", "bash", "-c", "source /opt/ros/humble/setup.bash && ros2 topic list | grep -q /carla"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ==========================================================================
+  # Service 3: Baseline Controller (PID + Pure Pursuit) - Humble
+  # ==========================================================================
+  baseline-controller:
+    image: baseline-controller:humble
+    container_name: baseline-controller
+    network_mode: host
+
+    environment:
+      # ROS 2 configuration
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+    volumes:
+      # Configuration files (read-only)
+      - ./config/waypoints.txt:/workspace/config/waypoints.txt:ro
+      - ./config/baseline_params.yaml:/workspace/config/baseline_params.yaml:ro
+      # Output logs (read-write)
+      - ./data/logs:/workspace/data/logs:rw
+      # Results (read-write)
+      - ./data/results:/workspace/data/results:rw
+
+    # Launch baseline controller node
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+               source /opt/carla-ros-bridge/install/setup.bash &&
+               source /workspace/av_td3_system/install/setup.bash &&
+               ros2 run av_td3_baseline baseline_controller_node
+               --ros-args
+               --params-file /workspace/config/baseline_params.yaml
+               --log-level info"
+
+    # Wait for bridge to be publishing topics
+    depends_on:
+      ros2-bridge:
+        condition: service_healthy
+
+    restart: unless-stopped  # ==========================================================================
+  # Service 4: DRL Agent (Future - TD3 Training/Evaluation)
+  # ==========================================================================
+  # Uncomment when implementing DRL agent in Phase 3
+  # drl-agent:
+  #   image: drl-agent:foxy
+  #   container_name: drl-agent
+  #   network_mode: host
+  #   runtime: nvidia
+  #
+  #   environment:
+  #     - ROS_DOMAIN_ID=0
+  #     - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+  #     - NVIDIA_VISIBLE_DEVICES=all
+  #
+  #   volumes:
+  #     - ./config:/workspace/config:ro
+  #     - ./data:/workspace/data:rw
+  #     - ./checkpoints:/workspace/checkpoints:rw
+  #
+  #   command: >
+  #     bash -c "source /opt/ros/foxy/setup.bash &&
+  #              source /opt/carla-ros-bridge/install/setup.bash &&
+  #              source /workspace/av_td3_system/install/setup.bash &&
+  #              python3 /workspace/scripts/train_td3_ros2.py"
+  #
+  #   depends_on:
+  #     ros2-bridge:
+  #       condition: service_healthy
+
+# ==============================================================================
+# Shared Network Configuration
+# ==============================================================================
+# Note: Using host network mode for all services to:
+# 1. Enable ROS 2 DDS multicast discovery between containers
+# 2. Minimize latency for CARLA client connections
+# 3. Simplify port management (no port mapping needed)
+#
+# Alternative: Create custom bridge network with multicast enabled
+# networks:
+#   av_td3_network:
+#     driver: bridge
+#     driver_opts:
+#       com.docker.network.bridge.enable_icc: "true"
+
+# ==============================================================================
+# Volume Definitions (Optional: for named volumes instead of bind mounts)
+# ==============================================================================
+# volumes:
+#   carla_logs:
+#   ros2_logs:
+#   training_checkpoints:
+
+# ==============================================================================
+# Usage Instructions
+# ==============================================================================
+# Build images:
+#   docker build -t ros2-carla-bridge:humble -f docker/ros2-carla-bridge.Dockerfile .
+#   docker build -t baseline-controller:humble -f docker/baseline-controller.Dockerfile .
+#
+# Launch all services:
+#   docker-compose -f docker-compose.baseline.yml up
+#
+# Launch in detached mode:
+#   docker-compose -f docker-compose.baseline.yml up -d
+#
+# View logs:
+#   docker-compose -f docker-compose.baseline.yml logs -f
+#   docker-compose -f docker-compose.baseline.yml logs -f carla-server
+#   docker-compose -f docker-compose.baseline.yml logs -f ros2-bridge
+#   docker-compose -f docker-compose.baseline.yml logs -f baseline-controller
+#
+# Stop all services:
+#   docker-compose -f docker-compose.baseline.yml down
+#
+# Rebuild and launch:
+#   docker-compose -f docker-compose.baseline.yml up --build
+#
+# Execute commands in running containers:
+#   docker-compose -f docker-compose.baseline.yml exec ros2-bridge ros2 topic list
+#   docker-compose -f docker-compose.baseline.yml exec ros2-bridge ros2 topic echo /carla/ego_vehicle/odometry
+#   docker-compose -f docker-compose.baseline.yml exec baseline-controller ros2 node list
+#
+# Test ROS 2 communication:
+#   # In one terminal:
+#   docker-compose -f docker-compose.baseline.yml exec ros2-bridge ros2 topic hz /carla/ego_vehicle/odometry
+#   # Should show ~20 Hz
+#
+# Manual vehicle control (testing):
+#   docker-compose -f docker-compose.baseline.yml exec ros2-bridge ros2 topic pub --once \
+#     /carla/ego_vehicle/vehicle_control_cmd carla_msgs/msg/CarlaEgoVehicleControl \
+#     "{throttle: 0.5, steer: 0.0, brake: 0.0}"
+# ==============================================================================
