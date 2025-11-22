@@ -141,7 +141,7 @@ docker-compose -f docker-compose.baseline.yml ps
 
 # Expected output:
 # NAME                STATUS              PORTS
-# carla-server        Up (healthy)        
+# carla-server        Up (healthy)
 # ros2-bridge         Up (healthy)
 # baseline-controller Up
 
@@ -313,6 +313,6 @@ For issues specific to this setup:
 
 ---
 
-**Last Updated**: November 22, 2025  
-**Phase**: Phase 2 - Baseline Controller System  
+**Last Updated**: November 22, 2025
+**Phase**: Phase 2 - Baseline Controller System
 **Status**: ✅ Docker configuration complete, ready for testing

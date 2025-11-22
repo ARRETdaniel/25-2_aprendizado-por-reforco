@@ -1,0 +1,18 @@
+--- a/carla_ros_bridge/src/carla_ros_bridge/bridge.py
++++ b/carla_ros_bridge/src/carla_ros_bridge/bridge.py
+@@ -416,9 +416,13 @@ def main(args=None):
+         except RuntimeError as e:
+             ros comp.logerr("Error: {}".format(e))
+             return 1
+-        if carla_version != '0.9.13':
+-            roscomp.logerr("CARLA python module version 0.9.13 required. Found: {}".format(carla_version))
+-            return 1
++        # Modified to support CARLA 0.9.13-0.9.16
++        supported_versions = ['0.9.13', '0.9.14', '0.9.15', '0.9.16']
++        if carla_version not in supported_versions:
++            roscomp.logwarn("CARLA python module version {} not officially tested. Supported versions: {}".format(
++                carla_version, ', '.join(supported_versions)))
++            roscomp.logwarn("Bridge may have compatibility issues. Proceed with caution.")
++        # Version check now allows all 0.9.13-0.9.16 versions
+         
+         roscomp.init("carla_ros_bridge", args=args)

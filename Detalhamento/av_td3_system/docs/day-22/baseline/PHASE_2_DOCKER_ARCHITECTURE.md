@@ -1,9 +1,9 @@
 # Phase 2: Docker-Based ROS 2 + CARLA Architecture
 
-**Date**: November 22, 2025  
-**Phase**: Phase 2 - Docker Architecture Design  
-**Status**: 🚧 **IN PROGRESS**  
-**Requirement**: System must run in Docker for supercomputer deployment  
+**Date**: November 22, 2025
+**Phase**: Phase 2 - Docker Architecture Design
+**Status**: 🚧 **IN PROGRESS**
+**Requirement**: System must run in Docker for supercomputer deployment
 
 ---
 
@@ -129,8 +129,8 @@ docker run \
 
 #### Container 1: CARLA Server (`carla-server`)
 
-**Image**: `carlasim/carla:0.9.16` (official)  
-**Purpose**: Simulation engine  
+**Image**: `carlasim/carla:0.9.16` (official)
+**Purpose**: Simulation engine
 **Configuration**:
 - Runtime: nvidia
 - Network: host
@@ -145,9 +145,9 @@ docker run \
 
 #### Container 2: ROS 2 Bridge (`ros2-bridge`)
 
-**Image**: `ros2-carla-bridge:foxy` (custom build)  
-**Purpose**: CARLA ↔ ROS 2 translation  
-**Base**: `ros:foxy-ros-base`  
+**Image**: `ros2-carla-bridge:foxy` (custom build)
+**Purpose**: CARLA ↔ ROS 2 translation
+**Base**: `ros:foxy-ros-base`
 **Build Process**:
 1. Copy CARLA Python API from `carlasim/carla:0.9.16`
 2. Clone `carla-ros-bridge` (ros2 branch)
@@ -177,9 +177,9 @@ docker run \
 
 #### Container 3: Baseline Controller (`baseline-controller`)
 
-**Image**: `baseline-controller:foxy` (custom build)  
-**Purpose**: PID + Pure Pursuit waypoint follower  
-**Base**: `ros2-carla-bridge:foxy` (inherit ROS 2 + CARLA env)  
+**Image**: `baseline-controller:foxy` (custom build)
+**Purpose**: PID + Pure Pursuit waypoint follower
+**Base**: `ros2-carla-bridge:foxy` (inherit ROS 2 + CARLA env)
 **Code**:
 - `src/baselines/pid_pure_pursuit.py` (extracted from controller2d.py)
 - `src/ros_nodes/baseline_controller_node.py` (ROS 2 node)
@@ -205,9 +205,9 @@ docker run \
 
 #### Container 4: DRL Agent (Future) (`drl-agent`)
 
-**Image**: `drl-agent:foxy` (custom build)  
-**Purpose**: TD3 agent for training/evaluation  
-**Base**: `ros2-carla-bridge:foxy` + PyTorch  
+**Image**: `drl-agent:foxy` (custom build)
+**Purpose**: TD3 agent for training/evaluation
+**Base**: `ros2-carla-bridge:foxy` + PyTorch
 **Code**:
 - `src/agents/td3_agent.py`
 - `src/environment/carla_env_ros2.py` (ROS 2 version of carla_env.py)
@@ -465,7 +465,7 @@ exec "$@"
   <name>av_td3_baseline</name>
   <version>1.0.0</version>
   <description>PID + Pure Pursuit Baseline Controller for CARLA</description>
-  
+
   <maintainer email="danielterragomes@dcc.ufmg.br">Daniel Terra</maintainer>
   <license>MIT</license>
 
@@ -538,15 +538,15 @@ baseline_controller_node:
       lookahead_distance: 2.0  # meters
       kp_heading: 8.00
       cross_track_deadband: 0.01  # meters
-      
+
     # Waypoint Configuration
     waypoints:
       file_path: "/workspace/config/waypoints.txt"
       target_speed: 8.33  # m/s (30 km/h)
-      
+
     # Control Loop
     control_frequency: 20.0  # Hz
-    
+
     # Safety
     collision_threshold: 0.1  # stop if collision detected
     max_steering_angle: 1.0  # radians
@@ -611,14 +611,14 @@ from carla_msgs.msg import CarlaEgoVehicleControl
 class CARLAEnvROS2(Node):
     def __init__(self):
         super().__init__('carla_env_ros2')
-        
+
         # Publishers
         self.control_pub = self.create_publisher(
             CarlaEgoVehicleControl,
             '/carla/ego_vehicle/vehicle_control_cmd',
             10
         )
-        
+
         # Subscribers
         self.odom_sub = self.create_subscription(
             Odometry,
@@ -626,14 +626,14 @@ class CARLAEnvROS2(Node):
             self.odom_callback,
             10
         )
-        
+
     def step(self, action):
         # Publish control
         msg = CarlaEgoVehicleControl()
         msg.throttle = action[0]
         msg.steer = action[1]
         self.control_pub.publish(msg)
-        
+
         # Wait for state update (handled by callback)
         rclpy.spin_once(self, timeout_sec=0.1)
         return self.current_state, reward, done, info
@@ -664,21 +664,21 @@ from src.baselines.pid_pure_pursuit import PIDPurePursuitController
 class BaselineControllerNode(Node):
     def __init__(self):
         super().__init__('baseline_controller_node')
-        
+
         # Load parameters
         self.declare_parameters...
-        
+
         # Initialize controller (extracted from controller2d.py)
         self.controller = PIDPurePursuitController(
             kp=self.get_parameter('pid.kp').value,
             ki=self.get_parameter('pid.ki').value,
             ...
         )
-        
+
         # Load waypoints
         waypoints = load_waypoints('/workspace/config/waypoints.txt')
         self.controller.set_waypoints(waypoints)
-        
+
         # ROS 2 pub/sub
         self.control_pub = self.create_publisher(
             CarlaEgoVehicleControl,
@@ -691,22 +691,22 @@ class BaselineControllerNode(Node):
             self.odom_callback,
             10
         )
-        
+
         # Control loop timer
         self.timer = self.create_timer(0.05, self.control_loop)  # 20 Hz
-        
+
     def odom_callback(self, msg):
         # Extract state from odometry
         self.current_x = msg.pose.pose.position.x
         self.current_y = msg.pose.pose.position.y
         # ... extract yaw, speed
-        
+
     def control_loop(self):
         # Compute control
         throttle, steer, brake = self.controller.update_controls(
             self.current_x, self.current_y, self.current_yaw, self.current_speed
         )
-        
+
         # Publish control command
         msg = CarlaEgoVehicleControl()
         msg.throttle = float(throttle)
@@ -844,12 +844,12 @@ docker-compose logs -f
 
 ### Task 8: ✅ Fetch Docker + ROS 2 integration docs (COMPLETE)
 
-**Status**: Documentation research complete  
+**Status**: Documentation research complete
 **Output**: This document (PHASE_2_DOCKER_ARCHITECTURE.md)
 
 ### Task 9: Design Docker Architecture (COMPLETE)
 
-**Status**: Multi-container architecture designed  
+**Status**: Multi-container architecture designed
 **Components**:
 - 3 containers: CARLA server, ROS 2 bridge, Baseline controller
 - Network: host mode for low latency
@@ -857,13 +857,13 @@ docker-compose logs -f
 
 ### Task 10: Create ROS 2 + Bridge Dockerfile (NEXT)
 
-**File**: `docker/ros2-carla-bridge.Dockerfile`  
-**Action**: Implement multi-stage build extracting CARLA Python API  
+**File**: `docker/ros2-carla-bridge.Dockerfile`
+**Action**: Implement multi-stage build extracting CARLA Python API
 **Test**: Build image, verify ros2 topic list works
 
 ### Task 11: Test Docker bridge connection
 
-**Action**: Launch CARLA + bridge containers, verify topics  
+**Action**: Launch CARLA + bridge containers, verify topics
 **Success criteria**:
 - Bridge connects to CARLA on port 2000
 - `/carla/ego_vehicle/odometry` publishes at 20 Hz
@@ -871,7 +871,7 @@ docker-compose logs -f
 
 ### Task 12-14: Verify topics and control
 
-**Action**: Test pub/sub between containers  
+**Action**: Test pub/sub between containers
 **Success criteria**:
 - Manual control via `ros2 topic pub` moves vehicle
 - Odometry data reflects vehicle movement

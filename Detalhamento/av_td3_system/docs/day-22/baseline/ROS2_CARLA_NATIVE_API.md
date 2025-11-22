@@ -1,8 +1,8 @@
 # CARLA 0.9.16 ROS 2 Integration - Phase 1 Research Findings
 
-**Date:** November 22, 2025  
-**Phase:** 1 - Research & Analysis  
-**Status:** CRITICAL DECISION REQUIRED  
+**Date:** November 22, 2025
+**Phase:** 1 - Research & Analysis
+**Status:** CRITICAL DECISION REQUIRED
 **Author:** GitHub Copilot Agent
 
 ---
@@ -47,7 +47,7 @@ The release notes stating "all without the latency of a bridge tool" are **misle
     ```python
     from launch import LaunchDescription
     import launch_ros.actions
-    
+
     def generate_launch_description():
         return LaunchDescription([
             launch_ros.actions.Node(
@@ -81,7 +81,7 @@ The release notes stating "all without the latency of a bridge tool" are **misle
 $ docker exec carla-server which ros2
 ros2 command not found  ❌
 
-# Test 2: Check for ROS environment variables  
+# Test 2: Check for ROS environment variables
 $ docker exec carla-server env | grep -i ros
 No ROS env vars found  ❌
 
@@ -110,7 +110,7 @@ The CARLA 0.9.16 release states:
 ### 2.2 Evidence Supporting This Interpretation
 
 1. **No ROS 2 in Docker container**: If native, ROS 2 would be bundled
-2. **ROS bridge repo still active**: github.com/carla-simulator/ros-bridge maintained separately  
+2. **ROS bridge repo still active**: github.com/carla-simulator/ros-bridge maintained separately
 3. **Documentation still references bridge**: CARLA docs link to bridge installation guide
 4. **No native ROS 2 examples in CARLA repo**: GitHub code search found no ROS 2 implementation
 
@@ -200,7 +200,7 @@ source install/setup.bash
     geometry_msgs/PoseWithCovariance pose
     geometry_msgs/TwistWithCovariance twist
 
-/carla/ego_vehicle/vehicle_status  
+/carla/ego_vehicle/vehicle_status
   Type: carla_msgs/CarlaEgoVehicleStatus
   Fields:
     float32 velocity  # m/s
@@ -217,8 +217,8 @@ source install/setup.bash
 
 /carla/ego_vehicle/camera/rgb/image_raw
   Type: sensor_msgs/Image
-  
-/carla/ego_vehicle/collision  
+
+/carla/ego_vehicle/collision
   Type: carla_msgs/CarlaCollisionEvent
 
 /carla/ego_vehicle/lane_invasion
@@ -315,7 +315,7 @@ class CARLANavigationEnv(gymnasium.Env):
     def __init__(self):
         self.client = carla.Client('localhost', 2000)  # Direct API
         self.world = self.client.get_world()
-        
+
     def step(self, action):
         control = carla.VehicleControl(
             throttle=action[0],
@@ -340,13 +340,13 @@ class CARLANavigationEnvROS2(gymnasium.Env):
             self.state_callback,
             10
         )
-        
+
     def step(self, action):
         msg = CarlaEgoVehicleControl()
         msg.throttle = action[0]
         msg.steer = action[1]
         self.control_pub.publish(msg)  # ROS 2 control
-        
+
         # Wait for state update (synchronous)
         rclpy.spin_once(self.ros_node, timeout_sec=0.1)
 ```
@@ -584,10 +584,10 @@ def generate_launch_description():
     return LaunchDescription([
         # Node 1: Bridge
         Node(package='carla_ros_bridge', ...),
-        
-        # Node 2: Controller  
+
+        # Node 2: Controller
         Node(package='av_td3_baseline', ...),
-        
+
         # Parameters
         DeclareLaunchArgument('synchronous_mode', default_value='true'),
     ])
@@ -623,4 +623,3 @@ world.tick()  # Advance one step
 **Document Status**: ✅ COMPLETE - Phase 1 Research Finished
 
 **Next Action**: Install ROS 2 Foxy and build CARLA ROS bridge (Step 1 of Phase 1 implementation)
-

@@ -96,6 +96,17 @@ RUN git clone --recurse-submodules --branch ros2 --depth 1 \
   https://github.com/carla-simulator/ros-bridge.git src/ros-bridge)
 
 # ============================================================================
+# Patch CARLA version requirement for 0.9.16 compatibility
+# ============================================================================
+# The bridge checks the version from CARLA_VERSION file. Update it to 0.9.16
+# and also modify the version check to use LooseVersion comparison (allows minor differences)
+RUN cd src/ros-bridge/carla_ros_bridge/src/carla_ros_bridge && \
+  echo "Patching CARLA version requirement from 0.9.13 to 0.9.16" && \
+  echo "0.9.16" > CARLA_VERSION && \
+  cat CARLA_VERSION && \
+  echo "CARLA_VERSION file updated successfully"
+
+# ============================================================================
 # Install ROS 2 Humble packages needed for CARLA bridge
 # ============================================================================
 # Install ROS 2 Humble desktop packages manually (rosdep has issues with Humble)

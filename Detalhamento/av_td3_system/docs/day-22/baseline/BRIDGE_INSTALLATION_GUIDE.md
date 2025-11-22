@@ -1,9 +1,9 @@
 # CARLA ROS Bridge Installation & Setup Guide
 
-**Target System**: Ubuntu 20.04  
-**ROS Version**: ROS 2 Foxy  
-**CARLA Version**: 0.9.16 (Docker)  
-**Bridge Version**: ros2 branch (latest)  
+**Target System**: Ubuntu 20.04
+**ROS Version**: ROS 2 Foxy
+**CARLA Version**: 0.9.16 (Docker)
+**Bridge Version**: ros2 branch (latest)
 
 ---
 
@@ -11,9 +11,9 @@
 
 ### 1. System Requirements
 
-✅ **Operating System**: Ubuntu 20.04 (Focal Fossa)  
-✅ **CARLA**: 0.9.16 running in Docker container `carla-server`  
-❌ **ROS 2 Foxy**: NOT installed (need to install)  
+✅ **Operating System**: Ubuntu 20.04 (Focal Fossa)
+✅ **CARLA**: 0.9.16 running in Docker container `carla-server`
+❌ **ROS 2 Foxy**: NOT installed (need to install)
 
 **Current Status**: ROS 2 is missing. Will install in Step 2.
 
@@ -395,8 +395,8 @@ ros2 topic echo /clock
 
 ### Control Message (Publisher)
 
-**Topic**: `/carla/ego_vehicle/vehicle_control_cmd`  
-**Type**: `carla_msgs/msg/CarlaEgoVehicleControl`  
+**Topic**: `/carla/ego_vehicle/vehicle_control_cmd`
+**Type**: `carla_msgs/msg/CarlaEgoVehicleControl`
 
 **Fields**:
 ```python
@@ -423,7 +423,7 @@ def convert_to_carla_control(throttle_brake: float, steer: float) -> CarlaEgoVeh
     msg = CarlaEgoVehicleControl()
     msg.header.stamp = node.get_clock().now().to_msg()
     msg.header.frame_id = "ego_vehicle"
-    
+
     # Split throttle/brake
     if throttle_brake >= 0.0:
         msg.throttle = float(np.clip(throttle_brake, 0.0, 1.0))
@@ -431,13 +431,13 @@ def convert_to_carla_control(throttle_brake: float, steer: float) -> CarlaEgoVeh
     else:
         msg.throttle = 0.0
         msg.brake = float(np.clip(-throttle_brake, 0.0, 1.0))
-    
+
     msg.steer = float(np.clip(steer, -1.0, 1.0))
     msg.hand_brake = False
     msg.reverse = False
     msg.gear = 1
     msg.manual_gear_shift = False
-    
+
     return msg
 ```
 
@@ -445,9 +445,9 @@ def convert_to_carla_control(throttle_brake: float, steer: float) -> CarlaEgoVeh
 
 #### 1. Odometry (Primary State Source)
 
-**Topic**: `/carla/ego_vehicle/odometry`  
-**Type**: `nav_msgs/msg/Odometry` (standard ROS message)  
-**Rate**: 20 Hz  
+**Topic**: `/carla/ego_vehicle/odometry`
+**Type**: `nav_msgs/msg/Odometry` (standard ROS message)
+**Rate**: 20 Hz
 
 **Fields**:
 ```python
@@ -472,19 +472,19 @@ def extract_state(odometry_msg) -> dict:
     # Position
     x = odometry_msg.pose.pose.position.x
     y = odometry_msg.pose.pose.position.y
-    
+
     # Orientation (quaternion to yaw)
     quat = odometry_msg.pose.pose.orientation
     yaw = math.atan2(
         2.0 * (quat.w * quat.z + quat.x * quat.y),
         1.0 - 2.0 * (quat.y**2 + quat.z**2)
     )
-    
+
     # Velocity (magnitude of linear velocity)
     vx = odometry_msg.twist.twist.linear.x
     vy = odometry_msg.twist.twist.linear.y
     speed = math.sqrt(vx**2 + vy**2)
-    
+
     return {
         'x': x,
         'y': y,
@@ -495,9 +495,9 @@ def extract_state(odometry_msg) -> dict:
 
 #### 2. Vehicle Status (Alternative State Source)
 
-**Topic**: `/carla/ego_vehicle/vehicle_status`  
-**Type**: `carla_msgs/msg/CarlaEgoVehicleStatus`  
-**Rate**: 20 Hz  
+**Topic**: `/carla/ego_vehicle/vehicle_status`
+**Type**: `carla_msgs/msg/CarlaEgoVehicleStatus`
+**Rate**: 20 Hz
 
 **Fields**:
 ```python
@@ -519,9 +519,9 @@ def calculate_jerk(current_accel, previous_accel, dt):
 
 #### 3. Collision Events
 
-**Topic**: `/carla/ego_vehicle/collision`  
-**Type**: `carla_msgs/msg/CarlaCollisionEvent`  
-**Rate**: Event-driven (only on collision)  
+**Topic**: `/carla/ego_vehicle/collision`
+**Type**: `carla_msgs/msg/CarlaCollisionEvent`
+**Rate**: Event-driven (only on collision)
 
 **Fields**:
 ```python
@@ -541,9 +541,9 @@ def collision_callback(msg):
 
 #### 4. Lane Invasion Events
 
-**Topic**: `/carla/ego_vehicle/lane_invasion`  
-**Type**: `carla_msgs/msg/CarlaLaneInvasionEvent`  
-**Rate**: Event-driven  
+**Topic**: `/carla/ego_vehicle/lane_invasion`
+**Type**: `carla_msgs/msg/CarlaLaneInvasionEvent`
+**Rate**: Event-driven
 
 **Fields**:
 ```python
@@ -572,14 +572,14 @@ from launch_ros.actions import Node
 def generate_launch_description():
     """
     Launch CARLA ROS bridge for baseline controller testing.
-    
+
     Configured for:
     - Synchronous mode: ON
     - Fixed delta: 0.05s (20 Hz)
     - Ego vehicle: Spawned automatically
     - Sensors: RGB camera, collision, IMU, GNSS, odometry
     """
-    
+
     return LaunchDescription([
         # Declare arguments
         DeclareLaunchArgument(
@@ -607,7 +607,7 @@ def generate_launch_description():
             default_value='Town01',
             description='CARLA map to load'
         ),
-        
+
         # CARLA ROS Bridge Node
         Node(
             package='carla_ros_bridge',
@@ -623,7 +623,7 @@ def generate_launch_description():
                 'use_sim_time': True,
             }]
         ),
-        
+
         # Ego Vehicle Spawner Node
         Node(
             package='carla_spawn_objects',
@@ -773,7 +773,7 @@ python3 -c 'import carla; print("Success")'
    ```bash
    docker inspect carla-server | grep NetworkMode
    # Should be: "NetworkMode": "host"
-   
+
    # If not, recreate container with --net=host
    ```
 
