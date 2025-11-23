@@ -12,10 +12,9 @@
         "integrator_max": 10.0
       },
       "pure_pursuit": {
-        "lookahead_distance": 2.0,
-        "kp_heading": 8.0,
-        "k_speed_crosstrack": 0.0,
-        "cross_track_deadband": 0.01
+        "kp_lookahead": 0.8,
+        "min_lookahead": 6.0,
+        "wheelbase": 3.0
       },
       "general": {
         "target_speed_kmh": 30.0
@@ -28,21 +27,21 @@
     "std_collisions": 0.4714045207910317,
     "avg_lane_invasions": 0.0,
     "std_lane_invasions": 0.0,
-    "mean_reward": -3823.5072170090875,
-    "std_reward": 59.42615074331319,
-    "avg_speed_kmh": 29.7810785621966,
-    "std_speed_kmh": 0.020603783764079633,
-    "avg_episode_length": 516.0,
-    "std_episode_length": 13.490737563232042,
+    "mean_reward": 1473.472906742819,
+    "std_reward": 871.8737302925111,
+    "avg_speed_kmh": 28.458377752979573,
+    "std_speed_kmh": 1.3445110724975757,
+    "avg_episode_length": 485.0,
+    "std_episode_length": 93.08061022576076,
     "num_episodes": 3,
     "scenario": 0,
     "seed": 42
   },
   "episodes": {
     "rewards": [
-      -3873.1364735139587,
-      -3739.956707369456,
-      -3857.4284701438482
+      1967.3026146739796,
+      248.11803569150266,
+      2204.9980698629756
     ],
     "successes": [
       0,
@@ -61,13 +60,13 @@
     ],
     "lengths": [
       515,
-      500,
-      533
+      359,
+      581
     ],
     "speeds_kmh": [
-      29.75607792092691,
-      29.780617408757347,
-      29.806540356905547
+      28.937623982868416,
+      29.81227505662284,
+      26.62523421944747
     ]
   }
 }

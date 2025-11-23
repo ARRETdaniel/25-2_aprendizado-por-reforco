@@ -13,6 +13,12 @@ import math
 from typing import List, Tuple, Optional
 import logging
 
+try:
+    import carla
+except ImportError:
+    # CARLA not available (e.g., for testing without simulator)
+    carla = None
+
 
 class WaypointManager:
     """
@@ -32,6 +38,7 @@ class WaypointManager:
         lookahead_distance: float = 50.0,
         num_waypoints_ahead: int = 10,
         waypoint_spacing: float = 5.0,
+        carla_map=None,  # Optional: CARLA map for proper lateral deviation calculation
     ):
         """
         Initialize waypoint manager.
@@ -41,12 +48,14 @@ class WaypointManager:
             lookahead_distance: Maximum distance ahead to track (meters)
             num_waypoints_ahead: Number of future waypoints to include in state
             waypoint_spacing: Distance between consecutive waypoints (meters)
+            carla_map: Optional CARLA map object for accurate lateral deviation calculation
         """
         self.logger = logging.getLogger(__name__)
         self.waypoints_file = waypoints_file
         self.lookahead_distance = lookahead_distance
         self.num_waypoints_ahead = num_waypoints_ahead
         self.waypoint_spacing = waypoint_spacing
+        self.carla_map = carla_map  # Store reference to CARLA map for lateral deviation
 
         # Load waypoints from file
         self.waypoints = self._load_waypoints()  # List of (x, y, z) tuples
@@ -299,14 +308,65 @@ class WaypointManager:
 
     def get_lateral_deviation(self, vehicle_location) -> float:
         """
-        Get lateral deviation from route (perpendicular distance to waypoint).
+        Get lateral deviation from lane center using CARLA's OpenDRIVE projection.
+
+        This method properly accounts for road curvature at intersections by projecting
+        the vehicle's location to the center of the nearest lane using CARLA's map API.
 
         Args:
             vehicle_location: Current vehicle location (can be carla.Location or tuple (x,y,z))
 
         Returns:
-            Lateral deviation in meters (positive = right of route)
+            Lateral deviation in meters (Euclidean 2D distance from lane center)
+            Returns 0.0 if vehicle is not on any road (truly off-road)
         """
+        if not hasattr(self, 'carla_map') or self.carla_map is None:
+            # Fallback to old straight-line method if map not available
+            return self._get_lateral_deviation_legacy(vehicle_location)
+
+        # Check if carla module is available
+        if carla is None:
+            return self._get_lateral_deviation_legacy(vehicle_location)
+
+        # Convert to carla.Location if needed
+        if hasattr(vehicle_location, 'x'):  # Already carla.Location
+            loc = vehicle_location
+        else:  # Tuple (x, y, z)
+            loc = carla.Location(x=vehicle_location[0],
+                                y=vehicle_location[1],
+                                z=vehicle_location[2] if len(vehicle_location) > 2 else 0.0)
+
+        # Get waypoint at lane center using CARLA's OpenDRIVE projection
+        # project_to_road=True ensures we get the center of the nearest lane
+        waypoint = self.carla_map.get_waypoint(
+            loc,
+            project_to_road=True,
+            lane_type=carla.LaneType.Driving
+        )
+
+        if waypoint is None:
+            # Vehicle is truly off-road (not on any driving lane)
+            return float('inf')  # Signal as maximum deviation
+
+        # Get lane center location (follows road curvature through intersections)
+        lane_center = waypoint.transform.location
+
+        # Calculate 2D Euclidean distance from vehicle to lane center
+        lateral_deviation = math.sqrt(
+            (loc.x - lane_center.x)**2 +
+            (loc.y - lane_center.y)**2
+        )
+
+        return lateral_deviation
+
+    def _get_lateral_deviation_legacy(self, vehicle_location) -> float:
+        """
+        Legacy method: Calculate lateral deviation using straight-line projection
+        between waypoints. DEPRECATED - does not account for road curvature.
+
+        Kept for fallback when CARLA map is not available.
+        """
+        print("WARNING: Using legacy lateral deviation calculation (may be inaccurate at intersections)")
         if self.current_waypoint_idx >= len(self.waypoints):
             return 0.0
 

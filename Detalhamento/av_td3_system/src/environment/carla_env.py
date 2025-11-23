@@ -148,6 +148,10 @@ class CARLANavigationEnv(Env):
         waypoints_file = self.carla_config.get("route", {}).get(
             "waypoints_file", "waypoints.txt"
         )
+
+        # Get CARLA map for proper lateral deviation calculation
+        carla_map = self.world.get_map()
+
         legacy_waypoint_manager = WaypointManager(
             waypoints_file=waypoints_file,
             lookahead_distance=self.carla_config.get("route", {}).get(
@@ -156,6 +160,7 @@ class CARLANavigationEnv(Env):
             num_waypoints_ahead=self.carla_config.get("route", {}).get(
                 "num_waypoints_ahead", 25
             ),
+            carla_map=carla_map,  # Pass CARLA map for intersection-aware lateral deviation
         )
 
         # Extract start and end locations from legacy waypoints file
@@ -249,10 +254,11 @@ class CARLANavigationEnv(Env):
             Object with waypoint_manager interface (waypoints attribute, reset() method, etc.)
         """
         class WaypointManagerAdapter:
-            def __init__(self, route_manager, lookahead_distance, sampling_resolution):
+            def __init__(self, route_manager, lookahead_distance, sampling_resolution, carla_map):
                 self.route_manager = route_manager
                 self.lookahead_distance = lookahead_distance
                 self.sampling_resolution = sampling_resolution
+                self.carla_map = carla_map  # Store CARLA map for lateral deviation
 
                 #  FIX: Calculate num_waypoints dynamically to match actual spacing
                 # Before: num_waypoints_ahead was hardcoded (10), assuming 5m spacing
@@ -310,13 +316,59 @@ class CARLANavigationEnv(Env):
 
                 return self.waypoints[start_idx:end_idx]
 
+            def get_lateral_deviation(self, vehicle_location) -> float:
+                """
+                Get lateral deviation from lane center using CARLA's OpenDRIVE projection.
+                Delegates to the same proper calculation used by WaypointManager.
+
+                Args:
+                    vehicle_location: Current vehicle location
+
+                Returns:
+                    Lateral deviation in meters
+                """
+                if not self.carla_map:
+                    return 0.0  # Fallback if no map available
+
+                # Convert to carla.Location if needed
+                if hasattr(vehicle_location, 'x'):  # Already carla.Location
+                    loc = vehicle_location
+                else:  # Tuple (x, y, z)
+                    loc = carla.Location(x=vehicle_location[0],
+                                        y=vehicle_location[1],
+                                        z=vehicle_location[2] if len(vehicle_location) > 2 else 0.0)
+
+                # Get waypoint at lane center (follows road curvature)
+                waypoint = self.carla_map.get_waypoint(
+                    loc,
+                    project_to_road=True,
+                    lane_type=carla.LaneType.Driving
+                )
+
+                if waypoint is None:
+                    # Vehicle is off-road
+                    return float('inf')
+
+                # Calculate 2D distance from vehicle to lane center
+                lane_center = waypoint.transform.location
+                lateral_deviation = math.sqrt(
+                    (loc.x - lane_center.x)**2 +
+                    (loc.y - lane_center.y)**2
+                )
+
+                return lateral_deviation
+
         # FIX: Pass sampling_resolution instead of hardcoded num_waypoints_ahead
         sampling_resolution = self.carla_config.get("route", {}).get("sampling_resolution", 2.0)
+
+        # Get CARLA map for lateral deviation calculation
+        carla_map = self.world.get_map()
 
         return WaypointManagerAdapter(
             route_manager=self.route_manager,
             lookahead_distance=self.carla_config.get("route", {}).get("lookahead_distance", 50.0),
-            sampling_resolution=sampling_resolution
+            sampling_resolution=sampling_resolution,
+            carla_map=carla_map  # Pass map for intersection-aware lateral deviation
         )
 
     def _connect_to_carla(self, max_retries: int = 5):
@@ -715,6 +767,21 @@ class CARLANavigationEnv(Env):
         truncated = (self.current_step >= self.max_episode_steps) and not done
         terminated = done and not truncated
 
+        # DIAGNOSTIC: Log when approaching max steps
+        if self.current_step >= self.max_episode_steps - 10 and not done:
+            self.logger.warning(
+                f"[DIAGNOSTIC] Approaching max_episode_steps! "
+                f"Step {self.current_step}/{self.max_episode_steps}, "
+                f"will truncate in {self.max_episode_steps - self.current_step} steps"
+            )
+
+        # DIAGNOSTIC: Log truncation
+        if truncated:
+            self.logger.warning(
+                f"[TERMINATION] Episode TRUNCATED at step {self.current_step} "
+                f"(reached max_episode_steps={self.max_episode_steps})"
+            )
+
         # Prepare info dict (using counts retrieved before reward calculation)
         info = {
             "step": self.current_step,
@@ -729,6 +796,7 @@ class CARLANavigationEnv(Env):
             "current_waypoint_idx": self.waypoint_manager.get_current_waypoint_index(),
             "waypoint_reached": waypoint_reached,
             "goal_reached": goal_reached,
+            "success": 1 if (termination_reason == "route_completed" and goal_reached) else 0,  # FIX: For evaluation script compatibility
             # NEW: Dense safety metrics for analysis
             "distance_to_nearest_obstacle": distance_to_nearest_obstacle,
             "time_to_collision": time_to_collision,
@@ -1090,6 +1158,7 @@ class CARLANavigationEnv(Env):
         """
         # Collision: immediate termination
         if self.sensors.is_collision_detected():
+            self.logger.warning(f"[TERMINATION] Collision detected at step {self.current_step}")
             return True, "collision"
 
         # FIXED: Off-road detection based on lateral deviation threshold
@@ -1098,6 +1167,10 @@ class CARLANavigationEnv(Env):
         # This allows agent to learn recovery behavior from mistakes
         lateral_deviation = abs(vehicle_state.get("lateral_deviation", 0.0))
         if lateral_deviation > 2.0:  # meters from lane center
+            self.logger.warning(
+                f"[TERMINATION] Off-road at step {self.current_step}: "
+                f"lateral_deviation={lateral_deviation:.3f}m > 2.0m threshold"
+            )
             return True, "off_road"
 
         # Wrong way: penalize but don't terminate immediately
@@ -1105,6 +1178,10 @@ class CARLANavigationEnv(Env):
 
         # Route completion
         if self.waypoint_manager.is_route_finished():
+            self.logger.info(
+                f"[TERMINATION] Route completed at step {self.current_step}! "
+                f"Waypoint {self.waypoint_manager.get_current_waypoint_index()}/{len(self.waypoint_manager.waypoints)-1}"
+            )
             return True, "route_completed"
 
         # FIX BUG #11: Max steps is NOT an MDP termination condition

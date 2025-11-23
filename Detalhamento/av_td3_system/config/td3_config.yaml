@@ -251,7 +251,7 @@ reward:
 training:
   # Episode settings
   max_timesteps: 2000000  # Total training timesteps (~2000 episodes × 1000 steps)
-  max_episode_steps: 1000  # Maximum steps per episode (CARLA default)
+  max_episode_steps: 2000  # Maximum steps per episode (CARLA default)
 
   # Checkpointing
   save_freq: 10000  # Save model every N timesteps

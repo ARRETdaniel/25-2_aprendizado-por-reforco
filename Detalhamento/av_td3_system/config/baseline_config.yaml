@@ -22,23 +22,32 @@ baseline_controller:
     integrator_max: 10.0
 
   # Pure Pursuit Controller parameters (lateral/steering control)
+  # UPDATED: True Pure Pursuit implementation (2025-01-23)
+  # Fixed: Replaced Stanley controller with geometric Pure Pursuit from Course1FinalProject
+  #
+  # CRITICAL FIX (2025-11-23): Reduced min_lookahead for intersection turns
+  # Previous: 15m minimum caused corner-cutting at intersections
+  # - At low speed (2.5 m/s), 15m lookahead points too far ahead
+  # - Vehicle cuts corner → front wheel hits sidewalk → lane invasion
+  # New: 6m minimum allows tighter turn tracking at intersections
   pure_pursuit:
-    # Lookahead distance in meters
-    # Determines how far ahead the controller looks on the path
-    # Larger values = smoother but less responsive
-    lookahead_distance: 2.0
+    # Speed-adaptive lookahead gain: L_d = max(min_lookahead, kp_lookahead × speed)
+    # Higher values → more preview → smoother tracking at high speeds
+    # From Course1FinalProject/controller2d.py (working implementation)
+    kp_lookahead: 0.8
 
-    # Heading error proportional gain
-    # Controls how aggressively to correct heading errors
-    kp_heading: 8.00
+    # Minimum lookahead distance in meters
+    # REDUCED from 15m to 6m to handle sharp intersection turns
+    # At intersection: speed=2.5 m/s → lookahead = max(6, 0.8×2.5) = 6m ✅
+    # On straightaway: speed=8.3 m/s → lookahead = max(6, 0.8×8.3) = 6.64m ✅
+    # Allows tighter path following at low speeds while maintaining stability
+    min_lookahead: 6.0
 
-    # Speed-dependent crosstrack error gain
-    # Set to 0 to disable speed dependency (as in controller2d.py)
-    k_speed_crosstrack: 0.00
-
-    # Crosstrack error deadband in meters
-    # Reduces oscillations by ignoring small crosstrack errors
-    cross_track_deadband: 0.01
+    # Vehicle wheelbase in meters (distance between front and rear axles)
+    # Used in bicycle kinematic model for steering calculation
+    # Typical passenger car: 2.5-3.5m
+    # CARLA default vehicles: ~3.0m
+    wheelbase: 3.0
 
   # General controller parameters
   general:

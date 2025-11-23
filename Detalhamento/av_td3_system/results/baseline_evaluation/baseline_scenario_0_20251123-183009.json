@@ -1,0 +1,72 @@
+{
+  "config": {
+    "scenario": 0,
+    "seed": 42,
+    "num_episodes": 3,
+    "controller_params": {
+      "pid": {
+        "kp": 0.5,
+        "ki": 0.3,
+        "kd": 0.13,
+        "integrator_min": 0.0,
+        "integrator_max": 10.0
+      },
+      "pure_pursuit": {
+        "kp_lookahead": 0.8,
+        "min_lookahead": 6.0,
+        "wheelbase": 3.0
+      },
+      "general": {
+        "target_speed_kmh": 30.0
+      }
+    }
+  },
+  "metrics": {
+    "success_rate": 0.0,
+    "avg_collisions": 0.6666666666666666,
+    "std_collisions": 0.4714045207910317,
+    "avg_lane_invasions": 0.0,
+    "std_lane_invasions": 0.0,
+    "mean_reward": 1475.3816918984642,
+    "std_reward": 869.1909156945002,
+    "avg_speed_kmh": 28.458714989279198,
+    "std_speed_kmh": 1.344845043768339,
+    "avg_episode_length": 484.6666666666667,
+    "std_episode_length": 93.53193156469196,
+    "num_episodes": 3,
+    "scenario": 0,
+    "seed": 42
+  },
+  "episodes": {
+    "rewards": [
+      1967.3067830842901,
+      253.8441618040376,
+      2204.9941308070647
+    ],
+    "successes": [
+      0,
+      0,
+      0
+    ],
+    "collisions": [
+      1,
+      1,
+      0
+    ],
+    "lane_invasions": [
+      0,
+      0,
+      0
+    ],
+    "lengths": [
+      515,
+      358,
+      581
+    ],
+    "speeds_kmh": [
+      28.937625149600162,
+      29.81327875511095,
+      26.625241063126484
+    ]
+  }
+}

@@ -140,7 +140,7 @@ class BaselineEvaluationPipeline:
             tm_port=self.tm_port
         )
         print(f"[ENVIRONMENT] Map: {self.carla_config.get('world', {}).get('map', 'Town01')}")
-        print(f"[ENVIRONMENT] Max episode steps: {self.agent_config.get('training', {}).get('max_episode_steps', 1000)}")
+        print(f"[ENVIRONMENT] Max episode steps: {self.agent_config.get('training', {}).get('max_episode_steps', 2000)}")
 
         # Load waypoints
         waypoints_file = self.carla_config.get("route", {}).get("waypoints_file", "config/waypoints.txt")
@@ -151,16 +151,18 @@ class BaselineEvaluationPipeline:
         print(f"\n[CONTROLLER] Initializing PID + Pure Pursuit baseline...")
         controller_config = self.baseline_config['baseline_controller']
 
+        # Initialize with TRUE Pure Pursuit parameters (fixed 2025-01-23)
         self.controller = BaselineController(
             pid_kp=controller_config['pid']['kp'],
             pid_ki=controller_config['pid']['ki'],
             pid_kd=controller_config['pid']['kd'],
-            lookahead_distance=controller_config['pure_pursuit']['lookahead_distance'],
-            kp_heading=controller_config['pure_pursuit']['kp_heading'],
+            kp_lookahead=controller_config['pure_pursuit']['kp_lookahead'],
+            min_lookahead=controller_config['pure_pursuit']['min_lookahead'],
+            wheelbase=controller_config['pure_pursuit']['wheelbase'],
             target_speed=controller_config['general']['target_speed_kmh']
         )
         print(f"[CONTROLLER] PID gains: kp={controller_config['pid']['kp']}, ki={controller_config['pid']['ki']}, kd={controller_config['pid']['kd']}")
-        print(f"[CONTROLLER] Pure Pursuit: lookahead={controller_config['pure_pursuit']['lookahead_distance']}m, kp_heading={controller_config['pure_pursuit']['kp_heading']}")
+        print(f"[CONTROLLER] Pure Pursuit: kp_lookahead={controller_config['pure_pursuit']['kp_lookahead']}, min_lookahead={controller_config['pure_pursuit']['min_lookahead']}m, wheelbase={controller_config['pure_pursuit']['wheelbase']}m")
         print(f"[CONTROLLER] Target speed: {controller_config['general']['target_speed_kmh']} km/h")
 
         # Get simulation timestep
@@ -484,10 +486,41 @@ class BaselineEvaluationPipeline:
 
                 obs_dict = next_obs_dict
 
-            # Episode finished
+            # Episode finished - LOG WHY IT ENDED
+            termination_reason = info.get('termination_reason', 'unknown')
             success = info.get('success', 0)
             collision_count = info.get('collision_count', 0)
             lane_invasion_count = info.get('lane_invasion_count', 0)
+
+            # DIAGNOSTIC: Log termination details
+            print(f"\n[TERMINATION] Episode ended after {episode_length} steps:")
+            print(f"  Reason: {termination_reason}")
+            print(f"  Done: {done} (natural MDP termination)")
+            print(f"  Truncated: {truncated} (time limit)")
+            print(f"  Max Steps: {max_episode_steps}")
+            print(f"  Success: {bool(success)}")
+            print(f"  Collisions: {collision_count}")
+            print(f"  Lane Invasions: {lane_invasion_count}")
+
+            # Log position at termination
+            final_pos = info.get('vehicle_state', {})
+            if final_pos and 'location' in final_pos:
+                x = final_pos['location'].get('x', None)
+                y = final_pos['location'].get('y', None)
+                if x is not None and y is not None:
+                    print(f"  Final Position: ({x:.2f}, {y:.2f})")
+                else:
+                    print(f"  Final Position: N/A")
+            else:
+                print(f"  Final Position: N/A")
+
+            # Log waypoint progress
+            waypoint_idx = info.get('current_waypoint_idx', 0)
+            progress_pct = info.get('progress_percentage', 0.0)
+            distance_to_goal = info.get('distance_to_goal', 0.0)
+            print(f"  Waypoint Index: {waypoint_idx}/{len(self.waypoints)-1}")
+            print(f"  Progress: {progress_pct:.1f}%")
+            print(f"  Distance to Goal: {distance_to_goal:.2f} m")
 
             # Calculate episode metrics
             avg_speed_ms = np.mean(episode_speeds) if episode_speeds else 0.0

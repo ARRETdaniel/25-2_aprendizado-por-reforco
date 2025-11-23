@@ -1,6 +1,6 @@
 # Phase 3: Waypoint Following Verification - Analysis Report
 
-**Date**: analysis_0_20251123-141826
+**Date**: analysis_0_20251123-201219
 **Episodes**: 3
 
 ---
@@ -15,9 +15,9 @@ The baseline controller (PID + Pure Pursuit) was evaluated for waypoint followin
 
 | Episode | Steps | Avg Speed (km/h) |
 |---------|-------|------------------|
-| 1 | 515 | 29.76 |
-| 2 | 500 | 29.78 |
-| 3 | 533 | 29.81 |
+| 1 | 515 | 28.94 |
+| 2 | 359 | 29.81 |
+| 3 | 916 | 20.17 |
 
 ---
 
@@ -27,18 +27,18 @@ The baseline controller (PID + Pure Pursuit) was evaluated for waypoint followin
 
 | Metric | Value (m) |
 |--------|-----------|
-| Mean | 0.865 |
-| Std Dev | 0.444 |
-| Median | 0.884 |
-| Max | 1.980 |
-| 95th Percentile | 1.554 |
+| Mean | 0.781 |
+| Std Dev | 0.449 |
+| Median | 0.781 |
+| Max | 1.607 |
+| 95th Percentile | 1.479 |
 | Min | 0.000 |
 
-**Total Samples**: 1548
+**Total Samples**: 1790
 
 **Interpretation**:
-- Mean lateral deviation: 0.865 m
-- 95% of time within: 1.554 m of lane center
+- Mean lateral deviation: 0.781 m
+- 95% of time within: 1.479 m of lane center
 - Termination threshold: 2.0 m
 
 ---
@@ -49,18 +49,18 @@ The baseline controller (PID + Pure Pursuit) was evaluated for waypoint followin
 
 | Metric | Value (degrees) |
 |--------|-----------------|
-| Mean | 9.74 |
-| Std Dev | 7.81 |
-| Median | 7.79 |
-| Max | 33.45 |
-| 95th Percentile | 26.28 |
+| Mean | 1.84 |
+| Std Dev | 5.65 |
+| Median | 0.00 |
+| Max | 32.41 |
+| 95th Percentile | 17.22 |
 | Min | 0.00 |
 
-**Total Samples**: 1548
+**Total Samples**: 1790
 
 **Interpretation**:
-- Mean heading error: 9.74°
-- Controller maintains heading within 26.28° for 95% of time
+- Mean heading error: 1.84°
+- Controller maintains heading within 17.22° for 95% of time
 
 ---
 
@@ -70,17 +70,17 @@ The baseline controller (PID + Pure Pursuit) was evaluated for waypoint followin
 
 | Metric | Value (km/h) |
 |--------|--------------|
-| Mean | 29.78 |
-| Std Dev | 4.91 |
-| Median | 30.30 |
-| Max | 39.28 |
+| Mean | 24.63 |
+| Std Dev | 10.05 |
+| Median | 29.98 |
+| Max | 38.83 |
 | Min | 0.20 |
 
-**Total Samples**: 1548
+**Total Samples**: 1790
 
 **Interpretation**:
-- Mean speed: 29.78 km/h (target: 30.0 km/h)
-- Speed tracking error: 0.22 km/h (0.7% deviation)
+- Mean speed: 24.63 km/h (target: 30.0 km/h)
+- Speed tracking error: 5.37 km/h (17.9% deviation)
 
 ---
 
@@ -91,9 +91,9 @@ The baseline controller (PID + Pure Pursuit) was evaluated for waypoint followin
 **Observation**: Controller exhibits zigzag pattern (repeated lane marking touches).
 
 **Evidence from Data**:
-- Mean lateral deviation: 0.865 m
-- 95th percentile: 1.554 m
-- Max deviation: 1.980 m
+- Mean lateral deviation: 0.781 m
+- 95th percentile: 1.479 m
+- Max deviation: 1.607 m
 
 **Root Causes** (Hypothesis):
 
