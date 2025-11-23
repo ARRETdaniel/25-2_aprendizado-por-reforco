@@ -1,0 +1,64 @@
+version: '3.8'
+
+# Minimal ROS Bridge Test Configuration
+# Following official CARLA ROS Bridge documentation
+#
+# Key Differences from docker-compose.test-bridge.yml:
+# 1. Uses carla_ros_bridge.launch.py (NOT carla_ros_bridge_with_example_ego_vehicle.launch.py)
+# 2. Does NOT launch carla_manual_control (which blocks automated control)
+# 3. Uses async mode for simpler testing
+# 4. Spawns ego vehicle separately via spawn_objects service
+#
+# Reference: https://carla.readthedocs.io/projects/ros-bridge/en/latest/run_ros/
+
+services:
+  # Service 1: CARLA Server (0.9.16)
+  carla-server:
+    image: carlasim/carla:0.9.16
+    container_name: carla-minimal-test
+    runtime: nvidia
+    network_mode: host
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    command: bash CarlaUE4.sh -RenderOffScreen -nosound -carla-rpc-port=2000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 bash -c 'echo > /dev/tcp/localhost/2000' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 40s
+
+  # Service 2: ROS 2 Bridge (Minimal - NO manual control)
+  ros2-bridge-minimal:
+    image: ros2-carla-bridge:humble-v4
+    container_name: ros2-bridge-minimal
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+    depends_on:
+      carla-server:
+        condition: service_healthy
+    volumes:
+      - ../tests/minimal_ego_vehicle.json:/tmp/minimal_ego_vehicle.json:ro
+    # MINIMAL CONFIGURATION:
+    # - Launch basic bridge
+    # - Spawn ego vehicle with essential sensors (odometry, control) via objects.json
+    # - NO manual_control node (critical for automated control)
+    # - Async mode (simpler for testing)
+    command:
+      - /bin/bash
+      - -c
+      - |
+        source /ros_entrypoint.sh
+        ros2 launch carla_ros_bridge carla_ros_bridge.launch.py host:=localhost port:=2000 timeout:=20 synchronous_mode:=false town:=Town01 &
+        sleep 5
+        ros2 launch carla_spawn_objects carla_spawn_objects.launch.py objects_definition_file:=/tmp/minimal_ego_vehicle.json &
+        wait
+    restart: unless-stopped
+
+networks:
+  default:
+    driver: bridge

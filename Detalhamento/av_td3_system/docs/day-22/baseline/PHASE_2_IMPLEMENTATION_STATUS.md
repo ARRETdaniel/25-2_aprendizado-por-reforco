@@ -54,21 +54,36 @@ During initial Docker build attempts (iterations v1-v6), we discovered a fundame
 
 ## Build Verification and Testing
 
-### Build v3: Adding Missing ROS 2 Package
+### Build v4: Successful Build with ROS 2 Humble ✅
 
-**Issue Discovered**: When testing the bridge launch, encountered:
-```
-ModuleNotFoundError: No module named 'derived_object_msgs'
-```
+**Build Status**: ✅ **COMPLETED SUCCESSFULLY**
+**Build Log**: `build_log_humble_v4_clean.log`
+**Image**: `ros2-carla-bridge:humble-v4` (3.96GB)
+**Build Time**: ~30 minutes
 
-**Root Cause**: The `ros-humble-derived-object-msgs` package was listed in rosdep but failed to install automatically during build v2.
+**Build Summary**:
+- ✅ Python 3.10.12 verified
+- ✅ CARLA 0.9.16 Python API installed successfully via pip
+- ✅ All core CARLA ROS 2 packages built:
+  - carla_common
+  - carla_msgs
+  - carla_ros_bridge
+  - carla_spawn_objects
+  - carla_manual_control
+  - carla_twist_to_control
+  - carla_waypoint_publisher
+  - carla_walker_agent
+  - carla_ros_scenario_runner
+- ⚠️ pcl_recorder failed (missing tf2_eigen/tf2_eigen.h) - NON-CRITICAL, not needed for baseline
+- ✅ All launch files available
 
-**Solution**: Added to manual apt-get installation in Dockerfile:
-```dockerfile
-ros-${ROS_DISTRO}-derived-object-msgs \
-```
+**Verification Tests Completed**:
+1. ✅ Python version: `Python 3.10.12`
+2. ✅ CARLA import: `carla.Client` class available
+3. ✅ ROS 2 packages: 11 carla packages installed
+4. ✅ Launch files: 9 launch files found
 
-**Current Status**: Build v3 in progress (build_log_humble_v3.log)
+**Current Status**: Image ready for integration testing
 
 ---
 
