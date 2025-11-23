@@ -1,6 +1,6 @@
 # Quick Start: Baseline Evaluation with Debug Visualization
 
-**Date**: 2025-01-21  
+**Date**: 2025-01-21
 **Purpose**: Quick reference for running baseline evaluation with visual debug window
 
 ---

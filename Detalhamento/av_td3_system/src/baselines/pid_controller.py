@@ -17,10 +17,10 @@ import numpy as np
 class PIDController:
     """
     PID Controller for longitudinal (speed) control.
-    
+
     This controller computes throttle and brake commands to track a desired speed.
     It uses the standard PID formula with anti-windup integrator saturation.
-    
+
     Attributes:
         kp (float): Proportional gain
         ki (float): Integral gain
@@ -30,7 +30,7 @@ class PIDController:
         v_error_integral (float): Accumulated speed error (integral term)
         v_error_prev (float): Previous speed error (for derivative term)
     """
-    
+
     def __init__(
         self,
         kp: float = 0.50,
@@ -41,7 +41,7 @@ class PIDController:
     ):
         """
         Initialize PID controller with specified gains.
-        
+
         Args:
             kp: Proportional gain (default: 0.50 from controller2d.py)
             ki: Integral gain (default: 0.30 from controller2d.py)
@@ -53,25 +53,25 @@ class PIDController:
         self.kp = kp
         self.ki = ki
         self.kd = kd
-        
+
         # Integrator limits (anti-windup)
         self.integrator_min = integrator_min
         self.integrator_max = integrator_max
-        
+
         # State variables
         self.v_error_integral = 0.0
         self.v_error_prev = 0.0
-    
+
     def reset(self) -> None:
         """
         Reset controller state (integral and derivative terms).
-        
+
         This should be called at the start of each episode or when the
         controller needs to be reinitialized.
         """
         self.v_error_integral = 0.0
         self.v_error_prev = 0.0
-    
+
     def update(
         self,
         current_speed: float,
@@ -80,22 +80,22 @@ class PIDController:
     ) -> Tuple[float, float]:
         """
         Compute throttle and brake commands based on speed error.
-        
+
         The PID formula used is:
             control = kp * error + ki * integral(error) + kd * d(error)/dt
-        
+
         Positive control output maps to throttle, negative to brake.
-        
+
         Args:
             current_speed: Current vehicle speed in m/s
             target_speed: Desired vehicle speed in m/s
             dt: Time step in seconds (should match CARLA fixed_delta_seconds)
-        
+
         Returns:
             Tuple[throttle, brake] where:
                 - throttle: Throttle command in [0.0, 1.0]
                 - brake: Brake command in [0.0, 1.0]
-        
+
         Example:
             >>> controller = PIDController()
             >>> throttle, brake = controller.update(current_speed=5.0, target_speed=10.0, dt=0.05)
@@ -103,7 +103,7 @@ class PIDController:
         """
         # Compute speed error
         v_error = target_speed - current_speed
-        
+
         # Integral term with anti-windup
         self.v_error_integral += v_error * dt
         self.v_error_integral = np.clip(
@@ -111,20 +111,20 @@ class PIDController:
             self.integrator_min,
             self.integrator_max
         )
-        
+
         # Derivative term
         if dt > 0:
             v_error_derivative = (v_error - self.v_error_prev) / dt
         else:
             v_error_derivative = 0.0
-        
+
         # PID control law
         control_output = (
             self.kp * v_error +
             self.ki * self.v_error_integral +
             self.kd * v_error_derivative
         )
-        
+
         # Split control into throttle and brake
         # Positive control -> throttle, Negative control -> brake
         if control_output >= 0:
@@ -133,12 +133,12 @@ class PIDController:
         else:
             throttle = 0.0
             brake = np.clip(-control_output, 0.0, 1.0)
-        
+
         # Update previous error for next iteration
         self.v_error_prev = v_error
-        
+
         return throttle, brake
-    
+
     def __repr__(self) -> str:
         """String representation of the controller."""
         return (

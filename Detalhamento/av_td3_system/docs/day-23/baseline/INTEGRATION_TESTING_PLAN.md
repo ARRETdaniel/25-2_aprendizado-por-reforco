@@ -1,6 +1,6 @@
 # Baseline Controller Integration Testing Plan
 
-**Date**: November 23, 2025  
+**Date**: November 23, 2025
 **Status**: ⏳ **READY TO START**
 
 ---
@@ -207,7 +207,7 @@ plt.show()
 # Scenario 0: 20 NPCs
 python scripts/evaluate_baseline.py --scenario 0 --num-episodes 5
 
-# Scenario 1: 50 NPCs  
+# Scenario 1: 50 NPCs
 python scripts/evaluate_baseline.py --scenario 1 --num-episodes 5
 
 # Scenario 2: 100 NPCs
@@ -278,37 +278,37 @@ class MetricsTracker:
         self.lateral_accel_history = []
         self.start_time = None
         self.completion_time = None
-    
+
     def update(self, dt, vehicle):
         # Distance tracking
         velocity = vehicle.get_velocity()
         speed = np.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)
         self.distance_traveled += speed * dt
         self.velocity_history.append(speed)
-        
+
         # Time tracking
         if self.start_time is None:
             self.start_time = time.time()
-    
+
     def compute_final_metrics(self, collision_count):
         # Collisions per km
         distance_km = self.distance_traveled / 1000.0
         collisions_per_km = collision_count / distance_km if distance_km > 0 else 0.0
-        
+
         # Route completion time
         if self.completion_time is None:
             self.completion_time = time.time()
         completion_time_s = self.completion_time - self.start_time
-        
+
         # Longitudinal jerk
         velocities = np.array(self.velocity_history)
         accelerations = np.diff(velocities) / dt
         jerks = np.diff(accelerations) / dt
         avg_jerk = np.mean(np.abs(jerks)) if len(jerks) > 0 else 0.0
-        
+
         # Lateral acceleration (requires position history)
         # TODO: Calculate from trajectory curvature
-        
+
         return {
             'collisions_per_km': collisions_per_km,
             'completion_time_s': completion_time_s,
@@ -391,10 +391,10 @@ If integration test fails, check:
 
 ## Success Criteria Summary
 
-**Phase 1 (Connectivity)**: ✅ If script runs without connection errors  
-**Phase 2 (Control)**: ✅ If control values are valid and reasonable  
-**Phase 3 (Waypoints)**: ✅ If trajectory follows waypoints with <1m avg error  
-**Phase 4 (NPCs)**: ✅ If success rate >50% in scenario 0  
+**Phase 1 (Connectivity)**: ✅ If script runs without connection errors
+**Phase 2 (Control)**: ✅ If control values are valid and reasonable
+**Phase 3 (Waypoints)**: ✅ If trajectory follows waypoints with <1m avg error
+**Phase 4 (NPCs)**: ✅ If success rate >50% in scenario 0
 **Phase 5 (Metrics)**: ✅ If all paper metrics collected and valid
 
 ---
