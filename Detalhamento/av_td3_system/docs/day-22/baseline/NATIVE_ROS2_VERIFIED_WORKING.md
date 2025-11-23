@@ -1,7 +1,7 @@
 # 🎉 NATIVE ROS 2 FULLY VERIFIED AND WORKING!
 
-**Date:** 2025-01-XX  
-**Status:** ✅ **SUCCESS** - Native ROS 2 confirmed working in carlasim/carla:0.9.16  
+**Date:** 2025-01-XX
+**Status:** ✅ **SUCCESS** - Native ROS 2 confirmed working in carlasim/carla:0.9.16
 **Critical Discovery:** `enable_for_ros()` method required for sensors
 
 ---
@@ -12,7 +12,7 @@
 
 **All requirements met:**
 1. ✅ `--ros2` flag works in carlasim/carla:0.9.16 Docker image
-2. ✅ `ros_name` attribute exists on blueprints  
+2. ✅ `ros_name` attribute exists on blueprints
 3. ✅ `enable_for_ros()` method exists on sensor actors
 4. ✅ **ROS 2 topics are being published successfully**
 5. ✅ Topics discoverable by standard ROS 2 tools
@@ -108,10 +108,10 @@ CARLA Native ROS 2 Verification Test
 
 ### Topic Name Format Observation
 
-**Expected format:** `/carla/{ros_name}/{sensor_name}/{type}`  
+**Expected format:** `/carla/{ros_name}/{sensor_name}/{type}`
 → `/carla/test_vehicle/front_camera/image`
 
-**Actual format:** `/carla//{sensor_name}/{type}`  
+**Actual format:** `/carla//{sensor_name}/{type}`
 → `/carla//front_camera/image`
 
 **Explanation:** The double slash `//` suggests:
@@ -185,14 +185,14 @@ from sensor_msgs.msg import Image
 class CameraSubscriber(Node):
     def __init__(self):
         super().__init__('camera_subscriber')
-        
+
         self.subscription = self.create_subscription(
             Image,
             '/carla//front_camera/image',  # Note: double slash
             self.camera_callback,
             10
         )
-        
+
     def camera_callback(self, msg):
         self.get_logger().info(f'Received image: {msg.width}x{msg.height}')
 
@@ -211,7 +211,7 @@ from carla_msgs.msg import CarlaEgoVehicleControl
 class VehicleController(Node):
     def __init__(self):
         super().__init__('vehicle_controller')
-        
+
         # Topic name TBD - need to test vehicle control topic format
         self.publisher = self.create_publisher(
             CarlaEgoVehicleControl,
@@ -316,9 +316,9 @@ Based on CARLA's native ROS 2 implementation, the following sensors can publish 
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Total containers:** 2 (CARLA + Controller)  
-**Communication:** Native DDS (no bridge!)  
-**Latency:** ~5-10ms (lowest possible)  
+**Total containers:** 2 (CARLA + Controller)
+**Communication:** Native DDS (no bridge!)
+**Latency:** ~5-10ms (lowest possible)
 **Complexity:** Low (standard ROS 2 patterns)
 
 ---
@@ -338,29 +338,29 @@ from carla_msgs.msg import CarlaEgoVehicleControl
 class TestController(Node):
     def __init__(self):
         super().__init__('test_controller')
-        
+
         # Try expected topic format
         self.pub_v1 = self.create_publisher(
             CarlaEgoVehicleControl,
             '/carla/ego/vehicle_control_cmd',
             10
         )
-        
+
         # Also try without vehicle prefix (like sensors)
         self.pub_v2 = self.create_publisher(
             CarlaEgoVehicleControl,
             '/carla//ego/vehicle_control_cmd',
             10
         )
-        
+
         self.timer = self.create_timer(0.5, self.send_test_control)
-        
+
     def send_test_control(self):
         msg = CarlaEgoVehicleControl()
         msg.throttle = 0.3
         msg.steer = 0.0
         msg.brake = 0.0
-        
+
         self.pub_v1.publish(msg)
         self.pub_v2.publish(msg)
         self.get_logger().info('Sent test control command')
@@ -446,7 +446,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    
+
   baseline-controller:
     build:
       context: .

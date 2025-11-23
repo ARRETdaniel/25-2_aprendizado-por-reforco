@@ -2,9 +2,9 @@
 
 ## Test Configuration (v4)
 
-**Date**: 2025-01-23  
-**Test Version**: v4 (Manual Gear Control)  
-**Container**: ros2-bridge-minimal (ros2-carla-bridge:humble-v4)  
+**Date**: 2025-01-23
+**Test Version**: v4 (Manual Gear Control)
+**Container**: ros2-bridge-minimal (ros2-carla-bridge:humble-v4)
 **CARLA**: 0.9.16 (async mode, 20 FPS)
 
 ### Changes from v3
@@ -43,8 +43,8 @@
 ## Analysis
 
 ### What Was Fixed
-✅ **Spawn Point**: Vehicle at ground level (z=0.00) - working since v2  
-✅ **Brake Release**: Brake=0.0 published for 1s before throttle - implemented in v3  
+✅ **Spawn Point**: Vehicle at ground level (z=0.00) - working since v2
+✅ **Brake Release**: Brake=0.0 published for 1s before throttle - implemented in v3
 ✅ **Manual Gear Control**: `manual_gear_shift=True` with `gear=1` - implemented in v4
 
 ### What STILL Doesn't Work
@@ -59,7 +59,7 @@
 
 Given that THREE successive fixes have failed:
 1. v2: Fixed spawn (underground → ground level) ✅ → Still no movement
-2. v3: Added brake release phase ✅ → Still no movement  
+2. v3: Added brake release phase ✅ → Still no movement
 3. v4: Enabled manual gear control ✅ → Still no movement
 
 **This suggests the issue is NOT with**:
@@ -124,12 +124,12 @@ docker logs ros2-bridge-minimal | grep -i "control\|physics\|gear"
 
 ## Phase 2.2 Status
 
-**Progress**: 95% → Blocked  
-**Blockers**:  
+**Progress**: 95% → Blocked
+**Blockers**:
 - Root cause of vehicle immobility still unknown after 3 fix attempts
 - Need deeper investigation into CARLA vehicle physics/control
 
-**Impact on Downstream Phases**:  
+**Impact on Downstream Phases**:
 - Phase 2.3 (PID+Pure Pursuit extraction) remains blocked
 - Cannot proceed without functional vehicle control via ROS Bridge
 
@@ -142,7 +142,7 @@ docker logs ros2-bridge-minimal | grep -i "control\|physics\|gear"
 - CARLA VehicleControl docs: https://carla.readthedocs.io/en/latest/python_api/#carlavehiclecontrol
 - Manual gear shift property:
   ```python
-  manual_gear_shift (bool): Determines whether the vehicle will be 
+  manual_gear_shift (bool): Determines whether the vehicle will be
   controlled by changing gears manually. Default is False.
   gear (int): States which gear is the vehicle running on.
   ```

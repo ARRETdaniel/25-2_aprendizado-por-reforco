@@ -1,7 +1,7 @@
 # Phase 2.2: ROS Bridge Vehicle Control Investigation
 
-**Date:** 2025-11-22  
-**Status:** 🔍 ACTIVE INVESTIGATION  
+**Date:** 2025-11-22
+**Status:** 🔍 ACTIVE INVESTIGATION
 **Goal:** Verify ROS Bridge can control CARLA vehicles for baseline implementation
 
 ---
@@ -21,23 +21,23 @@ Through extensive testing and official documentation review, we discovered:
 
 ### Previous Testing (with example ego vehicle launch)
 
-**Test 1:** `test_ros_bridge_vehicle_control.py`  
+**Test 1:** `test_ros_bridge_vehicle_control.py`
 - Used: `carla_ros_bridge_with_example_ego_vehicle.launch.py`
 - Result: No odometry received (synchronous mode blocking)
 
-**Test 2:** `test_ros_bridge_with_tick.py`  
+**Test 2:** `test_ros_bridge_with_tick.py`
 - Added: CARLA Python API client to call `world.tick()`
 - Result: Conflicted with ROS Bridge's internal tick loop
 
-**Test 3:** `test_ros_bridge_pure_ros2.py`  
+**Test 3:** `test_ros_bridge_pure_ros2.py`
 - Pure ROS 2 approach (no Python API)
 - Run inside bridge container (solved DDS discovery issue)
-- Result: 
+- Result:
   - ✅ Odometry received: x=64.36, y=1.96, z=0.00
   - ❌ Distance moved: 0.00m (vehicle didn't respond)
   - ❌ vehicle_status shows throttle=0.0 despite publishing 0.5-0.8
 
-**Test 4:** Debugging attempts  
+**Test 4:** Debugging attempts
 - Disabled autopilot: `ros2 topic pub /carla/ego_vehicle/enable_autopilot std_msgs/Bool '{data: false}'`
 - Disabled manual override: `ros2 topic pub /carla/ego_vehicle/vehicle_control_manual_override std_msgs/Bool '{data: false}'`
 - Various publishing rates: 10 Hz, 20 Hz
@@ -63,10 +63,10 @@ https://carla.readthedocs.io/projects/ros-bridge/en/latest/run_ros/
 ros2 topic pub /carla/<ROLE NAME>/vehicle_control_manual_override std_msgs/Bool '{data: true}'
 ```
 
-**The Problem:**  
+**The Problem:**
 The `carla_ros_bridge_with_example_ego_vehicle.launch.py` launch file starts THREE nodes:
-1. `carla_ros_bridge` - The bridge itself  
-2. `carla_spawn_objects` - Spawns example ego vehicle  
+1. `carla_ros_bridge` - The bridge itself
+2. `carla_spawn_objects` - Spawns example ego vehicle
 3. **`carla_manual_control`** - **Enables manual override mode!**
 
 From `carla_manual_control` documentation:
@@ -125,19 +125,19 @@ Use **`carla_ros_bridge.launch.py`** instead of `carla_ros_bridge_with_example_e
 
 ### Test Execution Issues
 
-**Issue 1: Docker Compose Command Syntax**  
+**Issue 1: Docker Compose Command Syntax**
 - Problem: `host:=localhost` interpreted as bash command
 - Attempted fix: Proper YAML array syntax for command
 - Status: Fixed in docker-compose.minimal-test.yml
 
-**Issue 2: CARLA Connection Timeout**  
+**Issue 2: CARLA Connection Timeout**
 - Problem: Bridge shows "time-out of 2000ms while waiting for the simulator"
 - Possible causes:
   1. CARLA not fully ready when bridge starts
   2. Network host mode issues
   3. Port 2000 not accessible from bridge container
 
-**Issue 3: ROS Bridge Restart Loop**  
+**Issue 3: ROS Bridge Restart Loop**
 - Problem: Container continuously restarting due to connection failure
 - Impact: Can't run control test
 
@@ -209,19 +209,19 @@ int32 gear
 
 ## Lessons Learned
 
-1. **Example launch files ≠ Production setup**  
+1. **Example launch files ≠ Production setup**
    - `carla_ros_bridge_with_example_ego_vehicle.launch.py` is for MANUAL TESTING
    - For automated control, use `carla_ros_bridge.launch.py` + spawn objects separately
 
-2. **Manual control node interferes with automation**  
+2. **Manual control node interferes with automation**
    - Even if it crashes, it may set override mode
    - Always spawn vehicles without manual_control for baseline/DRL agents
 
-3. **ROS 2 DDS discovery between containers is fragile**  
+3. **ROS 2 DDS discovery between containers is fragile**
    - Running tests inside bridge container is more reliable
    - Host network mode helps but doesn't solve everything
 
-4. **Official documentation > assumptions**  
+4. **Official documentation > assumptions**
    - Always fetch and read official docs BEFORE implementing
    - Examples in docs may have different goals than production use
 
@@ -249,7 +249,7 @@ int32 gear
 
 We are **very close** to solving the control issue. The problem is NOT with:
 - ✅ ROS Bridge itself (works)
-- ✅ Topic communication (works)  
+- ✅ Topic communication (works)
 - ✅ Message publishing (works)
 
 The problem is WITH:

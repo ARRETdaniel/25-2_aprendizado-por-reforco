@@ -16,7 +16,7 @@
   - 9 launch files discovered
   - Image ready for integration: `ros2-carla-bridge:humble-v4` (3.96GB)
 
-### In Progress 🔄  
+### In Progress 🔄
 - **Phase 2.2**: Full ROS 2 Bridge Stack Testing
   - Docker compose configuration created
   - Test script ready (`docker/test_ros2_bridge.sh`)
@@ -25,7 +25,7 @@
 ### Next Steps ⏳
 - **Phase 2.3**: Extract and modernize controllers from legacy code
 - **Phase 2.4**: Create ROS 2 baseline controller node
-- **Phase 2.5**: Build baseline controller Docker image  
+- **Phase 2.5**: Build baseline controller Docker image
 - **Phase 2.6**: Full 3-container integration test
 - **Phase 2.7**: Performance evaluation and documentation
 
@@ -95,7 +95,7 @@ ros2-carla-bridge       foxy         27a903f5dd93   1.48GB   # Failed (Python 3.
 - ✅ `docker/docker-compose.test-bridge.yml` - For Phase 2.2 testing
 - 📋 Need to create: `docker/docker-compose.baseline.yml` - For full 3-container stack
 
-### Test Scripts Created  
+### Test Scripts Created
 - ✅ `docker/test_ros2_bridge.sh` - Integration test script (already existed)
 
 ---
@@ -145,7 +145,7 @@ docker-compose -f docker-compose.test-bridge.yml up
 docker run --rm --gpus all --net=host carlasim/carla:0.9.16 \
   bash CarlaUE4.sh -RenderOffScreen -nosound -carla-rpc-port=2000
 
-# Terminal 2: ROS 2 bridge with example ego vehicle  
+# Terminal 2: ROS 2 bridge with example ego vehicle
 docker run --rm --net=host ros2-carla-bridge:humble-v4 \
   bash -c "source /ros_entrypoint.sh bash -c 'ros2 launch carla_ros_bridge carla_ros_bridge_with_example_ego_vehicle.launch.py host:=localhost port:=2000 synchronous_mode:=true fixed_delta_seconds:=0.05'"
 ```
@@ -249,7 +249,7 @@ Once topics are verified and control works, we proceed to extract and modernize 
 
 ### Build Quality ✅
 - Python version correct: ✅
-- CARLA API functional: ✅  
+- CARLA API functional: ✅
 - ROS 2 packages built: ✅ 11/12 (pcl_recorder non-critical failure)
 - Launch files available: ✅ 9 files
 - Image size: 3.96GB (acceptable for development)

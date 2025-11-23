@@ -1,0 +1,108 @@
+# Configuration file for PID + Pure Pursuit Baseline Controller
+# Based on parameters from FinalProject/controller2d.py
+
+# Baseline controller configuration
+baseline_controller:
+  # PID Controller parameters (longitudinal/speed control)
+  pid:
+    # Proportional gain - how aggressively to respond to current error
+    kp: 0.50
+    
+    # Integral gain - how aggressively to respond to accumulated error
+    # Helps eliminate steady-state error
+    ki: 0.30
+    
+    # Derivative gain - how aggressively to respond to rate of change of error
+    # Provides damping and reduces oscillations
+    kd: 0.13
+    
+    # Anti-windup integrator bounds
+    # Prevents integral term from growing unbounded during saturation
+    integrator_min: 0.0
+    integrator_max: 10.0
+  
+  # Pure Pursuit Controller parameters (lateral/steering control)
+  pure_pursuit:
+    # Lookahead distance in meters
+    # Determines how far ahead the controller looks on the path
+    # Larger values = smoother but less responsive
+    lookahead_distance: 2.0
+    
+    # Heading error proportional gain
+    # Controls how aggressively to correct heading errors
+    kp_heading: 8.00
+    
+    # Speed-dependent crosstrack error gain
+    # Set to 0 to disable speed dependency (as in controller2d.py)
+    k_speed_crosstrack: 0.00
+    
+    # Crosstrack error deadband in meters
+    # Reduces oscillations by ignoring small crosstrack errors
+    cross_track_deadband: 0.01
+  
+  # General controller parameters
+  general:
+    # Target cruising speed in km/h
+    # Will be converted to m/s internally
+    target_speed_kmh: 30.0
+
+# Evaluation configuration
+evaluation:
+  # Number of evaluation episodes
+  num_episodes: 20
+  
+  # Maximum steps per episode
+  max_steps: 1000
+  
+  # Simulation timestep in seconds (should match CARLA config)
+  fixed_delta_seconds: 0.05
+  
+  # CARLA map to use
+  map_name: "Town01"
+  
+  # Waypoints file path
+  waypoints_file: "config/waypoints.txt"
+  
+  # Weather preset (optional)
+  weather: "ClearNoon"
+  
+  # Traffic configuration
+  traffic:
+    # Number of NPC vehicles
+    num_vehicles: 50
+    
+    # Number of NPC pedestrians
+    num_pedestrians: 0
+  
+  # Output directory for results
+  output_dir: "results/baseline_evaluation"
+  
+  # Save trajectory data
+  save_trajectory: true
+  
+  # Save camera images
+  save_images: false
+  
+  # Metrics to collect
+  metrics:
+    - success_rate
+    - avg_collisions_per_km
+    - avg_speed_kmh
+    - route_completion_time_s
+    - avg_longitudinal_jerk_m_s3
+    - avg_lateral_acceleration_m_s2
+    - ttc_analysis
+
+# Logging configuration
+logging:
+  # Console log level (DEBUG, INFO, WARNING, ERROR)
+  console_level: "INFO"
+  
+  # File log level
+  file_level: "DEBUG"
+  
+  # Log file path
+  log_file: "logs/baseline_evaluation.log"
+  
+  # Enable debug info from controllers
+  debug_controllers: false

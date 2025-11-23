@@ -43,8 +43,15 @@ cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_
 # then
 cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system &&tensorboard --logdir data/logs --port 6006
 
+# BASELINE
 
+docker run -d --name carla-server --runtime=nvidia --net=host \
+    --env=NVIDIA_VISIBLE_DEVICES=all \
+    --env=NVIDIA_DRIVER_CAPABILITIES=all \
+    carlasim/carla:0.9.16 bash CarlaUE4.sh -RenderOffScreen -nosound
 
-testes
+cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system && docker run --rm --network host --runtime nvidia -e NVIDIA_VISIBLE_DEVICES=all -e NVIDIA_DRIVER_CAPABILITIES=all -e PYTHONUNBUFFERED=1 -e PYTHONPATH=/workspace -v $(pwd):/workspace -w /workspace td3-av-system:v2.0-python310 python3 scripts/evaluate_baseline.py --scenario 0 --num-episodes 1 --baseline-config config/baseline_config.yaml --debug 2>&1
+
+# testes
 
 docker run -d --name carla-server --runtime=nvidia --net=host --env=NVIDIA_VISIBLE_DEVICES=all --env=NVIDIA_DRIVER_CAPABILITIES=all carlasim/carla:0.9.16 bash CarlaUE4.sh --ros2 -RenderOffScreen -nosound

@@ -20,7 +20,6 @@
         {
             "type": "vehicle.tesla.model3",
             "id": "ego_vehicle",
-            "spawn_point": 1,
             "sensors":
             [
                 {

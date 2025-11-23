@@ -1,7 +1,7 @@
 # Phase 2.2 Status Report: Native ROS 2 Investigation
 
-**Date:** 2025-01-XX  
-**Status:** 🔄 IN PROGRESS - Partial verification complete  
+**Date:** 2025-01-XX
+**Status:** 🔄 IN PROGRESS - Partial verification complete
 **Blocker:** ROS 2 topics not publishing despite `ros_name` attribute existing
 
 ---
@@ -10,7 +10,7 @@
 
 ### ✅ CONFIRMED: Native ROS 2 Code Exists in Docker
 1. **`--ros2` flag accepted** - CARLA container starts without errors
-2. **`ros_name` attribute EXISTS** - Both vehicles and sensors have this blueprint attribute  
+2. **`ros_name` attribute EXISTS** - Both vehicles and sensors have this blueprint attribute
 3. **Test vehicle spawned successfully** - Script completed without errors
 4. **No error messages** - CARLA didn't complain about ROS 2 configuration
 
@@ -19,7 +19,7 @@
 **Expected topics:**
 ```
 /carla/test_vehicle/vehicle_control_cmd
-/carla/test_vehicle/front_camera/image  
+/carla/test_vehicle/front_camera/image
 /carla/clock
 ```
 
@@ -31,7 +31,7 @@
 ```
 
 **Conclusion:** The CARLA-specific topics are NOT being published, despite:
-- Server running with `--ros2` flag  
+- Server running with `--ros2` flag
 - Vehicle spawned with `ros_name='test_vehicle'`
 - Camera attached with `ros_name='front_camera'`
 - No errors in CARLA logs
@@ -135,7 +135,7 @@ docker exec carla-server strings /home/carla/CarlaUE4/Binaries/Linux/CarlaUE4-Li
 docker exec carla-server ldd /home/carla/CarlaUE4/Binaries/Linux/CarlaUE4-Linux-Shipping | grep -i fast
 ```
 
-**If FastDDS NOT found:** Native ROS 2 is NOT in Docker → Must use external bridge  
+**If FastDDS NOT found:** Native ROS 2 is NOT in Docker → Must use external bridge
 **If FastDDS found:** Configuration or initialization issue → Solvable
 
 ### Priority 3: Test DDS Discovery (DIAGNOSTIC)
@@ -155,15 +155,15 @@ docker run --rm --net=host \
 Based on findings from steps 1-3, choose path:
 
 **Path A: Native ROS 2 Works (after fixing configuration)**
-→ Proceed with unified container approach  
-→ Extract PID+Pure Pursuit controllers  
-→ Create ROS 2 baseline node  
+→ Proceed with unified container approach
+→ Extract PID+Pure Pursuit controllers
+→ Create ROS 2 baseline node
 → Test control loop
 
 **Path B: Native ROS 2 Doesn't Work in Docker**
-→ Revert to external bridge approach  
-→ Fix path issues in ros2-carla-bridge Dockerfile  
-→ Use 3-container architecture  
+→ Revert to external bridge approach
+→ Fix path issues in ros2-carla-bridge Dockerfile
+→ Use 3-container architecture
 → Proceed with baseline implementation
 
 ---
