@@ -1055,10 +1055,21 @@ class CARLANavigationEnv(Env):
         FIX BUG #11: This function returns TRUE only for NATURAL MDP terminations.
         Time limits are NOT MDP terminations - they are handled as TRUNCATION in step().
 
+        CRITICAL FIX (Lane Invasion Bug): Based on research paper:
+        "End-to-End Deep Reinforcement Learning for Lane Keeping Assist"
+        Finding: "We concluded that the more we put termination conditions, the slower convergence time to learn"
+
+        Previous Bug: Terminated immediately on ANY lane marking touch → prevented recovery learning
+        Fix: Only terminate if COMPLETELY off-road (> 2.0m lateral deviation from lane center)
+
         Natural MDP Termination Conditions (terminated=True):
         1. Collision detected → immediate termination
-        2. Off-road (lane invasion) → safety violation
+        2. Completely off-road (lateral deviation > 2.0m) → safety violation
         3. Route completion (reached goal) → success
+
+        NOT Termination Conditions (allow learning/recovery):
+        - Lane marking touch → penalty via reward function, continue episode
+        - Small lateral deviations (< 2.0m) → allow correction behavior
 
         NOT Included (handled as truncation in step()):
         - Max steps / time limit → truncated=True, terminated=False
@@ -1081,8 +1092,12 @@ class CARLANavigationEnv(Env):
         if self.sensors.is_collision_detected():
             return True, "collision"
 
-        # Off-road detection
-        if self.sensors.is_lane_invaded():
+        # FIXED: Off-road detection based on lateral deviation threshold
+        # Only terminate if COMPLETELY off-road (> 2.0m from lane center)
+        # Lane marking touches are penalized via reward function but do NOT terminate episode
+        # This allows agent to learn recovery behavior from mistakes
+        lateral_deviation = abs(vehicle_state.get("lateral_deviation", 0.0))
+        if lateral_deviation > 2.0:  # meters from lane center
             return True, "off_road"
 
         # Wrong way: penalize but don't terminate immediately

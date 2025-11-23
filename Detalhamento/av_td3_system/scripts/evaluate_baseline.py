@@ -685,6 +685,12 @@ def main():
         help='Enable debug logging'
     )
 
+    parser.add_argument(
+        '--skip-analysis',
+        action='store_true',
+        help='Skip automatic trajectory analysis after evaluation'
+    )
+
     args = parser.parse_args()
 
     # Initialize pipeline
@@ -698,13 +704,56 @@ def main():
         debug=args.debug
     )
 
+    trajectory_file = None  # Will store the trajectory file path for analysis
+
     try:
         # Run evaluation
         metrics = pipeline.evaluate()
 
+        # Get trajectory file path for analysis
+        if not args.no_trajectory:
+            # Find the most recent trajectory file
+            traj_dir = Path(args.output_dir) / 'trajectories'
+            if traj_dir.exists():
+                traj_files = sorted(traj_dir.glob('trajectories_*.json'))
+                if traj_files:
+                    trajectory_file = traj_files[-1]  # Most recent file
+
         # Print final summary
         print("\n[SUCCESS] Baseline evaluation complete!")
         print(f"[SUCCESS] Results saved to {args.output_dir}")
+
+        # Automatically run trajectory analysis
+        if not args.skip_analysis and not args.no_trajectory:
+            print("\n" + "="*80)
+            print("📊 AUTOMATIC TRAJECTORY ANALYSIS")
+            print("="*80)
+
+            # Import and run analysis script
+            import subprocess
+
+            # Let the analysis script auto-detect the trajectory file
+            cmd = ['python3', 'scripts/analyze_phase3_trajectories.py']
+
+            print(f"\n🔧 Running: {' '.join(cmd)}\n")
+            print("   (auto-detecting latest trajectory file...)\n")
+
+            result = subprocess.run(cmd, cwd=project_root)
+
+            if result.returncode == 0:
+                print("\n✅ Trajectory analysis completed successfully!")
+                print("📁 Analysis results saved")
+                print("   Plots generated:")
+                print("   - trajectory_map.png (NEW: top-down 2D view)")
+                print("   - lateral_deviation.png")
+                print("   - heading_error.png")
+                print("   - speed_profile.png")
+                print("   - control_commands.png")
+                print("   - PHASE3_ANALYSIS_REPORT.md")
+            else:
+                print(f"\n⚠️ Trajectory analysis failed with exit code {result.returncode}")
+                print("You can run analysis manually with:")
+                print("  python scripts/analyze_phase3_trajectories.py")
 
     except KeyboardInterrupt:
         print("\n[INTERRUPT] Evaluation interrupted by user")

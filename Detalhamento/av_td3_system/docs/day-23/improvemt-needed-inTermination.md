@@ -7,3 +7,5 @@ Immediate Fixes
 To validate if the agent can learn, apply these changes based on the papers:
 
 Disable Termination on Lane Invasion: Only terminate the episode on a Collision or if the car is completely off-road (e.g., > 2 meters from center). Allow the agent to cross the line, take the penalty, and try to steer back.
+
+done: /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system/docs/day-23/CRITICAL_FIX_LANE_INVASION_TERMINATION.md
