@@ -1,7 +1,7 @@
 # GitHub Code Analysis - Bug Discovery
 
-**Date**: 2025-11-23  
-**Analysis**: Comparison of working GitHub code vs current implementation  
+**Date**: 2025-11-23
+**Analysis**: Comparison of working GitHub code vs current implementation
 **Finding**: 🚨 **CRITICAL BUG FOUND in GitHub implementation**
 
 ---
@@ -18,7 +18,7 @@ Your "working" GitHub implementations have a **critical bug** that our current i
 
 ### GitHub Code (Both Files)
 
-**File 1**: `Course1FinalProject/controller2d.py`  
+**File 1**: `Course1FinalProject/controller2d.py`
 **File 2**: `Course1FinalProject/implementation_pi/PID_pure_persuit.py`
 
 Both contain the SAME bug:
@@ -84,7 +84,7 @@ alpha = np.arctan2(carrot_y - y_rear, carrot_x - x_rear) - yaw  # ✅ Uses y_rea
 
 The GitHub bug actually helped in some scenarios:
 
-1. **Effective Shorter Lookahead**: 
+1. **Effective Shorter Lookahead**:
    - Intended: 10m from rear axle
    - Actual: ~10m from center, which is ~8.5m from rear axle
    - Result: More responsive (but also more oscillatory)
@@ -124,7 +124,7 @@ for wp in waypoints:
     dist = sqrt((wp[0] - 266.40)² + (wp[1] - 129.5019)²)  # Uses vehicle center Y
     # WP at (255.352, 129.49):
     # dist = sqrt((-11.05)² + (-0.0119)²) ≈ 11.05m
-    
+
 # Alpha calculation (uses rear Y)
 alpha = atan2(129.49 - 129.50, 255.352 - 266.40) - yaw
       = atan2(-0.01, -11.05) - 180°
@@ -141,7 +141,7 @@ for wp in waypoints:
     dist = sqrt((wp[0] - 266.40)² + (wp[1] - 129.50)²)  # Uses rear axle Y
     # WP at (255.352, 129.49):
     # dist = sqrt((-11.05)² + (-0.01)²) ≈ 11.05m
-    
+
 # Alpha calculation (uses rear Y)
 alpha = atan2(129.49 - 129.50, 255.352 - 266.40) - yaw
       = atan2(-0.01, -11.05) - 180°

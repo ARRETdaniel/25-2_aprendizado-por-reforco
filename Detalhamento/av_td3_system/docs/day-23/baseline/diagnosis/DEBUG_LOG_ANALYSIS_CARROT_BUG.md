@@ -1,7 +1,7 @@
 # Debug Log Analysis - Carrot Waypoint Bug Discovery
 
-**Date**: 2025-11-23  
-**Issue**: Left drift at step ~130  
+**Date**: 2025-11-23
+**Issue**: Left drift at step ~130
 **Status**: 🎯 **ROOT CAUSE IDENTIFIED!**
 
 ---
@@ -71,16 +71,16 @@ The **carrot waypoint is getting stuck at the first waypoint** (317.74, 129.49) 
 ```python
 def _find_carrot_waypoint(...):
     carrot_x, carrot_y = waypoints[0][0], waypoints[0][1]  # ❌ BUG: Default to FIRST
-    
+
     for waypoint in waypoints:
         dist = np.sqrt((waypoint[0] - x_rear)**2 + (waypoint[1] - y_rear)**2)
-        
+
         if dist >= lookahead_distance:
             carrot_x = waypoint[0]
             carrot_y = waypoint[1]
             break
     # If no waypoint found, carrot remains waypoints[0] ❌
-    
+
     return carrot_x, carrot_y
 ```
 
@@ -171,16 +171,16 @@ For **linear paths**, use the last waypoint when no waypoint is beyond lookahead
 ```python
 def _find_carrot_waypoint(...):
     carrot_x, carrot_y = waypoints[-1][0], waypoints[-1][1]  # ✅ Use LAST waypoint
-    
+
     for waypoint in waypoints:
         dist = np.sqrt((waypoint[0] - x_rear)**2 + (waypoint[1] - y_rear)**2)
-        
+
         if dist >= lookahead_distance:
             carrot_x = waypoint[0]
             carrot_y = waypoint[1]
             break
     # If no waypoint found, carrot is waypoints[-1] ✅
-    
+
     return carrot_x, carrot_y
 ```
 
@@ -203,23 +203,23 @@ def _find_carrot_waypoint(...):
         dist = np.sqrt((waypoint[0] - x_rear)**2 + (waypoint[1] - y_rear)**2)
         if dist >= lookahead_distance:
             return waypoint[0], waypoint[1]
-    
+
     # Fallback: find closest waypoint ahead
     min_dist = float('inf')
     closest_wp = waypoints[-1]
-    
+
     for waypoint in waypoints:
         # Only consider waypoints ahead (dot product with heading)
         dx = waypoint[0] - x_rear
         dy = waypoint[1] - y_rear
         ahead = dx * cos(yaw) + dy * sin(yaw)
-        
+
         if ahead > 0:  # Ahead of vehicle
             dist = sqrt(dx**2 + dy**2)
             if dist < min_dist:
                 min_dist = dist
                 closest_wp = waypoint
-    
+
     return closest_wp[0], closest_wp[1]
 ```
 

@@ -1,7 +1,7 @@
 # Baseline Controller - Complete Bug Fix Summary
 
-**Date**: 2025-11-23  
-**Session**: Day 23 - Baseline Controller Debugging  
+**Date**: 2025-11-23
+**Session**: Day 23 - Baseline Controller Debugging
 **Status**: ✅ **TWO CRITICAL BUGS FIXED - READY TO TEST**
 
 ---
@@ -46,7 +46,7 @@ def _filter_waypoints_ahead(
 ) -> List[Tuple[float, float, float]]:
     """
     Filter waypoints to only include those ahead within lookahead distance.
-    
+
     GitHub implementation (module_7.py):
     1. Find closest waypoint
     2. Include 1 waypoint behind (for smooth transition)
@@ -94,7 +94,7 @@ Episode complete: Success=False, Avg Speed: 29.87 km/h
 ...
 104.62, 129.49, 8.333   ← 30 km/h
 
-# Intersection (WP 69-86): LOW SPEED  
+# Intersection (WP 69-86): LOW SPEED
 98.59, 129.22, 2.5      ← 9 km/h (SPEED CHANGE!)
 95.98, 127.76, 2.5      ← 9 km/h
 ...
@@ -116,7 +116,7 @@ def _get_target_speed_from_waypoints(
 ) -> float:
     """
     Extract target speed from closest waypoint.
-    
+
     GitHub implementation (controller2d.py):
     1. Find closest waypoint to vehicle
     2. Extract speed (3rd element) from that waypoint
@@ -125,7 +125,7 @@ def _get_target_speed_from_waypoints(
     # Find closest waypoint
     distances = np.sqrt((waypoints[:,0] - x)² + (waypoints[:,1] - y)²)
     closest_index = np.argmin(distances)
-    
+
     # Extract speed from closest waypoint
     target_speed = waypoints[closest_index, 2]
     return target_speed

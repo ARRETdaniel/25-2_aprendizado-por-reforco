@@ -1,8 +1,8 @@
 # **CRITICAL BUG - Missing Speed Reduction at Intersection**
 
-**Date**: 2025-11-23  
-**Issue**: Vehicle performs lane invasion at intersection due to excessive speed  
-**Root Cause**: Controller ignores waypoint speed profile (fixed 30 km/h instead of 9 km/h at turn)  
+**Date**: 2025-11-23
+**Issue**: Vehicle performs lane invasion at intersection due to excessive speed
+**Root Cause**: Controller ignores waypoint speed profile (fixed 30 km/h instead of 9 km/h at turn)
 **Status**: 🔴 **BUG IDENTIFIED - FIX NEEDED**
 
 ---
@@ -49,7 +49,7 @@ Episode 3 complete: Success=False, Lane Invasions: 0, Avg Speed: 29.87 km/h
 ...
 104.62, 129.49, 8.333   ← 30 km/h
 
-# Transition + Turn (waypoints 69-86): LOW SPEED  
+# Transition + Turn (waypoints 69-86): LOW SPEED
 98.59, 129.22, 2.5      ← 9 km/h (SPEED CHANGE!)
 95.98, 127.76, 2.5      ← 9 km/h
 93.88, 125.62, 2.5      ← 9 km/h
@@ -100,7 +100,7 @@ def update_desired_speed(self):
     """
     min_idx = 0
     min_dist = float("inf")
-    
+
     # Find closest waypoint
     for i in range(len(self._waypoints)):
         dist = np.linalg.norm(np.array([
@@ -110,7 +110,7 @@ def update_desired_speed(self):
         if dist < min_dist:
             min_dist = dist
             min_idx = i
-    
+
     # Extract speed from closest waypoint
     if min_idx < len(self._waypoints) - 1:
         self._desired_speed = self._waypoints[min_idx][2]  # ← KEY LINE!
@@ -152,7 +152,7 @@ def compute_control(self, vehicle, waypoints, dt, target_speed=None):
     # STEP 2: Determine target speed
     if target_speed is None:
         target_speed = self.target_speed  # ← FIXED 8.33 m/s! ❌
-    
+
     # STEP 3: PID control with WRONG target speed
     throttle, brake = self.pid_controller.update(
         current_speed=current_speed,
@@ -216,25 +216,25 @@ def _get_target_speed_from_waypoints(
 ) -> float:
     """
     Extract target speed from closest waypoint.
-    
+
     Matches GitHub's update_desired_speed() logic:
     1. Find waypoint closest to vehicle position
     2. Return speed (3rd element) from that waypoint
     3. Fallback to last waypoint if at end of path
-    
+
     This enables speed profile following:
     - High speed (8.333 m/s) on straight sections
     - Low speed (2.5 m/s) at intersections/curves
     - Smooth transitions between speed zones
-    
+
     Args:
         current_x: Vehicle X position in meters
         current_y: Vehicle Y position in meters
         waypoints: List of (x, y, speed_m_s) tuples
-    
+
     Returns:
         target_speed: Speed from closest waypoint in m/s
-    
+
     Example:
         >>> waypoints = [(100, 129, 8.333), (98, 129, 2.5), (95, 127, 2.5)]
         >>> # Vehicle at X=99m (between waypoints)
@@ -243,19 +243,19 @@ def _get_target_speed_from_waypoints(
     """
     if len(waypoints) == 0:
         return self.target_speed  # Fallback to default
-    
+
     waypoints_np = np.array(waypoints)
-    
+
     # Find closest waypoint to vehicle
     distances = np.sqrt(
         (waypoints_np[:, 0] - current_x)**2 +
         (waypoints_np[:, 1] - current_y)**2
     )
     closest_index = np.argmin(distances)
-    
+
     # Extract speed from closest waypoint (3rd column)
     target_speed = waypoints_np[closest_index, 2]
-    
+
     return target_speed
 ```
 
@@ -273,7 +273,7 @@ def compute_control(self, vehicle, waypoints, dt, target_speed=None):
             current_y=current_y,
             waypoints=waypoints  # Full waypoint list
         )
-    
+
     # STEP 3: PID control with CORRECT target speed
     throttle, brake = self.pid_controller.update(
         current_speed=current_speed,
@@ -329,7 +329,7 @@ def update_controls(self):
     ...
     min_index = self.update_desired_speed()  # ← Extract from waypoints!
     v_desired = self._desired_speed  # ← Use extracted value
-    
+
     # PID uses v_desired (varies with position)
     throttle_output = k_p * (v_desired - v) + ...
 ```
@@ -367,7 +367,7 @@ throttle, brake = self.pid_controller.update(
 
 **Severity**: 🔴 **CRITICAL** - Causes episode failures, safety violations
 
-**Impact**: 
+**Impact**:
 - Prevents successful episode completion
 - Invalidates baseline comparison (unfair to DRL if baseline fails)
 - Violates safety requirements (lane invasion)

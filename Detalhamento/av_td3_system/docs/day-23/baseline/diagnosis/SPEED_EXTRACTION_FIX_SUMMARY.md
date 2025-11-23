@@ -1,8 +1,8 @@
 # Speed Extraction Fix - Implementation Summary
 
-**Date**: 2025-11-23  
-**Issue**: Vehicle ignoring waypoint speed profile  
-**Fix**: Added `_get_target_speed_from_waypoints()` method  
+**Date**: 2025-11-23
+**Issue**: Vehicle ignoring waypoint speed profile
+**Fix**: Added `_get_target_speed_from_waypoints()` method
 **Status**: ✅ **IMPLEMENTED - READY TO TEST**
 
 ---
@@ -26,19 +26,19 @@ def _get_target_speed_from_waypoints(
     """
     if len(waypoints) == 0:
         return self.target_speed  # Fallback
-    
+
     waypoints_np = np.array(waypoints)
-    
+
     # Find closest waypoint
     distances = np.sqrt(
         (waypoints_np[:, 0] - current_x)**2 +
         (waypoints_np[:, 1] - current_y)**2
     )
     closest_index = np.argmin(distances)
-    
+
     # Extract speed (3rd column)
     target_speed = waypoints_np[closest_index, 2]
-    
+
     return target_speed
 ```
 

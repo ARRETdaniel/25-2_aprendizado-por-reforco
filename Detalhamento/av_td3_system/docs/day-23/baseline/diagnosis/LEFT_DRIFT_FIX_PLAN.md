@@ -1,7 +1,7 @@
 # Left Drift Fix - Implementation Plan
 
-**Date**: 2025-11-23  
-**Issue**: Pure Pursuit overshoots target path causing leftward drift  
+**Date**: 2025-11-23
+**Issue**: Pure Pursuit overshoots target path causing leftward drift
 **Priority**: 🔴 **HIGH** - Blocks baseline validation
 
 ---
@@ -73,7 +73,7 @@ steer = atan2(2 * L * sin(alpha_damped), lookahead)
 
 ### Mathematical Justification
 
-**Pure Pursuit alpha** represents the angle to reach the carrot waypoint.  
+**Pure Pursuit alpha** represents the angle to reach the carrot waypoint.
 **Damping term** `-k × (crosstrack / lookahead)` represents proportional correction.
 
 **Combined effect**:
@@ -96,12 +96,12 @@ def _calculate_crosstrack_error(
 ) -> float:
     """
     Calculate perpendicular distance from vehicle to waypoint path.
-    
+
     For a straight path (Y = constant), this simplifies to:
         crosstrack_error = current_y - target_y
-    
+
     For curved paths, use point-to-line distance formula.
-    
+
     Returns:
         Crosstrack error in meters
         Positive = left of path
@@ -110,39 +110,39 @@ def _calculate_crosstrack_error(
     # Find closest waypoint
     min_dist = float('inf')
     closest_wp_idx = 0
-    
+
     for i, wp in enumerate(waypoints):
         dist = np.sqrt((wp[0] - x)**2 + (wp[1] - y)**2)
         if dist < min_dist:
             min_dist = dist
             closest_wp_idx = i
-    
+
     # For straight-line path (all waypoints have same Y)
     # Crosstrack error is simply the Y-difference
     if closest_wp_idx < len(waypoints) - 1:
         # Use path segment direction for more accurate calculation
         wp1 = waypoints[closest_wp_idx]
         wp2 = waypoints[min(closest_wp_idx + 1, len(waypoints) - 1)]
-        
+
         # Path vector
         path_dx = wp2[0] - wp1[0]
         path_dy = wp2[1] - wp1[1]
         path_length = np.sqrt(path_dx**2 + path_dy**2)
-        
+
         if path_length > 0.001:  # Avoid division by zero
             # Unit path vector
             path_unit_x = path_dx / path_length
             path_unit_y = path_dy / path_length
-            
+
             # Vector from wp1 to vehicle
             vehicle_dx = x - wp1[0]
             vehicle_dy = y - wp1[1]
-            
+
             # Cross product gives signed distance
             # (perpendicular to path)
             crosstrack = vehicle_dx * path_unit_y - vehicle_dy * path_unit_x
             return crosstrack
-    
+
     # Fallback: simple Y-difference (for straight horizontal paths)
     return y - waypoints[closest_wp_idx][1]
 ```
@@ -159,30 +159,30 @@ def update(
     waypoints: List[Tuple[float, float, float]]
 ) -> float:
     # ... (existing steps 1-4) ...
-    
+
     # Step 4: Calculate angle from rear axle to carrot waypoint
     alpha = self._normalize_angle(
         np.arctan2(carrot_y - y_rear, carrot_x - x_rear) - current_yaw
     )
-    
+
     # NEW: Step 4.5: Add crosstrack damping
     crosstrack_error = self._calculate_crosstrack_error(
         current_x, current_y, waypoints
     )
-    
+
     # Damping gain (tunable parameter)
     k_damping = 0.3
-    
+
     # Apply damping: reduces alpha when vehicle is off path
     # Sign convention: positive crosstrack (left of path) → reduce alpha (steer right)
     alpha_damped = alpha - k_damping * crosstrack_error / lookahead_distance
-    
+
     # Step 5: Pure Pursuit steering formula (with damped alpha)
     steer_rad = np.arctan2(
         2.0 * self.wheelbase * np.sin(alpha_damped),
         lookahead_distance
     )
-    
+
     # ... (rest of method unchanged) ...
 ```
 
@@ -212,7 +212,7 @@ pure_pursuit:
   min_lookahead: 15.0  # Was 10.0
 ```
 
-**Pros**: Simple, no algorithm changes  
+**Pros**: Simple, no algorithm changes
 **Cons**: Slower response to sharp turns, may cut corners
 
 ### Option C: Add Low-Pass Filter to Steering
@@ -231,7 +231,7 @@ self.steer_previous = steer_filtered
 return steer_filtered
 ```
 
-**Pros**: Reduces steering oscillations  
+**Pros**: Reduces steering oscillations
 **Cons**: Adds lag, may reduce responsiveness
 
 ---

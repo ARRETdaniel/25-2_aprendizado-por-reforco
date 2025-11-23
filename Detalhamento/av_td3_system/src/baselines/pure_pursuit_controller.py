@@ -456,7 +456,7 @@ class PurePursuitController:
                 # Calculate crosstrack error for debugging
                 target_y = 129.49  # Known target Y from waypoints
                 crosstrack_error = current_y - target_y
-                
+
                 print(
                     f"[PP-DEBUG Step {self.step_count:3d}] "
                     f"Pos=({current_x:.2f}, {current_y:.4f}) "

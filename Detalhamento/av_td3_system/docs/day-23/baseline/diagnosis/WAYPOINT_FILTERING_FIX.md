@@ -1,8 +1,8 @@
 # **CRITICAL BUG FIX - Waypoint Filtering**
 
-**Date**: 2025-11-23  
-**Issue**: Carrot waypoint jumping to first waypoint, causing backward steering  
-**Root Cause**: Missing waypoint filtering before passing to Pure Pursuit  
+**Date**: 2025-11-23
+**Issue**: Carrot waypoint jumping to first waypoint, causing backward steering
+**Root Cause**: Missing waypoint filtering before passing to Pure Pursuit
 **Status**: ✅ **FIXED**
 
 ---
