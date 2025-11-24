@@ -1,8 +1,8 @@
 # HISTORICAL ANALYSIS: Progress Reward Discontinuity Problem
 
-**Date**: 2025-11-24  
-**Issue**: Recurring discontinuity in progress rewards across multiple implementations  
-**Purpose**: Understand what changed between implementations and identify root cause  
+**Date**: 2025-11-24
+**Issue**: Recurring discontinuity in progress rewards across multiple implementations
+**Purpose**: Understand what changed between implementations and identify root cause
 
 ---
 
@@ -28,13 +28,13 @@
 def get_route_distance_to_goal(vehicle_location):
     # Find nearest waypoint ahead
     nearest_idx = _find_nearest_waypoint_index(vehicle)
-    
+
     # Point-to-point distance: vehicle → waypoint
     dist_to_waypoint = distance(vehicle, waypoints[nearest_idx])
-    
+
     # Sum remaining segments
     remaining = sum(segments from nearest_idx to end)
-    
+
     return dist_to_waypoint + remaining
 ```
 
@@ -58,20 +58,20 @@ Step 16: route_distance=264.48m, reward=-3.15  ❌ (vehicle moved forward!)
 def get_route_distance_to_goal(vehicle_location):
     # Find nearest SEGMENT
     segment_idx = _find_nearest_segment(vehicle)
-    
+
     # PROJECT vehicle onto segment
     projection = _project_onto_segment(
-        vehicle, 
+        vehicle,
         waypoints[segment_idx],
         waypoints[segment_idx + 1]
     )
-    
+
     # Distance from PROJECTION to segment end
     dist_to_end = distance(projection, waypoints[segment_idx + 1])
-    
+
     # Sum remaining segments
     remaining = sum(segments from segment_idx+1 to end)
-    
+
     return dist_to_end + remaining
 ```
 
@@ -99,13 +99,13 @@ dense_waypoints = _create_dense_waypoints()  # 86 → 26,396 waypoints
 def get_route_distance_to_goal(vehicle_location):
     # Find nearest DENSE waypoint
     nearest_idx = find_nearest(vehicle, dense_waypoints)
-    
+
     # Distance: vehicle → dense waypoint
     vehicle_to_nearest = distance(vehicle, dense_waypoints[nearest_idx])
-    
+
     # Sum dense waypoint chain
     chain_distance = sum(segments from nearest_idx to end)
-    
+
     return vehicle_to_nearest + chain_distance
 ```
 
@@ -131,16 +131,16 @@ Step 47: Vehicle=(316.49, 129.49), dist=263.59m, delta=-0.154m, reward=-0.77 ❌
 def get_route_distance_to_goal(vehicle_location):
     # Find nearest DENSE SEGMENT
     nearest_segment_idx = find_nearest_segment(vehicle, dense_waypoints)
-    
+
     # PROJECT onto dense segment
     wp_a = dense_waypoints[segment_idx]
     wp_b = dense_waypoints[segment_idx + 1]
     t = project_onto_segment(vehicle, wp_a, wp_b)
-    
+
     # Arc-length from projection to goal
     arc_on_current = (1 - t) * length(wp_a, wp_b)
     arc_remaining = sum(segments from segment_idx+1 to end)
-    
+
     return arc_on_current + arc_remaining
 ```
 
@@ -254,10 +254,10 @@ From `SYSTEMATIC_PROGRESS_REWARD_ANALYSIS.md`:
 
 ### What We Have Now (Nov 24b)
 
-✅ **Dense waypoints**: 1cm spacing, high fidelity  
-✅ **Projection-based**: Arc-length measurement  
-✅ **No PBRS**: Removed buggy free rewards  
-✅ **Route distance**: Following path, not Euclidean  
+✅ **Dense waypoints**: 1cm spacing, high fidelity
+✅ **Projection-based**: Arc-length measurement
+✅ **No PBRS**: Removed buggy free rewards
+✅ **Route distance**: Following path, not Euclidean
 
 ### What Should Work
 

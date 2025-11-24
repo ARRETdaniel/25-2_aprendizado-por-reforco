@@ -1,6 +1,6 @@
 # Quick Start: Test Arc-Length Interpolation
 
-**Status:** ✅ READY TO TEST  
+**Status:** ✅ READY TO TEST
 **Date:** November 24, 2025
 
 ---
@@ -87,5 +87,5 @@ Then check: `TESTING_GUIDE_ARC_LENGTH.md` for troubleshooting
 
 ---
 
-**Testing Time:** 2-3 minutes  
+**Testing Time:** 2-3 minutes
 **Expected Outcome:** Smooth continuous progress rewards

@@ -1,8 +1,8 @@
 # Waypoint Crossing Behavior Analysis - CORRECTED
 
-**Date**: 2025-01-24  
-**Log File**: av_td3_system/docs/day-24/progress.log  
-**Issue**: Understanding the behavior immediately after waypoint crossing  
+**Date**: 2025-01-24
+**Log File**: av_td3_system/docs/day-24/progress.log
+**Issue**: Understanding the behavior immediately after waypoint crossing
 **Status**: ⚠️ **MINOR EDGE CASE IDENTIFIED** - Arc-length projection stuck at t=0.000 for ~6 steps after waypoint crossing
 
 ---
@@ -46,7 +46,7 @@ The projection calculation in `_find_nearest_segment()` is returning **exactly t
 
 **Possible Causes:**
 
-1. **Projection Perpendicular Issue**: 
+1. **Projection Perpendicular Issue**:
    - When vehicle crosses waypoint, it may be positioned such that the perpendicular projection onto the new segment falls exactly at (or very near) the segment start point
    - This could happen if the vehicle path is perpendicular to the segment direction at crossing
 
@@ -90,14 +90,14 @@ Progress Delta: 0.16m ✅ RESUMES (catches up some of the lost progress)
 
 ### Severity: MINOR (But Should Be Fixed)
 
-**Frequency**: 
+**Frequency**:
 - Occurs at EVERY waypoint crossing
 - Total waypoints: 86
 - Impact per episode: ~516 steps with incorrect progress reward (6 steps × 86 waypoints)
 
 **Impact on Learning**:
 
-1. **Positive**: 
+1. **Positive**:
    - Arc-length DOES eventually unstick
    - Continuous progress resumes after temporary stall
    - Overall trend is still forward progress (variance reduction still achieved)

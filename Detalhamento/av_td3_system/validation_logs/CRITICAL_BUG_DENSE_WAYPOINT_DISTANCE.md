@@ -1,7 +1,7 @@
 # CRITICAL BUG: Dense Waypoint Distance Calculation Missing Vehicle-to-Waypoint Distance
 
-**Date**: 2025-01-24  
-**Severity**: 🔴 **CRITICAL** - Breaks progress reward completely  
+**Date**: 2025-01-24
+**Severity**: 🔴 **CRITICAL** - Breaks progress reward completely
 **Status**: 🔍 **IDENTIFIED** - Requires immediate fix
 
 ---
@@ -89,22 +89,22 @@ Step 27-40: Vehicle moving continuously but nearest_idx stays at 1
 ```python
 def get_route_distance_to_goal(self, vehicle_location):
     """Calculate distance to goal using dense waypoints + vehicle position."""
-    
+
     # Find nearest dense waypoint
     nearest_idx = find_nearest(vehicle, dense_waypoints)
     nearest_wp = dense_waypoints[nearest_idx]
-    
+
     # CRITICAL: Add distance from vehicle to nearest waypoint
     vehicle_to_nearest = distance(vehicle, nearest_wp)
-    
+
     # Sum distances from nearest waypoint to goal
     waypoint_chain_distance = 0.0
     for i in range(nearest_idx, len(dense_waypoints) - 1):
         waypoint_chain_distance += distance(dense_waypoints[i], dense_waypoints[i+1])
-    
+
     # Total distance = vehicle_to_nearest + chain_to_goal
     total_distance = vehicle_to_nearest + waypoint_chain_distance
-    
+
     return total_distance
 ```
 

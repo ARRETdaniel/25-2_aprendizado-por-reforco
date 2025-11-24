@@ -1,9 +1,9 @@
 # Log Analysis: Progress Reward Discontinuity Pattern
 
-**Date:** November 24, 2025  
-**Issue:** #3.1 - Progress reward discontinuity verification  
-**Log File:** `validation_logs/logterminal.log`  
-**Analysis Type:** Systematic review of reward behavior during manual validation  
+**Date:** November 24, 2025
+**Issue:** #3.1 - Progress reward discontinuity verification
+**Log File:** `validation_logs/logterminal.log`
+**Analysis Type:** Systematic review of reward behavior during manual validation
 **Status:** ⚠️ **DISCONTINUITY CONFIRMED - Different Root Cause Than Expected**
 
 ---
@@ -148,7 +148,7 @@ Step 407: Segment=16, DistFromRoute=0.11m  ← Same segment
 Step 408: Segment=16, DistFromRoute=0.09m  ← Same segment
 ```
 
-**Counter-Evidence:** 
+**Counter-Evidence:**
 - Segment stays same (correct - vehicle moving along segment)
 - Distance_from_route **IS changing** (1.26m → 0.66m → 0.11m → 0.09m)
 - This means `_find_nearest_segment()` IS recalculating correctly
@@ -172,7 +172,7 @@ Step 408: Segment=16, DistFromRoute=0.09m  ← Same segment
    ```
    Segment 16 endpoints: waypoint[16] → waypoint[17]
    Vehicle moving from x=269.15 to x=267.36 along segment
-   
+
    Question: What is the segment orientation?
    - If segment is horizontal (x-aligned), vehicle moving in X changes lateral position
    - If segment is vertical (y-aligned), vehicle moving in X doesn't change projection
@@ -201,7 +201,7 @@ Vehicle=(289.90, 129.54), Segment=9, route_distance=236.53m  ← UPDATED!
 
 **Observation:** Distance updates **AFTER** waypoint is reached (Step 365: "Waypoint reached!"), then stays stuck for several steps, then suddenly updates.
 
-**Root Cause Candidate:** 
+**Root Cause Candidate:**
 - `_update_current_waypoint()` logic has hysteresis/lag
 - Projection calculated from old waypoint segment until threshold crossed
 - When vehicle crosses waypoint, segment changes, causing distance jump

@@ -1,7 +1,7 @@
 # Quick Testing Guide: Arc-Length Interpolation
 
-**Date:** November 24, 2025  
-**Fix:** Phase 5 - Arc-Length Interpolation Implementation  
+**Date:** November 24, 2025
+**Fix:** Phase 5 - Arc-Length Interpolation Implementation
 **Status:** ✅ Ready for Testing
 
 ---
@@ -173,8 +173,8 @@ INFO - Loaded 86 waypoints from config/waypoints.txt (total route length: 267.46
 
 ### Runtime (Per Step)
 
-**Before (O(n) summation):** ~86 operations per step  
-**After (O(1) interpolation):** ~3 operations per step  
+**Before (O(n) summation):** ~86 operations per step
+**After (O(1) interpolation):** ~3 operations per step
 **Speedup:** ~29x faster!
 
 **Verify:** Episode FPS should be **unchanged or slightly faster** (no performance regression)
@@ -268,6 +268,6 @@ If testing **fails**, report:
 
 ---
 
-**Ready to Test:** ✅  
-**Expected Duration:** 2-3 minutes  
+**Ready to Test:** ✅
+**Expected Duration:** 2-3 minutes
 **Expected Outcome:** Smooth continuous progress reward signal

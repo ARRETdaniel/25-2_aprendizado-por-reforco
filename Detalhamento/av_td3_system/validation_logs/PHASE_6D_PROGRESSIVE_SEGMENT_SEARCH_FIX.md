@@ -1,7 +1,7 @@
 # PHASE 6D: Progressive Segment Search Fix
 
-**Date**: 2025-11-24  
-**Severity**: 🔴 **CRITICAL** - Final fix for progress reward discontinuity  
+**Date**: 2025-11-24
+**Severity**: 🔴 **CRITICAL** - Final fix for progress reward discontinuity
 **Status**: ✅ **RESOLVED**
 
 ---
@@ -33,7 +33,7 @@
 
 ```
 Step 49:
-  Vehicle=(316.00, 129.49) 
+  Vehicle=(316.00, 129.49)
   SegmentIdx=102, t=1.0000 ← CLAMPED at segment endpoint!
   PerpendicularDist=0.713m
   ArcLength=263.35m
@@ -43,7 +43,7 @@ Step 50:
   SegmentIdx=102, t=1.0000 ← STILL CLAMPED!
   PerpendicularDist=0.932m ← INCREASING (moving away from segment endpoint)!
   ArcLength=263.35m ← UNCHANGED!
-  
+
   Progress Delta: 0.000m
   Progress Reward: 0.00 ❌
 
@@ -52,7 +52,7 @@ Step 51:
   SegmentIdx=102, t=1.0000 ← STILL CLAMPED!
   PerpendicularDist=1.163m ← INCREASING!
   ArcLength=263.35m ← UNCHANGED!
-  
+
   Progress Delta: 0.000m
   Progress Reward: 0.00 ❌
 ```
@@ -81,17 +81,17 @@ search_end = min(len(self.dense_waypoints) - 1, self.current_waypoint_idx + 100)
 for i in range(search_start, search_end):
     # Project vehicle onto segment i
     t = ((vx - wp_a[0]) * seg_x + (vy - wp_a[1]) * seg_y) / seg_length_sq
-    
+
     # Clamp t to [0, 1]  ← PROBLEM: Hides when vehicle past segment!
     t = max(0.0, min(1.0, t))
-    
+
     # Calculate closest point on segment
     closest_x = wp_a[0] + t * seg_x
     closest_y = wp_a[1] + t * seg_y
-    
+
     # Distance from vehicle to segment
     dist = sqrt((vx - closest_x)² + (vy - closest_y)²)
-    
+
     if dist < min_dist:
         min_dist = dist
         nearest_segment_idx = i  ← Selects based on perpendicular distance!
@@ -174,7 +174,7 @@ max_search = min(len(self.dense_waypoints) - 1, self.current_waypoint_idx + 200)
 for i in range(self.current_waypoint_idx, max_search):
     # Project vehicle onto segment (UNCLAMPED first to check validity)
     t_unclamped = ((vx - wp_a[0]) * seg_x + (vy - wp_a[1]) * seg_y) / seg_length_sq
-    
+
     # Check if vehicle is WITHIN this segment
     if t_unclamped < 0.0:
         # Vehicle is BEFORE this segment (vehicle reversed or jumped)
@@ -233,17 +233,17 @@ if nearest_segment_idx > self.current_waypoint_idx:
 ### Results
 
 ```
-Step   VehicleX   Distance     Delta      SegmentIdx  Status    
+Step   VehicleX   Distance     Delta      SegmentIdx  Status
 --------------------------------------------------------------
-0      320.00     49.50        0.000      0           ✅         
-1      319.70     49.20        0.300      29          ✅         
-2      319.40     48.90        0.300      59          ✅         
-10     317.00     46.50        0.300/step 300         ✅         
-20     314.00     43.50        0.300/step 600         ✅         
-25     312.50     42.00        0.300/step 750         ✅         
-30     311.00     40.50        0.300/step 900         ✅         
-40     308.00     37.50        0.300/step 1200        ✅         
-49     305.30     34.80        0.300/step 1470        ✅         
+0      320.00     49.50        0.000      0           ✅
+1      319.70     49.20        0.300      29          ✅
+2      319.40     48.90        0.300      59          ✅
+10     317.00     46.50        0.300/step 300         ✅
+20     314.00     43.50        0.300/step 600         ✅
+25     312.50     42.00        0.300/step 750         ✅
+30     311.00     40.50        0.300/step 900         ✅
+40     308.00     37.50        0.300/step 1200        ✅
+49     305.30     34.80        0.300/step 1470        ✅
 ```
 
 **Validation Summary**:
@@ -320,7 +320,7 @@ Step   VehicleX   Distance     Delta      SegmentIdx  Status
 
 ---
 
-**Status**: ✅ **COMPLETE - VALIDATED** 
+**Status**: ✅ **COMPLETE - VALIDATED**
 
 **Reference Files**:
 - Implementation: `src/environment/waypoint_manager.py` (lines 620-750)

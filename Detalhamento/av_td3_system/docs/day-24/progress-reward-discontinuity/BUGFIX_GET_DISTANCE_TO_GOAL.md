@@ -1,8 +1,8 @@
 # Bugfix: Restore get_distance_to_goal() Method
 
-**Date:** November 24, 2025  
-**Issue:** AttributeError during manual validation  
-**Status:** ✅ FIXED  
+**Date:** November 24, 2025
+**Issue:** AttributeError during manual validation
+**Status:** ✅ FIXED
 **Priority:** P0 - CRITICAL (blocks testing)
 
 ---
@@ -49,10 +49,10 @@ def get_distance_to_goal(self, vehicle_location):
     Calculate Euclidean (straight-line) distance from vehicle to final goal waypoint.
 
     ⚠️ USAGE NOTE: This method is for GOAL CHECKING ONLY, not progress reward calculation!
-    
+
     For progress reward calculation, use get_route_distance_to_goal() which implements
     smooth metric blending to prevent discontinuity (Fix #3.1).
-    
+
     This method is kept for:
     - Goal reached detection (check_goal_reached())
     - Debugging/comparison purposes

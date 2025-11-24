@@ -1,7 +1,7 @@
 # Fix Summary: Progress Reward Discontinuity (Issue #3.1)
 
-**Date:** November 24, 2025  
-**Status:** ✅ IMPLEMENTED - Ready for Phase 4 Testing  
+**Date:** November 24, 2025
+**Status:** ✅ IMPLEMENTED - Ready for Phase 4 Testing
 **Implementation:** PHASE_3_IMPLEMENTATION_CORRECTED.md
 
 ---
@@ -78,13 +78,13 @@ python scripts/validate_rewards_manual.py \
 
 3. **TRANSITION logs** during sharp turns (5m-20m from route):
    ```
-   [ROUTE_DISTANCE_BLEND] TRANSITION: dist_from_route=7.45m, blend=0.16, 
+   [ROUTE_DISTANCE_BLEND] TRANSITION: dist_from_route=7.45m, blend=0.16,
      projection=38.67m, euclidean=35.23m, final=38.12m
    ```
 
 4. **FAR OFF-ROUTE logs** during off-road exploration (>20m):
    ```
-   [ROUTE_DISTANCE_BLEND] FAR OFF-ROUTE: dist_from_route=23.45m, 
+   [ROUTE_DISTANCE_BLEND] FAR OFF-ROUTE: dist_from_route=23.45m,
      using 100% Euclidean=32.11m
    ```
 
@@ -265,16 +265,16 @@ During testing, watch for:
 
 ## Questions?
 
-**Q: Why did temporal smoothing not work?**  
+**Q: Why did temporal smoothing not work?**
 A: Because `distance_to_goal` was never `None` - the fallback `get_distance_to_goal()` always returned a valid Euclidean distance float. The smoothing code never executed.
 
-**Q: Will this affect training performance?**  
+**Q: Will this affect training performance?**
 A: YES - in a **positive** way! Continuous reward signal means TD3 can learn stable Q-values without variance accumulation. This should **improve** training stability and final performance.
 
-**Q: What if I still see discontinuity?**  
+**Q: What if I still see discontinuity?**
 A: Check the DEBUG logs - if you don't see `[ROUTE_DISTANCE_BLEND]` messages, the code isn't executing. Verify waypoint_manager.py changes were applied correctly.
 
-**Q: Can I revert to old behavior?**  
+**Q: Can I revert to old behavior?**
 A: Not recommended - the old fallback caused proven discontinuity. But for testing, you could temporarily modify `get_route_distance_to_goal()` to always return `get_distance_to_goal()` (pure Euclidean).
 
 ---

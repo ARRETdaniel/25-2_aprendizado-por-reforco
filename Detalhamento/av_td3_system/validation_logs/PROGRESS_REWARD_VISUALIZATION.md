@@ -126,7 +126,7 @@ Physics Tick 1 (t=0.00s)
 │     Reward = 12.72 ✅
 
 Physics Tick 2 (t=0.05s)  ⚠️ OBSERVATION HAPPENS FIRST
-│  
+│
 ├─ Environment observes state BEFORE applying action
 │  Vehicle still near (183.84, 129.48)
 │  Distance: 128.96m  [SAME AS BEFORE]
@@ -174,7 +174,7 @@ When the environment observes state **BEFORE** applying the action:
 State(t):   distance=128.96m
             prev_distance=128.96m
             Delta = 0.0m ✅ CORRECT - vehicle hasn't moved yet
-            
+
 [Action executes here]
 
 State(t+1): distance=128.84m
@@ -194,7 +194,7 @@ Waypoint 43                 Waypoint 44
     ●─────────────────────────────●
     ↑                             ↑
     135.42m                       138.54m
-    
+
 Step 564:
 Position: ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━→ (waypoint reached!)
           (183.84, 129.48)
@@ -270,15 +270,15 @@ Waypoint 43 ●─────────────────● Waypoint 4
 Step 1: Vehicle at 40% of segment
         └─ Distance calculated: 128.0m  [discrete, rounds to waypoint]
         └─ Delta: 0.0m ❌ WRONG - vehicle moved but no credit!
-        
+
 Step 2: Vehicle at 60% of segment
         └─ Distance calculated: 128.0m  [still rounded to same waypoint]
         └─ Delta: 0.0m ❌ WRONG - moved again, still no credit!
-        
+
 Step 3: Vehicle at 80% of segment
         └─ Distance calculated: 128.0m  [still same waypoint]
         └─ Delta: 0.0m ❌ WRONG - moved third time, no credit!
-        
+
 Step 4: Vehicle crosses to next segment
         └─ Distance calculated: 125.3m  [now counts next waypoint]
         └─ Delta: 2.7m ❌ SPIKE - sudden large reward!
@@ -296,15 +296,15 @@ Waypoint 43 ●─────────────────● Waypoint 4
 Step 1: Vehicle at 40% of segment (t=0.40)
         └─ Distance: 128.52m  [continuous calculation]
         └─ Delta: 0.12m ✅ CORRECT - proportional to movement!
-        
+
 Step 2: Vehicle at 60% of segment (t=0.60)
         └─ Distance: 127.90m  [continuous, no rounding]
         └─ Delta: 0.62m ✅ CORRECT - smooth progression!
-        
+
 Step 3: Vehicle at 80% of segment (t=0.80)
         └─ Distance: 127.28m  [continuous update]
         └─ Delta: 0.62m ✅ CORRECT - consistent!
-        
+
 Step 4: Vehicle crosses to next segment (t=0.00)
         └─ Distance: 125.84m  [smooth transition]
         └─ Delta: 1.44m ✅ CORRECT - no spike, just larger movement!
@@ -419,6 +419,6 @@ No bugs detected. Implementation is correct and ready for training.
 
 ---
 
-**Document**: Progress Reward Behavior Visualization  
-**Status**: ✅ **VALIDATED**  
+**Document**: Progress Reward Behavior Visualization
+**Status**: ✅ **VALIDATED**
 **Related**: `ARC_LENGTH_VALIDATION_ANALYSIS.md`, `VALIDATION_SUMMARY.md`

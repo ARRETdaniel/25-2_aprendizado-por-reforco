@@ -1,7 +1,7 @@
 # CRITICAL BUG: Route Finished Check Using Wrong Waypoint Array
 
-**Date**: 2025-11-24  
-**Severity**: 🔴 **CRITICAL** - Episodes terminate after ~50 steps (96cm traveled!)  
+**Date**: 2025-11-24
+**Severity**: 🔴 **CRITICAL** - Episodes terminate after ~50 steps (96cm traveled!)
 **Status**: ✅ **FIXED**
 
 ---
@@ -12,7 +12,7 @@
 
 **Root Cause**: The `is_route_finished()` method was checking `current_waypoint_idx` against the **ORIGINAL waypoints** array (86 waypoints), but the progressive search was updating `current_waypoint_idx` to track position in the **DENSE waypoints** array (26,396 waypoints).
 
-**Result**: 
+**Result**:
 ```
 Dense waypoint index: 96 (vehicle at 96cm along route)
 Check: 96 >= len(waypoints) - 1 = 85
@@ -28,10 +28,10 @@ Result: TRUE → "Route completed!" ❌ WRONG!
 From `docs/day-24/progress.log`:
 
 ```log
-18:46:29 - src.environment.waypoint_manager - DEBUG - [DENSE_WP_PROJ] Vehicle=(316.93, 129.49), 
+18:46:29 - src.environment.waypoint_manager - DEBUG - [DENSE_WP_PROJ] Vehicle=(316.93, 129.49),
 SegmentIdx=80/26395, t=0.8298, PerpendicularDist=0.000m, ArcLength=263.57m
 
-18:46:29 - src.environment.carla_env - INFO - [TERMINATION] Route completed at step 48! 
+18:46:29 - src.environment.carla_env - INFO - [TERMINATION] Route completed at step 48!
 Waypoint 96/85  ← BUG: 96 > 85, but vehicle only traveled ~0.96m!
 
 18:46:29 - src.environment.carla_env - INFO - Episode ended: route_completed after 48 steps
@@ -104,7 +104,7 @@ def is_route_finished(self) -> bool:
 def is_route_finished(self) -> bool:
     """
     Check if vehicle has reached end of route.
-    
+
     Note: current_waypoint_idx now tracks position in DENSE waypoints (26k+),
           not original waypoints (86). Must compare against dense_waypoints length.
     """

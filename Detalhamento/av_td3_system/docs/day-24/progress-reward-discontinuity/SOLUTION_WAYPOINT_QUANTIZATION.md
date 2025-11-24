@@ -1,9 +1,9 @@
 # SOLUTION: Progress Reward Discontinuity from Waypoint Quantization
 
-**Date:** November 24, 2025  
-**Issue:** #3.1 - Progress reward discontinuity (0.0 reward during forward motion)  
-**Root Cause:** Waypoint-based distance metric has inherent quantization  
-**Status:** ✅ **SOLUTION IDENTIFIED**  
+**Date:** November 24, 2025
+**Issue:** #3.1 - Progress reward discontinuity (0.0 reward during forward motion)
+**Root Cause:** Waypoint-based distance metric has inherent quantization
+**Status:** ✅ **SOLUTION IDENTIFIED**
 **Priority:** HIGH (affects 36.5% of episode steps)
 
 ---
@@ -18,7 +18,7 @@ The progress reward discontinuity is NOT a bug - it's an **inherent limitation**
 ```
 Waypoint spacing statistics:
 - Average: 3.11m
-- Min: 2.98m  
+- Min: 2.98m
 - Max: 3.30m
 - Total waypoints: 86
 
@@ -171,7 +171,7 @@ Distance to segment 16-17:
   - Project onto line from (267.90, 129.49) to (264.84, 129.49)
   - Vehicle is 269.15 - 267.90 = 1.25m before segment start
   - Distance from route = perpendicular distance ≈ 0.09m (Y difference)
-  
+
 Distance to segment 17-18:
   - Project onto line from (264.84, 129.49) to (261.73, 129.49)
   - Vehicle is 269.15 - 264.84 = 4.31m before segment start
@@ -196,7 +196,7 @@ def _find_nearest_segment(self, vehicle_location):
     # Search window: [current_waypoint_idx - 2, current_waypoint_idx + 10]
     start_idx = max(0, self.current_waypoint_idx - 2)
     end_idx = min(len(self.waypoints), self.current_waypoint_idx + 10)
-    
+
     # Only search within window...
 ```
 
@@ -205,14 +205,14 @@ def _find_nearest_segment(self, vehicle_location):
 def _find_nearest_segment(self, vehicle_location):
     # Search ALL segments to find true nearest
     # This is more expensive (O(n) vs O(1)), but ensures correctness
-    
+
     min_distance = float('inf')
     nearest_segment_idx = None
-    
+
     for i in range(len(self.waypoints) - 1):
         # Check distance to segment i
         ...
-    
+
     return (nearest_segment_idx, min_distance)
 ```
 
@@ -227,7 +227,7 @@ def _find_nearest_segment(self, vehicle_location):
 ```python
 def __init__(self, ...):
     self.waypoints = self._load_waypoints(waypoints_file)
-    
+
     # NEW: Pre-calculate cumulative distance
     self.cumulative_distance = [0.0]
     for i in range(len(self.waypoints) - 1):
@@ -235,13 +235,13 @@ def __init__(self, ...):
         dy = self.waypoints[i+1][1] - self.waypoints[i][1]
         segment_dist = math.sqrt(dx*dx + dy*dy)
         self.cumulative_distance.append(self.cumulative_distance[-1] + segment_dist)
-    
+
     self.total_route_length = self.cumulative_distance[-1]
 
 def get_route_distance_to_goal(self, vehicle_location):
     """
     Calculate distance to goal using arc-length interpolation.
-    
+
     ALGORITHM:
     1. Find nearest segment
     2. Calculate projection parameter t ∈ [0, 1] along that segment
@@ -249,43 +249,43 @@ def get_route_distance_to_goal(self, vehicle_location):
     4. Distance to goal = total_length - s
     """
     vx, vy = vehicle_location[0], vehicle_location[1]
-    
+
     # Find nearest segment
     segment_idx, _ = self._find_nearest_segment(vehicle_location)
-    
+
     if segment_idx is None:
         # Fallback to Euclidean
         return self._euclidean_distance_to_goal(vehicle_location)
-    
+
     # Project onto segment
     wp_start = self.waypoints[segment_idx]
     wp_end = self.waypoints[segment_idx + 1]
-    
+
     projection = self._project_onto_segment(
         (vx, vy),
         (wp_start[0], wp_start[1]),
         (wp_end[0], wp_end[1])
     )
-    
+
     # Calculate projection parameter t
     dx_segment = wp_end[0] - wp_start[0]
     dy_segment = wp_end[1] - wp_start[1]
     dx_proj = projection[0] - wp_start[0]
     dy_proj = projection[1] - wp_start[1]
-    
+
     segment_length_sq = dx_segment**2 + dy_segment**2
     if segment_length_sq < 1e-6:
         t = 0.0
     else:
         t = (dx_proj * dx_segment + dy_proj * dy_segment) / segment_length_sq
         t = max(0.0, min(1.0, t))
-    
+
     # Arc-length of vehicle along route
     arc_length = self.cumulative_distance[segment_idx] + t * math.sqrt(segment_length_sq)
-    
+
     # Distance to goal
     distance_to_goal = self.total_route_length - arc_length
-    
+
     return distance_to_goal
 ```
 
@@ -317,7 +317,7 @@ if distance_to_goal == self.prev_distance_to_goal and distance_to_goal is not No
     if hasattr(self, 'recent_velocity') and self.recent_velocity > 0:
         estimated_delta = self.recent_velocity * 0.05  # dt = 0.05s at 20 FPS
         distance_delta = estimated_delta
-        
+
         self.logger.debug(
             f"[PROGRESS-SMOOTH] Distance unchanged ({distance_to_goal:.2f}m), "
             f"using velocity-based estimate: {estimated_delta:.3f}m"
@@ -327,7 +327,7 @@ if distance_to_goal == self.prev_distance_to_goal and distance_to_goal is not No
 else:
     # Normal calculation
     distance_delta = self.prev_distance_to_goal - distance_to_goal
-    
+
     # Track velocity for future estimates
     if hasattr(vehicle_state, 'velocity'):
         self.recent_velocity = vehicle_state['velocity']

@@ -1,7 +1,7 @@
 # CRITICAL BUG: Distance Discontinuity at Dense Waypoint Boundaries
 
-**Date**: 2025-01-24  
-**Severity**: 🔴 **CRITICAL** - Penalizes forward movement incorrectly  
+**Date**: 2025-01-24
+**Severity**: 🔴 **CRITICAL** - Penalizes forward movement incorrectly
 **Status**: 🔍 **IDENTIFIED** - Requires immediate fix
 
 ---
@@ -44,7 +44,7 @@ Step 47:
 
 ```
 Dense Waypoints (1cm spacing):
-    
+
 Step 46:
 GOAL ← ... ← WP[102] ← ── 0.94cm ── ← WP[101] ← ── 0.069m ── ← VEHICLE
                                                   (nearest=101)
@@ -79,7 +79,7 @@ When using **nearest waypoint + distance to nearest**:
 4. **Vehicle reaches 0.5cm from WP[101]**:
    - Now nearest to WP[102] (switches!)
    - VehicleToWP jumps to distance from WP[102]
-   - Distance formula: `0.233m + chain_from_102` 
+   - Distance formula: `0.233m + chain_from_102`
    - **Discontinuous jump**: Distance increases by waypoint spacing!
 
 ---
@@ -91,31 +91,31 @@ Instead of "nearest waypoint + distance", we need **arc-length projection onto p
 ```python
 def get_route_distance_to_goal(self, vehicle_location):
     """Calculate distance using projection onto dense waypoint path."""
-    
+
     # Find nearest segment (between two consecutive waypoints)
     nearest_segment_idx = find_nearest_segment(vehicle, dense_waypoints)
-    
+
     # Project vehicle onto segment to find closest point ON THE PATH
     wp_a = dense_waypoints[nearest_segment_idx]
     wp_b = dense_waypoints[nearest_segment_idx + 1]
-    
+
     # Projection gives us position along segment (t ∈ [0, 1])
     t = project_point_onto_segment(vehicle, wp_a, wp_b)
-    
+
     # Distance from vehicle to projection point (perpendicular distance)
     # This is the "cross-track error" - how far off the path
     lateral_dist = perpendicular_distance(vehicle, wp_a, wp_b, t)
-    
+
     # Arc-length distance ALONG the path from projection to goal
     arc_length_to_goal = (
         (1 - t) * segment_length(wp_a, wp_b)  # Remaining on current segment
         + sum_segments(nearest_segment_idx + 1, end)  # All remaining segments
     )
-    
+
     # Total distance = lateral + along-path
     # OR: Just use along-path distance (ignore lateral for progress)
     distance_to_goal = arc_length_to_goal
-    
+
     return distance_to_goal
 ```
 
@@ -127,8 +127,8 @@ def get_route_distance_to_goal(self, vehicle_location):
 Step 46:
 GOAL ← WP[102] ← WP[101] ← VEHICLE
          ^         ^         └─ projects to point P1 on segment[101→102]
-         1.0cm     0.0cm     
-                   
+         1.0cm     0.0cm
+
 Distance = (segment[101→102] - distance_to_P1) + sum(segments[102→end])
          = (0.01m - 0.002m) + 263.43m
          = 263.44m ✅
@@ -136,7 +136,7 @@ Distance = (segment[101→102] - distance_to_P1) + sum(segments[102→end])
 Step 47: (moved 0.17m forward, now past WP[102])
 GOAL ← WP[103] ← WP[102] ← ← ← ← ← VEHICLE
                    ^                └─ projects to P2 on segment[102→103]
-                   
+
 Distance = (segment[102→103] - distance_to_P2) + sum(segments[103→end])
          = (0.01m - 0.007m) + 263.28m
          = 263.29m ✅ DECREASED BY 0.15m!
@@ -202,7 +202,7 @@ Distance = (segment[102→103] - distance_to_P2) + sum(segments[103→end])
 
 **Status**: 🔴 **BLOCKING TRAINING** - Fix required immediately
 
-**Previous Bug**: Missing vehicle-to-waypoint distance (FIXED)  
+**Previous Bug**: Missing vehicle-to-waypoint distance (FIXED)
 **Current Bug**: Discontinuity at waypoint boundaries (THIS BUG)
 
 **Reference**: This is exactly the problem Phase 5 (arc-length projection) was solving!

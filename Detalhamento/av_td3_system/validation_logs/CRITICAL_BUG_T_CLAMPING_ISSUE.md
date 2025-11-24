@@ -1,7 +1,7 @@
 # CRITICAL BUG: t-Parameter Clamping Causes Segment Sticking
 
-**Date**: 2025-11-24  
-**Severity**: 🔴 **CRITICAL** - Arc-length projection still has discontinuities  
+**Date**: 2025-11-24
+**Severity**: 🔴 **CRITICAL** - Arc-length projection still has discontinuities
 **Status**: 🔍 **ROOT CAUSE IDENTIFIED**
 
 ---
@@ -22,7 +22,7 @@ From `docs/day-24/progress.log` (Steps 49-51):
 
 ```
 Step 49:
-  Vehicle=(316.00, 129.49) 
+  Vehicle=(316.00, 129.49)
   SegmentIdx=102, t=1.0000 ← CLAMPED!
   PerpendicularDist=0.713m
   ArcLength=263.35m
@@ -63,17 +63,17 @@ Step 51:
 for i in range(search_start, search_end):
     # Project vehicle onto segment i
     t = ((vx - wp_a[0]) * seg_x + (vy - wp_a[1]) * seg_y) / seg_length_sq
-    
+
     # Clamp t to [0, 1]
     t = max(0.0, min(1.0, t))  # ← PROBLEM: Hides when vehicle past segment!
-    
+
     # Calculate closest point on segment
     closest_x = wp_a[0] + t * seg_x
     closest_y = wp_a[1] + t * seg_y
-    
+
     # Distance from vehicle to closest point
     dist = sqrt((vx - closest_x)² + (vy - closest_y)²)
-    
+
     if dist < min_dist:
         min_dist = dist
         nearest_segment_idx = i  # ← Selects based on perpendicular distance!
@@ -169,13 +169,13 @@ Only clamp `t` AFTER finding the nearest segment:
 for i in range(search_start, search_end):
     # Calculate UNCLAMPED t
     t_unclamped = ((vx - wp_a[0]) * seg_x + (vy - wp_a[1]) * seg_y) / seg_length_sq
-    
+
     # For perpendicular distance, use CLAMPED t
     t_clamped = max(0.0, min(1.0, t_unclamped))
     closest_x = wp_a[0] + t_clamped * seg_x
     closest_y = wp_a[1] + t_clamped * seg_y
     dist = sqrt((vx - closest_x)² + (vy - closest_y)²)
-    
+
     # BUT: Only select segments where vehicle is BETWEEN start and end!
     # Check if 0.0 <= t_unclamped <= 1.0
     if 0.0 <= t_unclamped <= 1.0:
@@ -198,17 +198,17 @@ Start from `current_waypoint_idx` and search forward until finding a segment wit
 for i in range(self.current_waypoint_idx, min(len(self.dense_waypoints) - 1, self.current_waypoint_idx + 200)):
     wp_a = self.dense_waypoints[i]
     wp_b = self.dense_waypoints[i + 1]
-    
+
     # Calculate t
     seg_x = wp_b[0] - wp_a[0]
     seg_y = wp_b[1] - wp_a[1]
     seg_length_sq = seg_x ** 2 + seg_y ** 2
-    
+
     if seg_length_sq < 1e-6:
         continue
-    
+
     t = ((vx - wp_a[0]) * seg_x + (vy - wp_a[1]) * seg_y) / seg_length_sq
-    
+
     if t < 0.0:
         # Vehicle is before this segment, stop searching
         nearest_segment_idx = max(0, i - 1)

@@ -1,8 +1,8 @@
 # Simple Fix Proposal: Progress Reward Discontinuity
 
-**Date:** November 24, 2025  
-**Issue:** Reward discontinuity persists after smooth blending implementation  
-**Status:** PROPOSED SOLUTION  
+**Date:** November 24, 2025
+**Issue:** Reward discontinuity persists after smooth blending implementation
+**Status:** PROPOSED SOLUTION
 
 ---
 
@@ -38,7 +38,7 @@ Looking at the projection method in `get_route_distance_to_goal()`:
 final_distance = (1 - blend_factor) * projection_distance + blend_factor * euclidean_distance
 ```
 
-**The Problem:**  
+**The Problem:**
 When vehicle is at coordinates (x1, y1) and we project onto segment to get (x2, y2):
 - `projection_distance` starts from (x2, y2) to goal
 - `euclidean_distance` starts from (x1, y1) to goal
@@ -58,43 +58,43 @@ Instead of blending two distances with different origins, **always measure from 
 ```python
 def get_route_distance_to_goal(self, vehicle_location):
     """Calculate distance to goal using smooth path interpolation."""
-    
+
     # Vehicle position
     if hasattr(vehicle_location, 'x'):
         vx, vy = vehicle_location.x, vehicle_location.y
     else:
         vx, vy = vehicle_location[0], vehicle_location[1]
-    
+
     # Find nearest segment
     segment_idx, distance_from_route = self._find_nearest_segment(vehicle_location)
-    
+
     # Goal position
     goal_x, goal_y, _ = self.waypoints[-1]
-    
+
     # METHOD 1: On-route - follow waypoint path
     if distance_from_route <= 5.0 and segment_idx is not None:
         # Distance from vehicle to nearest point on route
         wp_start = self.waypoints[segment_idx]
         wp_end = self.waypoints[segment_idx + 1]
         projection = self._project_onto_segment((vx, vy), (wp_start[0], wp_start[1]), (wp_end[0], wp_end[1]))
-        
+
         dist_to_route = math.sqrt((projection[0] - vx)**2 + (projection[1] - vy)**2)
-        
+
         # Distance along route from projection to goal
         dist_projection_to_segment_end = math.sqrt(
             (wp_end[0] - projection[0])**2 + (wp_end[1] - projection[1])**2
         )
-        
+
         # Remaining segments
         remaining = 0.0
         for i in range(segment_idx + 1, len(self.waypoints) - 1):
             wp1 = self.waypoints[i]
             wp2 = self.waypoints[i + 1]
             remaining += math.sqrt((wp2[0] - wp1[0])**2 + (wp2[1] - wp1[1])**2)
-        
+
         route_distance = dist_to_route + dist_projection_to_segment_end + remaining
         return route_distance
-    
+
     # METHOD 2: Off-route - direct euclidean
     else:
         euclidean_distance = math.sqrt((goal_x - vx)**2 + (goal_y - vy)**2)

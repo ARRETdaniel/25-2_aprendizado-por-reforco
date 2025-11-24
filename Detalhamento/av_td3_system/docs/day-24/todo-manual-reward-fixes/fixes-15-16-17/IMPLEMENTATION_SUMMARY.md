@@ -1,7 +1,7 @@
 # Reward Validation Fixes - Implementation Summary
 
-**Date**: November 24, 2025  
-**Status**: Implementation Complete, Testing Pending  
+**Date**: November 24, 2025
+**Status**: Implementation Complete, Testing Pending
 **Total Time**: ~90 minutes (faster than 5-8 hour estimate due to systematic approach)
 
 ---
@@ -54,7 +54,7 @@ def get_distance_to_nearest_obstacle(self) -> float:
     with self.obstacle_lock:
         if self.last_detection_time is not None:
             time_since_detection = time.time() - self.last_detection_time
-            
+
             if time_since_detection > 0.2:  # 4 frames at 20 FPS
                 if self.distance_to_obstacle < float('inf'):
                     self.logger.debug(
@@ -64,7 +64,7 @@ def get_distance_to_nearest_obstacle(self) -> float:
                 self.distance_to_obstacle = float('inf')
                 self.other_actor = None
                 self.last_detection_time = None
-        
+
         return self.distance_to_obstacle
 ```
 

@@ -1,9 +1,9 @@
 # CRITICAL FIX: Arc-Length Projection for Dense Waypoints
 
-**Date**: 2025-01-24  
-**Issue**: Negative progress rewards for forward movement at waypoint boundaries  
-**Root Cause**: Geometric discontinuity when using "nearest waypoint + distance"  
-**Solution**: Arc-length projection onto dense waypoint path  
+**Date**: 2025-01-24
+**Issue**: Negative progress rewards for forward movement at waypoint boundaries
+**Root Cause**: Geometric discontinuity when using "nearest waypoint + distance"
+**Solution**: Arc-length projection onto dense waypoint path
 **Status**: ✅ **IMPLEMENTED**
 
 ---
@@ -23,7 +23,7 @@ Step 46:
   Progress Delta: +0.026m (forward), Reward: +0.13 ✅
 
 Step 47: [VEHICLE MOVED 0.17m FORWARD!]
-  Vehicle: (316.49, 129.49) 
+  Vehicle: (316.49, 129.49)
   Distance: 263.59m ← INCREASED by 0.15m!
   Progress Delta: -0.154m (backward), Reward: -0.77 ❌ WRONG!
 ```
@@ -40,7 +40,7 @@ The geometric discontinuity occurs when the vehicle switches between waypoints:
 BEFORE (approaching waypoint):
     GOAL ← WP[102] ← WP[101] ← [0.069m] ← VEHICLE (nearest=101)
     Distance = 0.069 + chain_from_101 = 263.44m ✅
-    
+
 AFTER (vehicle moves 0.17m forward, passes WP[101]):
     GOAL ← WP[102] ← [0.233m] ← VEHICLE (nearest=102, switched!)
     Distance = 0.233 + chain_from_102 = 263.59m ❌
@@ -59,11 +59,11 @@ For dense waypoints with spacing `d`:
 At waypoint boundary:
   Before: dist = ε + N*d         (ε ≈ 0, nearly at waypoint)
   After:  dist = (d-ε) + (N-1)*d (passed waypoint, now distance from next)
-  
+
   Delta = [(d-ε) + (N-1)*d] - [ε + N*d]
         = d - ε + Nd - d - ε - Nd
         = d - 2ε
-        
+
   When ε ≈ 0:  Delta ≈ +d (distance INCREASES!)
 ```
 
@@ -161,10 +161,10 @@ distance_to_goal = arc_on_current + arc_on_remaining  # CONTINUOUS! ✅
 New logging format shows projection details:
 
 ```
-[DENSE_WP_PROJ] Vehicle=(316.66, 129.49), 
-                SegmentIdx=101/26395, 
-                t=0.9500, 
-                PerpendicularDist=0.002m, 
+[DENSE_WP_PROJ] Vehicle=(316.66, 129.49),
+                SegmentIdx=101/26395,
+                t=0.9500,
+                PerpendicularDist=0.002m,
                 ArcLength=263.43m
 ```
 
@@ -223,7 +223,7 @@ Step 48: dist=263.09m, delta=+0.180m, reward=+0.90 ✅ (correct!)
 
 ### Why Dense Waypoints + Projection?
 
-**Dense waypoints alone** (Phase 6 initial): 
+**Dense waypoints alone** (Phase 6 initial):
 - ❌ Still have discontinuities at boundaries
 - ❌ Distance jumps when switching waypoints
 

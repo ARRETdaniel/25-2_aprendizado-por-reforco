@@ -1,8 +1,8 @@
 # Phase 3 Implementation (CORRECTED): Smooth Metric Blending Fix
 
-**Date:** November 24, 2025  
-**Issue:** #3.1 - Progress reward discontinuity (10.0 → 0.0 → 10.0 oscillation)  
-**Status:** ✅ IMPLEMENTED (Correct Solution)  
+**Date:** November 24, 2025
+**Issue:** #3.1 - Progress reward discontinuity (10.0 → 0.0 → 10.0 oscillation)
+**Status:** ✅ IMPLEMENTED (Correct Solution)
 **Previous Attempt:** PHASE_3_IMPLEMENTATION.md (WRONG - temporal smoothing for None values)
 
 ---
@@ -58,7 +58,7 @@ if segment_idx is None:
     return self.get_distance_to_goal(vehicle_location)  # ← Returns FLOAT, not None!
 ```
 
-**Test Result:** 
+**Test Result:**
 - No `[PROGRESS-SMOOTH]` logs appeared ❌
 - User saw "WARNING: Using deprecated Euclidean distance" instead ✅
 - Discontinuity persisted ❌
@@ -84,7 +84,7 @@ if segment_idx is None:
 **The Jump:**
 ```
 Vehicle temporarily goes >20m off-route (e.g., during sharp turn exploration):
-  
+
 Before (on-route):  distance_to_goal = 53.6m (projection)
 After (off-route):  distance_to_goal = 42.4m (Euclidean)
 ───────────────────────────────────────────────────────────
@@ -109,7 +109,7 @@ When returning on-route:
 
 ### Change 1: Return Distance from Route
 
-**File:** `src/environment/waypoint_manager.py`  
+**File:** `src/environment/waypoint_manager.py`
 **Method:** `_find_nearest_segment()` (lines ~571-649)
 
 **OLD SIGNATURE:**
@@ -153,7 +153,7 @@ return nearest_segment_idx, min_distance
 
 ### Change 2: Implement Smooth Blending Algorithm
 
-**File:** `src/environment/waypoint_manager.py`  
+**File:** `src/environment/waypoint_manager.py`
 **Method:** `get_route_distance_to_goal()` (lines ~437-530)
 
 **Algorithm Overview:**
@@ -162,11 +162,11 @@ return nearest_segment_idx, min_distance
 2. Calculate projection-based distance (if on-route)
 3. Calculate Euclidean distance (always, for blending)
 4. Blend based on distance_from_route:
-   
+
    dist_from_route ≤ 5m:     100% projection (blend = 0.0)
    dist_from_route = 5-20m:  Gradual blend (blend = 0.0 → 1.0)
    dist_from_route > 20m:    100% Euclidean (blend = 1.0)
-   
+
    blend_factor = min(1.0, (dist_from_route - 5.0) / 15.0)
    final_distance = (1 - blend_factor) × projection + blend_factor × euclidean
 ```
@@ -181,77 +181,77 @@ def get_route_distance_to_goal(self, vehicle_location):
     # Safety check
     if not self.waypoints:
         return None
-    
+
     # Extract coordinates
     vx, vy = (vehicle_location.x, vehicle_location.y) if hasattr(vehicle_location, 'x') \
              else (vehicle_location[0], vehicle_location[1])
-    
+
     # Step 1: Find nearest segment (NEW: returns distance_from_route!)
     segment_idx, distance_from_route = self._find_nearest_segment(vehicle_location)
-    
+
     # Step 2: Calculate projection-based distance (if on-route)
     projection_distance = None
-    
+
     if segment_idx is not None and segment_idx < len(self.waypoints) - 1:
         # Project onto segment
         wp_start = self.waypoints[segment_idx]
         wp_end = self.waypoints[segment_idx + 1]
-        
+
         projection = self._project_onto_segment(
             (vx, vy),
             (wp_start[0], wp_start[1]),
             (wp_end[0], wp_end[1])
         )
-        
+
         # Distance from projection to segment end
         dist_to_segment_end = math.sqrt(
             (wp_end[0] - projection[0]) ** 2 +
             (wp_end[1] - projection[1]) ** 2
         )
-        
+
         # Sum remaining segments
         remaining_distance = 0.0
         for i in range(segment_idx + 1, len(self.waypoints) - 1):
             wp1, wp2 = self.waypoints[i], self.waypoints[i + 1]
             segment_dist = math.sqrt((wp2[0] - wp1[0]) ** 2 + (wp2[1] - wp1[1]) ** 2)
             remaining_distance += segment_dist
-        
+
         projection_distance = dist_to_segment_end + remaining_distance
-    
+
     # Step 3: Calculate Euclidean distance (always, for blending)
     goal_x, goal_y, _ = self.waypoints[-1]
     euclidean_distance = math.sqrt((goal_x - vx) ** 2 + (goal_y - vy) ** 2)
-    
+
     # Step 4: Smooth blending based on distance from route
     if projection_distance is None:
         # Far off-route (>20m) - use pure Euclidean
         final_distance = euclidean_distance
         blend_factor = 1.0
-        
+
         self.logger.debug(
             f"[ROUTE_DISTANCE_BLEND] FAR OFF-ROUTE: "
             f"dist_from_route={distance_from_route:.2f}m, "
             f"using 100% Euclidean={euclidean_distance:.2f}m"
         )
-    
+
     elif distance_from_route <= 5.0:
         # On-route (≤5m) - use pure projection
         final_distance = projection_distance
         blend_factor = 0.0
-        
+
         self.logger.debug(
             f"[ROUTE_DISTANCE_BLEND] ON-ROUTE: "
             f"dist_from_route={distance_from_route:.2f}m, "
             f"using 100% projection={projection_distance:.2f}m"
         )
-    
+
     else:
         # Transition zone (5m-20m) - smooth blending
         blend_factor = min(1.0, (distance_from_route - 5.0) / 15.0)
-        
+
         final_distance = (1.0 - blend_factor) * projection_distance + \
                          blend_factor * euclidean_distance
-        
+
         self.logger.debug(
             f"[ROUTE_DISTANCE_BLEND] TRANSITION: "
             f"dist_from_route={distance_from_route:.2f}m, "
@@ -260,7 +260,7 @@ def get_route_distance_to_goal(self, vehicle_location):
             f"euclidean={euclidean_distance:.2f}m, "
             f"final={final_distance:.2f}m"
         )
-    
+
     # Diagnostic logging
     self.logger.debug(
         f"[ROUTE_DISTANCE_PROJECTION] "
@@ -269,7 +269,7 @@ def get_route_distance_to_goal(self, vehicle_location):
         f"DistFromRoute={distance_from_route:.2f}m, "
         f"Final={final_distance:.2f}m"
     )
-    
+
     return final_distance
 ```
 
@@ -284,7 +284,7 @@ def get_route_distance_to_goal(self, vehicle_location):
 
 ### Change 3: Deprecate Euclidean Fallback Method
 
-**File:** `src/environment/waypoint_manager.py`  
+**File:** `src/environment/waypoint_manager.py`
 **Method:** `get_distance_to_goal()` (lines ~405-435)
 
 **OLD DOCSTRING:**
@@ -303,7 +303,7 @@ print("WARNING: Using deprecated Euclidean distance to goal calculation")
 
 Previous Issue: Caused reward discontinuity when used as fallback in
 get_route_distance_to_goal() because Euclidean distance is always shorter
-than projection-based distance on curved routes (e.g., 90° turn: 53.6m 
+than projection-based distance on curved routes (e.g., 90° turn: 53.6m
 projection vs 42.4m Euclidean = 11.2m jump → +560 reward spike!)
 
 Fix #3.1: Replaced fallback with smooth metric blending.
@@ -315,7 +315,7 @@ DO NOT use for progress reward calculation!
 # Removed warning print (no longer called during normal operation)
 ```
 
-**Impact:** 
+**Impact:**
 - No more "deprecated" warnings during testing ✅
 - Clear documentation of why it was removed
 - Kept for debugging/comparison if needed
@@ -334,7 +334,7 @@ Given:
 
 Blend factor (smooth transition):
   blend_factor = min(1.0, (dist_from_route - 5.0) / 15.0)
-  
+
   dist_from_route = 0m   → blend = max(0.0, -5.0/15.0) = 0.0  (100% projection)
   dist_from_route = 5m   → blend = max(0.0,  0.0/15.0) = 0.0  (100% projection)
   dist_from_route = 12.5m → blend = (12.5-5.0)/15.0 = 0.5     (50% each)
@@ -361,7 +361,7 @@ When slightly more off-route (7m from path):
 
 When vehicle overshoots turn (21m from path):
   distance_to_goal = 42.4m (SUDDEN SWITCH to Euclidean!)
-  
+
 DISCONTINUITY: 53.6m → 42.4m = -11.2m jump → +560 reward spike! 🔥
 ```
 
@@ -482,9 +482,9 @@ For effective learning:
 
 **Expected Logs:**
 ```
-[ROUTE_DISTANCE_BLEND] TRANSITION: dist_from_route=7.45m, blend=0.16, 
+[ROUTE_DISTANCE_BLEND] TRANSITION: dist_from_route=7.45m, blend=0.16,
   projection=38.67m, euclidean=35.23m, final=38.12m
-[ROUTE_DISTANCE_BLEND] TRANSITION: dist_from_route=8.23m, blend=0.22, 
+[ROUTE_DISTANCE_BLEND] TRANSITION: dist_from_route=8.23m, blend=0.22,
   projection=38.01m, euclidean=34.89m, final=37.32m
 ```
 
@@ -498,9 +498,9 @@ For effective learning:
 
 **Expected Logs:**
 ```
-[ROUTE_DISTANCE_BLEND] FAR OFF-ROUTE: dist_from_route=23.45m, 
+[ROUTE_DISTANCE_BLEND] FAR OFF-ROUTE: dist_from_route=23.45m,
   using 100% Euclidean=32.11m
-[ROUTE_DISTANCE_BLEND] FAR OFF-ROUTE: dist_from_route=25.67m, 
+[ROUTE_DISTANCE_BLEND] FAR OFF-ROUTE: dist_from_route=25.67m,
   using 100% Euclidean=31.89m
 ```
 
@@ -515,9 +515,9 @@ For effective learning:
 **Expected Logs:**
 ```
 [ROUTE_DISTANCE_BLEND] FAR OFF-ROUTE: dist_from_route=22.34m, Euclidean=30.45m
-[ROUTE_DISTANCE_BLEND] TRANSITION: dist_from_route=18.12m, blend=0.87, 
+[ROUTE_DISTANCE_BLEND] TRANSITION: dist_from_route=18.12m, blend=0.87,
   projection=35.67m, euclidean=30.23m, final=31.02m
-[ROUTE_DISTANCE_BLEND] TRANSITION: dist_from_route=12.45m, blend=0.50, 
+[ROUTE_DISTANCE_BLEND] TRANSITION: dist_from_route=12.45m, blend=0.50,
   projection=35.34m, euclidean=29.89m, final=32.62m
 [ROUTE_DISTANCE_BLEND] ON-ROUTE: dist_from_route=4.23m, projection=35.01m
 ```

@@ -1,7 +1,7 @@
 # User Concern Resolution: Progress Reward After Waypoint Crossing
 
-**Date**: 2025-01-24  
-**Issue**: Vehicle moving but progress reward shows 0.00 after waypoint crossing  
+**Date**: 2025-01-24
+**Issue**: Vehicle moving but progress reward shows 0.00 after waypoint crossing
 **Status**: ✅ **EDGE CASE IDENTIFIED AND DOCUMENTED**
 
 ---
@@ -113,8 +113,8 @@ The projection calculation in `_find_nearest_segment()` is returning exactly t=0
 3. Test hypothesis: Why t stays at 0.000 for 6 steps?
 4. Implement fix based on root cause
 
-**Effort**: 1-2 hours  
-**Priority**: LOW-MEDIUM  
+**Effort**: 1-2 hours
+**Priority**: LOW-MEDIUM
 **Trigger**: If TD3 training shows reward variance issues at waypoints
 
 ---

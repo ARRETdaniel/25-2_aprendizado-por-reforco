@@ -1,8 +1,8 @@
 # ROOT CAUSE FOUND: Projection Distance Quantization
 
-**Date:** November 24, 2025  
-**Issue:** #3.1 - Progress reward discontinuity (projection distance "sticking")  
-**Status:** ✅ **ROOT CAUSE IDENTIFIED**  
+**Date:** November 24, 2025
+**Issue:** #3.1 - Progress reward discontinuity (projection distance "sticking")
+**Status:** ✅ **ROOT CAUSE IDENTIFIED**
 **Severity:** HIGH (affects 36.5% of episode steps!)
 
 ---
@@ -41,12 +41,12 @@ def _update_current_waypoint(self, vehicle_location):
     """
     # ...
     WAYPOINT_PASSED_THRESHOLD = 5.0
-    
+
     # Check if current waypoint has been passed
     if self.current_waypoint_idx < len(self.waypoints):
         wpx, wpy, wpz = self.waypoints[self.current_waypoint_idx]
         dist_to_current = math.sqrt((vx - wpx) ** 2 + (vy - wpy) ** 2)
-        
+
         # If within threshold, consider this waypoint reached and advance
         if dist_to_current < WAYPOINT_PASSED_THRESHOLD:  # ← KEY LINE!
             # Move to next waypoint if available
@@ -82,29 +82,29 @@ def _find_nearest_segment(self, vehicle_location):
 def get_route_distance_to_goal(self, vehicle_location):
     # Step 1: Find nearest route segment
     segment_idx, distance_from_route = self._find_nearest_segment(vehicle_location)
-    
+
     if segment_idx is not None and segment_idx < len(self.waypoints) - 1:
         # Step 2: Project vehicle onto nearest segment
         wp_start = self.waypoints[segment_idx]  # ← segment_idx DOESN'T CHANGE!
         wp_end = self.waypoints[segment_idx + 1]
-        
+
         projection = self._project_onto_segment(
             (vx, vy),
             (wp_start[0], wp_start[1]),  # ← SAME segment start
             (wp_end[0], wp_end[1])       # ← SAME segment end
         )
-        
+
         # Step 3: Calculate distance from projection to segment end
         dist_to_segment_end = math.sqrt(
             (wp_end[0] - projection[0]) ** 2 +
             (wp_end[1] - projection[1]) ** 2
         )
-        
+
         # Step 4: Sum remaining waypoint segments
         remaining_distance = 0.0
         for i in range(segment_idx + 1, len(self.waypoints) - 1):
             # ...
-        
+
         projection_distance = dist_to_segment_end + remaining_distance
 ```
 
@@ -174,12 +174,12 @@ Movement: 1.79m forward over 3 steps
 
 Projection onto segment 16-17:
   Segment vector: (260-280, 130-130) = (-20, 0) (horizontal line)
-  
+
   Step 405: Project (269.15, 129.58) onto line from (280,130) to (260,130)
     t = (269.15-280) / (-20) = 10.85 / 20 = 0.5425
     projection = (280 + 0.5425×(-20), 130) = (269.15, 130.0)
     dist_to_end = sqrt((260-269.15)² + (130-130)²) = 9.15m
-    
+
   Step 406: Project (268.55, 129.58) onto same segment
     t = (268.55-280) / (-20) = 11.45 / 20 = 0.5725
     projection = (280 + 0.5725×(-20), 130) = (268.55, 130.0)
