@@ -24,6 +24,7 @@ import argparse
 import os
 import sys
 import time
+import logging  # Added for debug logging support
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass, asdict
@@ -253,7 +254,8 @@ class ManualControlInterface:
         self,
         snapshot: Optional[RewardSnapshot],
         summary_stats: Dict,
-        logging_enabled: bool
+        logging_enabled: bool,
+        goal_reached: bool = False  # ADDED for Issue #4
     ):
         """Render heads-up display with reward information."""
         y_offset = 10
@@ -264,6 +266,31 @@ class ManualControlInterface:
             surface = self.font.render(text, True, color)
             self.display.blit(surface, (10, y_offset))
             y_offset += line_height
+
+        # CRITICAL FIX (Nov 23, 2025): Issue #4 - Route Completion Reward Visibility
+        # ============================================================================
+        # Display prominent banner when goal is reached to show +100 bonus is applied
+        if goal_reached:
+            # Large font for celebration message
+            big_font = pygame.font.Font(None, 48)
+            banner_surface = big_font.render("GOAL REACHED!", True, (0, 255, 0))
+            banner_rect = banner_surface.get_rect(center=(self.width // 2, 100))
+            # Draw semi-transparent background for banner
+            bg_rect = pygame.Rect(0, 80, self.width, 60)
+            bg_surface = pygame.Surface((self.width, 60))
+            bg_surface.set_alpha(200)
+            bg_surface.fill((0, 0, 0))
+            self.display.blit(bg_surface, (0, 80))
+            # Draw banner text
+            self.display.blit(banner_surface, banner_rect)
+
+            # Show reward bonus notification
+            bonus_surface = self.font.render("+100.0 Route Completion Bonus!", True, (255, 255, 0))
+            bonus_rect = bonus_surface.get_rect(center=(self.width // 2, 150))
+            self.display.blit(bonus_surface, bonus_rect)
+
+            # Adjust y_offset to not overlap banner
+            y_offset = 180
 
         # Title
         draw_text("=== CARLA Reward Validation ===", (0, 255, 255))
@@ -303,7 +330,11 @@ class ManualControlInterface:
             draw_text(f"  Lane Keep:  {snapshot.lane_keeping_reward:8.4f}", reward_color(snapshot.lane_keeping_reward))
             draw_text(f"  Comfort:    {snapshot.comfort_penalty:8.4f}", reward_color(snapshot.comfort_penalty))
             draw_text(f"  Safety:     {snapshot.safety_penalty:8.4f}", reward_color(snapshot.safety_penalty))
-            draw_text(f"  Progress:   {snapshot.progress_reward:8.4f}", reward_color(snapshot.progress_reward))
+            # CRITICAL FIX: Highlight progress with special color when goal reached
+            progress_color = (255, 255, 0) if goal_reached else reward_color(snapshot.progress_reward)
+            draw_text(f"  Progress:   {snapshot.progress_reward:8.4f}", progress_color)
+            if goal_reached:
+                draw_text(f"    (includes +100 goal bonus!)", (255, 255, 0))
             draw_text("")
 
             if snapshot.scenario_type != "normal":
@@ -345,7 +376,7 @@ class ManualControlInterface:
             self.camera_surface = pygame.transform.smoothscale(surface, (camera_width, camera_height))
             self.camera_x_offset = (self.width - camera_width) // 2  # Center horizontally
 
-    def render(self, snapshot: Optional[RewardSnapshot], summary_stats: Dict, logging_enabled: bool):
+    def render(self, snapshot: Optional[RewardSnapshot], summary_stats: Dict, logging_enabled: bool, goal_reached: bool = False):
         """Render complete frame."""
         # Black background
         self.display.fill((0, 0, 0))
@@ -355,8 +386,8 @@ class ManualControlInterface:
             x_offset = getattr(self, 'camera_x_offset', 0)
             self.display.blit(self.camera_surface, (x_offset, 0))
 
-        # Render HUD (bottom portion overlay)
-        self.render_hud(snapshot, summary_stats, logging_enabled)
+        # Render HUD (bottom portion overlay) with goal reached flag
+        self.render_hud(snapshot, summary_stats, logging_enabled, goal_reached)
 
         pygame.display.flip()
         self.clock.tick(30)  # 30 FPS
@@ -419,8 +450,37 @@ def main():
         default=None,
         help="Maximum steps before auto-reset (None = unlimited)"
     )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Logging level for debug output (use DEBUG to see waypoint blending logs)"
+    )
 
     args = parser.parse_args()
+
+    # Configure logging with specified level
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%H:%M:%S',
+        force=True  # Force reconfiguration even if logging was already initialized
+    )
+
+    # Explicitly set log level for all relevant modules (handles import-time logger creation)
+    log_level = getattr(logging, args.log_level)
+    logging.getLogger('src.environment.waypoint_manager').setLevel(log_level)
+    logging.getLogger('src.environment.reward_functions').setLevel(log_level)
+    logging.getLogger('src.environment.carla_env').setLevel(log_level)
+    logging.getLogger('src.environment.sensors').setLevel(log_level)
+
+    # Log configuration
+    logger = logging.getLogger(__name__)
+    logger.info(f"Logging level set to: {args.log_level}")
+    if args.log_level == "DEBUG":
+        logger.info("DEBUG mode enabled - you will see waypoint blending diagnostic logs")
+        logger.debug("Explicitly configured loggers: waypoint_manager, reward_functions, carla_env, sensors")
 
     # Load configuration
     config_path = Path(args.config)
@@ -522,6 +582,9 @@ def main():
             # Get state information
             state_info = info.get("state", {})
 
+            # CRITICAL FIX (Nov 23, 2025): Issue #4 - Extract goal_reached flag
+            goal_reached = info.get("goal_reached", False)
+
             # Capture snapshot
             snapshot = validator.capture_snapshot(
                 state_info=state_info,
@@ -546,8 +609,8 @@ def main():
                     rgb_frame = np.stack([frame_uint8] * 3, axis=-1)
                     interface.update_camera(rgb_frame)
 
-            # Render interface
-            interface.render(snapshot, summary_stats, validator.logging_enabled)
+            # Render interface with goal_reached flag
+            interface.render(snapshot, summary_stats, validator.logging_enabled, goal_reached)
 
             # Check for episode end
             if terminated or truncated:
@@ -565,6 +628,10 @@ def main():
                     print("[READY] Episode reset. Continue driving with WSAD.")
                 else:
                     # Manual reset for other termination reasons (e.g., goal reached)
+                    # CRITICAL FIX: Check if goal was reached for special celebration
+                    goal_just_reached = (reason == "route_completed" and info.get("goal_reached", False))
+                    if goal_just_reached:
+                        print("[SUCCESS] 🎉 GOAL REACHED! +100 bonus applied to progress reward!")
                     print("[INFO] Press 'R' to reset or 'Q' to quit")
 
                     # Wait for user command
@@ -580,8 +647,8 @@ def main():
                             current_scenario = "normal"
                             waiting = False
 
-                        # Keep rendering while waiting
-                        interface.render(snapshot, summary_stats, validator.logging_enabled)
+                        # Keep rendering while waiting (show goal celebration if applicable)
+                        interface.render(snapshot, summary_stats, validator.logging_enabled, goal_just_reached)
 
             # Check max steps
             if args.max_steps and step_in_episode >= args.max_steps:

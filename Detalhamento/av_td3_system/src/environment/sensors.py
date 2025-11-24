@@ -610,6 +610,20 @@ class LaneInvasionDetector:
         """
         Callback when lane invasion occurs.
 
+        CRITICAL FIX (Nov 23, 2025): Offroad Detection Issue #1
+        ========================================================
+        Lane invasion sensor fires EVENT when crossing lane markings,
+        but doesn't fire when returning to center. We need separate logic
+        to clear the flag based on lateral deviation.
+
+        According to CARLA docs (ref_sensors.md#lane-invasion-detector):
+        "Registers an event each time its parent crosses a lane marking"
+        - Event is PER CROSSING, not continuous state
+        - No "return to lane" event exists
+
+        Solution: Set flag on event, clear it in is_invading_lane() based on
+        lateral deviation check.
+
         Args:
             event: CARLA LaneInvasionEvent
         """
@@ -622,14 +636,46 @@ class LaneInvasionDetector:
 
         self.logger.warning(f"Lane invasion detected: {event.crossed_lane_markings}")
 
-    def is_invading_lane(self) -> bool:
+    def is_invading_lane(self, lateral_deviation: float = None, lane_half_width: float = None) -> bool:
         """
         Check if lane invasion detected this frame.
 
+        CRITICAL FIX (Nov 23, 2025): Offroad Detection Issue #1
+        ========================================================
+        Clear invasion flag when vehicle returns to lane center.
+
+        Logic:
+        1. If lateral_deviation and lane_half_width provided:
+           - Check if vehicle has returned to safe zone (within lane bounds)
+           - Clear flag if lateral_deviation < lane_half_width * 0.8 (80% threshold)
+        2. Otherwise: Return current flag state
+
+        Args:
+            lateral_deviation: Current distance from lane center (meters)
+            lane_half_width: Half-width of current lane (meters)
+
         Returns:
-            True if off-road/lane invaded
+            True if off-road/lane invaded, False if safely in lane
         """
         with self.invasion_lock:
+            # If vehicle state data provided, check if returned to lane
+            if lateral_deviation is not None and lane_half_width is not None:
+                # Vehicle is safely within lane if deviation < 80% of lane width
+                # Example: 1.75m lane width → half=0.875m → threshold=0.7m
+                # If vehicle deviates 0.5m from center → clear flag (safely in lane)
+                # If vehicle deviates 0.85m from center → keep flag (approaching edge)
+                recovery_threshold = lane_half_width * 0.8
+
+                if abs(lateral_deviation) < recovery_threshold:
+                    # Vehicle has recovered to lane center, clear invasion flag
+                    if self.lane_invaded:  # Only log if changing from invaded → clear
+                        self.logger.info(
+                            f"[LANE RECOVERY] Vehicle returned to lane center "
+                            f"(deviation={lateral_deviation:.3f}m < threshold={recovery_threshold:.3f}m)"
+                        )
+                    self.lane_invaded = False
+                    self.invasion_event = None
+
             return self.lane_invaded
 
     def get_step_invasion_count(self) -> int:
@@ -734,6 +780,7 @@ class ObstacleDetector:
         # Obstacle detection state
         self.distance_to_obstacle = float('inf')  # Distance in meters
         self.other_actor = None  # Actor detected as obstacle
+        self.last_detection_time = None  # Track when last obstacle was detected (for staleness check)
         self.obstacle_lock = threading.Lock()
 
         # Obstacle sensor setup
@@ -772,14 +819,30 @@ class ObstacleDetector:
         """
         Callback when obstacle detected.
 
+        CRITICAL FIX (Nov 24, 2025): Issue 1.5 - Safety Penalty Persistence
+        =====================================================================
+        Problem: Callback only fires when obstacle IS detected, NOT when it clears.
+        This causes distance to be cached at last detected value (e.g., 1.647m),
+        resulting in persistent PBRS penalty (e.g., -1.0/1.647 = -0.607) even after
+        vehicle moves away from obstacle.
+
+        Solution: Store detection timestamp to detect stale data. If no new detection
+        for a few frames, reset distance to infinity.
+
+        Reference: TASK_1.5_SAFETY_PERSISTENCE_FIX.md
+        CARLA Docs: https://carla.readthedocs.io/en/latest/ref_sensors/#obstacle-detector
+
         Args:
             event: CARLA ObstacleDetectionEvent with obstacle details
                 - distance: float (meters to obstacle)
                 - other_actor: carla.Actor (what was detected)
         """
+        import time
+
         with self.obstacle_lock:
             self.distance_to_obstacle = event.distance
             self.other_actor = event.other_actor
+            self.last_detection_time = time.time()  # Track when last detection occurred
 
         # Log only significant changes (avoid spam)
         if event.distance < 5.0:
@@ -791,10 +854,42 @@ class ObstacleDetector:
         """
         Get distance to nearest detected obstacle.
 
+        CRITICAL FIX (Nov 24, 2025): Issue 1.5 - Safety Penalty Persistence
+        =====================================================================
+        Clear stale obstacle detections that haven't updated recently.
+
+        The CARLA obstacle sensor callback only fires when an obstacle IS detected,
+        not when it clears. This means if a vehicle was at 1.65m and then moves away,
+        the callback never fires again, leaving distance_to_obstacle cached at 1.65m.
+
+        Solution: If no detection within last 0.2 seconds (4 frames at 20 FPS),
+        assume obstacle has cleared and reset to infinity.
+
+        This prevents persistent PBRS penalty (e.g., -1.0/1.647 = -0.607) after
+        successful recovery from near-obstacle situations.
+
         Returns:
-            Distance in meters (float('inf') if no obstacle within range)
+            Distance in meters (float('inf') if no obstacle within range or stale data)
         """
+        import time
+
         with self.obstacle_lock:
+            # Check if detection is stale (no update in last 0.2 seconds)
+            if self.last_detection_time is not None:
+                time_since_detection = time.time() - self.last_detection_time
+
+                # If no detection for 0.2 seconds (4 frames at 20 FPS), assume cleared
+                if time_since_detection > 0.2:
+                    # Reset to infinity (no obstacle)
+                    if self.distance_to_obstacle < float('inf'):
+                        self.logger.debug(
+                            f"[OBSTACLE CLEAR] No detection for {time_since_detection:.3f}s, "
+                            f"clearing cached distance {self.distance_to_obstacle:.2f}m"
+                        )
+                    self.distance_to_obstacle = float('inf')
+                    self.other_actor = None
+                    self.last_detection_time = None
+
             return self.distance_to_obstacle
 
     def get_obstacle_info(self) -> Optional[Dict]:
@@ -817,6 +912,7 @@ class ObstacleDetector:
         with self.obstacle_lock:
             self.distance_to_obstacle = float('inf')
             self.other_actor = None
+            self.last_detection_time = None  # Clear timestamp
 
     def destroy(self):
         """
@@ -871,6 +967,98 @@ class ObstacleDetector:
             self.obstacle_sensor = None
 
 
+class OffroadDetector:
+    """
+    Detects when vehicle is on non-drivable surface using CARLA Waypoint API.
+
+    Uses waypoint.lane_type to distinguish:
+    - DRIVABLE: Driving, Parking, Bidirectional lanes
+    - NOT DRIVABLE: Sidewalk, Shoulder, Border, Restricted, etc.
+
+    This is the CORRECT way to detect off-road conditions in CARLA,
+    as opposed to using the lane invasion sensor which detects line crossings.
+
+    Reference: https://carla.readthedocs.io/en/latest/python_api/#carla.LaneType
+    """
+
+    def __init__(self, vehicle: carla.Actor, world: carla.World):
+        """
+        Initialize offroad detector.
+
+        Args:
+            vehicle: CARLA vehicle actor to monitor
+            world: CARLA world object to access map
+        """
+        self.vehicle = vehicle
+        self.world = world
+        self.carla_map = world.get_map()
+        self.logger = logging.getLogger(__name__)
+        self.is_offroad = False
+        self.offroad_lock = threading.Lock()
+
+        self.logger.info("Offroad detector initialized using Waypoint API")
+
+    def check_offroad(self) -> bool:
+        """
+        Check if vehicle is on non-drivable surface.
+
+        Returns True if on sidewalk/grass/shoulder, False if on drivable lane.
+        Uses waypoint.lane_type to determine surface type.
+
+        Returns:
+            bool: True if vehicle is off-road (non-drivable surface)
+        """
+        with self.offroad_lock:
+            try:
+                location = self.vehicle.get_location()
+
+                # Don't snap to road - we want to know if truly off-road
+                # project_to_road=False means: return None if location is not on a road
+                waypoint = self.carla_map.get_waypoint(
+                    location,
+                    project_to_road=False,
+                    lane_type=carla.LaneType.Any
+                )
+
+                if waypoint is None:
+                    # No waypoint found = vehicle is completely off the map/road
+                    self.is_offroad = True
+                    self.logger.warning("[OFFROAD] Vehicle off map (no waypoint)")
+                    return True
+
+                # Define drivable lane types (from CARLA API documentation)
+                # Reference: https://carla.readthedocs.io/en/latest/python_api/#carla.LaneType
+                drivable_lane_types = [
+                    carla.LaneType.Driving,      # Normal traffic lanes
+                    carla.LaneType.Parking,      # Parking spaces
+                    carla.LaneType.Bidirectional,  # Two-way traffic lanes
+                ]
+
+                if waypoint.lane_type not in drivable_lane_types:
+                    # Vehicle is on non-drivable surface
+                    self.is_offroad = True
+                    lane_type_name = str(waypoint.lane_type).replace("LaneType.", "")
+                    self.logger.warning(
+                        f"[OFFROAD] Vehicle on {lane_type_name} (not drivable)"
+                    )
+                    return True
+
+                # Vehicle is on drivable lane
+                self.is_offroad = False
+                return False
+
+            except Exception as e:
+                self.logger.error(f"Error checking offroad status: {e}", exc_info=True)
+                # Default to safe assumption (not offroad) on error
+                return False
+
+    def reset(self):
+        """Reset offroad state for new episode."""
+        with self.offroad_lock:
+            self.is_offroad = False
+            self.logger.debug("Offroad detector state reset")
+
+
 class SensorSuite:
     """
     Aggregates all sensors and provides unified interface.
@@ -904,14 +1092,15 @@ class SensorSuite:
         self.camera = CARLACameraManager(vehicle, camera_config, world)
         self.collision_detector = CollisionDetector(vehicle, world)
         self.lane_invasion_detector = LaneInvasionDetector(vehicle, world)
-        self.obstacle_detector = ObstacleDetector(vehicle, world)  # NEW: Obstacle detection
+        self.obstacle_detector = ObstacleDetector(vehicle, world)  # Obstacle detection
+        self.offroad_detector = OffroadDetector(vehicle, world)  # TASK 1 FIX: True off-road detection
 
         # Initialize frame stacking
         self.image_stack = ImageStack(
             frame_height=84, frame_width=84, num_frames=4
         )
 
-        self.logger.info("Complete sensor suite initialized")
+        self.logger.info("Complete sensor suite initialized (including offroad detector)")
 
     def tick(self):
         """
@@ -967,14 +1156,23 @@ class SensorSuite:
         """
         return self.collision_detector.is_colliding()
 
-    def is_lane_invaded(self) -> bool:
+    def is_lane_invaded(self, lateral_deviation: float = None, lane_half_width: float = None) -> bool:
         """
         Check if vehicle went off-road this frame.
 
+        CRITICAL FIX (Nov 23, 2025): Offroad Detection Issue #1
+        ========================================================
+        Pass lateral deviation and lane width to detector so it can clear
+        the invasion flag when vehicle returns to lane center.
+
+        Args:
+            lateral_deviation: Current distance from lane center (meters)
+            lane_half_width: Half-width of current lane (meters)
+
         Returns:
-            True if lane invaded
+            True if lane invaded, False if safely in lane
         """
-        return self.lane_invasion_detector.is_invading_lane()
+        return self.lane_invasion_detector.is_invading_lane(lateral_deviation, lane_half_width)
 
     def get_collision_info(self) -> Optional[Dict]:
         """Get collision details if any."""
@@ -1001,6 +1199,21 @@ class SensorSuite:
         """
         return self.obstacle_detector.get_distance_to_nearest_obstacle()
 
+    def is_offroad(self) -> bool:
+        """
+        Check if vehicle is on non-drivable surface (TASK 1 FIX).
+
+        Uses CARLA Waypoint API to check lane_type:
+        - Returns True if on Sidewalk, Shoulder, Border, Restricted, etc.
+        - Returns False if on Driving, Parking, or Bidirectional lanes
+
+        This is the CORRECT method for off-road detection, NOT lane invasion sensor!
+
+        Returns:
+            True if vehicle is off-road (non-drivable surface)
+        """
+        return self.offroad_detector.check_offroad()
+
     def get_obstacle_info(self) -> Optional[Dict]:
         """Get detailed obstacle information."""
         return self.obstacle_detector.get_obstacle_info()
@@ -1011,7 +1224,8 @@ class SensorSuite:
         self.collision_detector.reset()
         self.lane_invasion_detector.reset()
         self.obstacle_detector.reset()
-        self.logger.info("All sensors reset")
+        self.offroad_detector.reset()  # TASK 1 FIX: Reset offroad state
+        self.logger.info("All sensors reset (including offroad detector)")
 
     def reset_step_counters(self):
         """

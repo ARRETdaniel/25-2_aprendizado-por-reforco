@@ -738,9 +738,24 @@ class CARLANavigationEnv(Env):
             acceleration=vehicle_state["acceleration"],
             acceleration_lateral=vehicle_state["acceleration_lateral"],
             collision_detected=self.sensors.is_collision_detected(),
-            offroad_detected=self.sensors.is_lane_invaded(),
+            # TASK 1 FIX (Nov 23, 2025): Use correct offroad detection
+            # OLD BUG: Used is_lane_invaded() which detects LINE CROSSINGS (legal lane changes!)
+            # NEW FIX: Use is_offroad() which checks WAYPOINT.LANE_TYPE (Sidewalk vs Driving)
+            # Reference: https://carla.readthedocs.io/en/latest/python_api/#carla.LaneType
+            offroad_detected=self.sensors.is_offroad(),  # TRUE off-road detection (grass, sidewalk)
             wrong_way=vehicle_state["wrong_way"],
-            lane_invasion_detected=(lane_invasion_count > 0),  # CRITICAL FIX: Pass lane invasion events
+
+            # CRITICAL FIX (Nov 24, 2025): Issue 1.6 - Lane Invasion Penalty Inconsistency
+            # =================================================================================
+            # OLD BUG: Used is_lane_invaded() which returns PERSISTENT flag that gets cleared
+            #          by recovery logic. If vehicle returns to center before reward calculation,
+            #          flag is already False even though callback fired this step.
+            # NEW FIX: Use get_step_lane_invasion_count() which returns per-step counter (0 or 1)
+            #          that accurately tracks whether invasion occurred THIS step, regardless of
+            #          whether vehicle has already recovered.
+            # Reference: TASK_1.6_LANE_INVASION_INCONSISTENCY_FIX.md
+            # CARLA Docs: https://carla.readthedocs.io/en/latest/ref_sensors/#lane-invasion-detector
+            lane_invasion_detected=bool(self.sensors.get_step_lane_invasion_count()),  # Per-step detection
             distance_to_goal=distance_to_goal,
             waypoint_reached=waypoint_reached,
             goal_reached=goal_reached,
@@ -1182,7 +1197,7 @@ class CARLANavigationEnv(Env):
         # Lane marking touches are penalized via reward function but do NOT terminate episode
         # This allows agent to learn recovery behavior from mistakes
         lateral_deviation = abs(vehicle_state.get("lateral_deviation", 0.0))
-        if lateral_deviation > 3.0:  # meters from lane center
+        if lateral_deviation > 2.5:  # meters from lane center
             self.logger.warning(
                 f"[TERMINATION] Off-road at step {self.current_step}: "
                 f"lateral_deviation={lateral_deviation:.3f}m > 2.0m threshold"
@@ -1196,7 +1211,7 @@ class CARLANavigationEnv(Env):
         if self.waypoint_manager.is_route_finished():
             self.logger.info(
                 f"[TERMINATION] Route completed at step {self.current_step}! "
-                f"Waypoint {self.waypoint_manager.get_current_waypoint_index()}/{len(self.waypoint_manager.waypoints)-1}"
+                f"Dense waypoint {self.waypoint_manager.get_current_waypoint_index()}/{len(self.waypoint_manager.dense_waypoints)-1}"
             )
             return True, "route_completed"
 

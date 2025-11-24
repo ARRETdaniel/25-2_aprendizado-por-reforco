@@ -59,9 +59,24 @@ cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_
 cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system && docker run --rm --network host --runtime nvidia -e NVIDIA_VISIBLE_DEVICES=all -e NVIDIA_DRIVER_CAPABILITIES=all -e PYTHONUNBUFFERED=1 -e PYTHONPATH=/workspace -v $(pwd):/workspace -w /workspace td3-av-system:v2.0-python310 python3 scripts/evaluate_baseline.py --scenario 0 --num-episodes 1 --baseline-config config/baseline_config.yaml --debug 2>&1
 
 
-# MANUAL:
+# MANUAL VALIDATION WITH DEBUG LOGGING (CORRECTED):
 
-cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system &&  docker run --rm --network host --runtime nvidia -e NVIDIA_VISIBLE_DEVICES=all -e NVIDIA_DRIVER_CAPABILITIES=all -e PYTHONUNBUFFERED=1 -e PYTHONPATH=/workspace -e DISPLAY=$DISPLAY -e QT_X11_NO_MITSHM=1 -v /tmp/.X11-unix:/tmp/.X11-unix:rw -v $(pwd):/workspace -w /workspace --privileged td3-av-system:v2.0-python310 bash -c "pip install pygame --quiet && python3 scripts/validate_rewards_manual.py --config config/baseline_config.yaml --output-dir validation_logs/quick_test --max-steps 1000"
+cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system && \
+docker run --rm --network host --runtime nvidia \
+  -e NVIDIA_VISIBLE_DEVICES=all \
+  -e NVIDIA_DRIVER_CAPABILITIES=all \
+  -e PYTHONUNBUFFERED=1 \
+  -e PYTHONPATH=/workspace \
+  -e DISPLAY=$DISPLAY \
+  -e QT_X11_NO_MITSHM=1 \
+  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  -v $(pwd):/workspace \
+  -w /workspace \
+  --privileged \
+  td3-av-system:v2.0-python310 \
+  bash -c "pip install pygame --quiet && python3 scripts/validate_rewards_manual.py --config config/baseline_config.yaml --output-dir validation_logs/debug_test --max-steps 100000 --log-level DEBUG" 2>&1 | tee /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system/docs/day-24/progress.log
+
+cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system &&  docker run --rm --network host --runtime nvidia -e NVIDIA_VISIBLE_DEVICES=all -e NVIDIA_DRIVER_CAPABILITIES=all -e PYTHONUNBUFFERED=1 -e PYTHONPATH=/workspace -e DISPLAY=$DISPLAY -e QT_X11_NO_MITSHM=1 -v /tmp/.X11-unix:/tmp/.X11-unix:rw -v $(pwd):/workspace -w /workspace --privileged td3-av-system:v2.0-python310 bash -c "pip install pygame --quiet && python3 scripts/validate_rewards_manual.py --config config/baseline_config.yaml --output-dir validation_logs/quick_test --max-steps 100000 --log-level DEBUG"
 
 # testes
 
