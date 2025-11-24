@@ -40,7 +40,7 @@ reward:
   weights:
     efficiency: 1.0      # Base weight (forward velocity reward, Fix #1)
     lane_keeping: 2.0    # Lane centering
-    comfort: 0         # Smooth driving
+    comfort: 0.5         # Smooth driving
     safety: 1.0          # 🔧 CRITICAL FIX: 1.0 weight (penalties are already negative!)
     progress: 1.0        # Strong incentive for forward progress (with Fix #3: 10x distance_scale)
 

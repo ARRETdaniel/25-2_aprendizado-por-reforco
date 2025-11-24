@@ -786,6 +786,22 @@ class CARLANavigationEnv(Env):
         info = {
             "step": self.current_step,
             "reward_breakdown": reward_dict["breakdown"],
+            # Add validation-friendly flat format for manual control script
+            "reward_components": {
+                "total": reward,
+                "efficiency": reward_dict["breakdown"]["efficiency"][2],  # weighted value
+                "lane_keeping": reward_dict["breakdown"]["lane_keeping"][2],
+                "comfort": reward_dict["breakdown"]["comfort"][2],
+                "safety": reward_dict["breakdown"]["safety"][2],
+                "progress": reward_dict["breakdown"]["progress"][2],
+            },
+            # Add state metrics for validation HUD
+            "state": {
+                "velocity": vehicle_state["velocity"],
+                "lateral_deviation": vehicle_state["lateral_deviation"],
+                "heading_error": vehicle_state["heading_error"],
+                "distance_to_goal": distance_to_goal,
+            },
             "termination_reason": termination_reason,
             "vehicle_state": vehicle_state,
             "collision_info": collision_info,  # Already retrieved above
@@ -1166,7 +1182,7 @@ class CARLANavigationEnv(Env):
         # Lane marking touches are penalized via reward function but do NOT terminate episode
         # This allows agent to learn recovery behavior from mistakes
         lateral_deviation = abs(vehicle_state.get("lateral_deviation", 0.0))
-        if lateral_deviation > 2.0:  # meters from lane center
+        if lateral_deviation > 3.0:  # meters from lane center
             self.logger.warning(
                 f"[TERMINATION] Off-road at step {self.current_step}: "
                 f"lateral_deviation={lateral_deviation:.3f}m > 2.0m threshold"

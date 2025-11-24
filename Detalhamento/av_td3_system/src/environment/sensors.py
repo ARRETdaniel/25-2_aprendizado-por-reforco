@@ -63,6 +63,7 @@ class CARLACameraManager:
         # Queue for latest image (thread-safe)
         self.image_queue = queue.Queue(maxsize=5)
         self.latest_image = None
+        self.latest_rgb_image = None  # Store raw RGB for visualization
         self.image_lock = threading.Lock()
 
         # OPTIMIZATION: Step counter for throttled debug logging (every 100 frames)
@@ -114,7 +115,11 @@ class CARLACameraManager:
             array = array[:, :, :3]  # Drop alpha channel → BGR
             array = array[:, :, ::-1]  # Convert BGR to RGB
 
-            # Preprocess
+            # Store raw RGB for visualization (used by validation/rendering)
+            with self.image_lock:
+                self.latest_rgb_image = array.copy()
+
+            # Preprocess for training
             processed = self._preprocess(array)
 
             # Store in thread-safe manner
@@ -200,6 +205,16 @@ class CARLACameraManager:
         """
         with self.image_lock:
             return self.latest_image
+
+    def get_latest_rgb_frame(self) -> Optional[np.ndarray]:
+        """
+        Get latest raw RGB frame (for visualization/debugging).
+
+        Returns:
+            HxWx3 RGB image (uint8, 0-255), or None if no frame available
+        """
+        with self.image_lock:
+            return self.latest_rgb_image
 
     def destroy(self):
         """
@@ -933,6 +948,15 @@ class SensorSuite:
             )
 
         return stacked
+
+    def get_rgb_camera_frame(self) -> Optional[np.ndarray]:
+        """
+        Get raw RGB camera frame (for visualization).
+
+        Returns:
+            HxWx3 RGB image (uint8, 0-255), or None if not available
+        """
+        return self.camera.get_latest_rgb_frame()
 
     def is_collision_detected(self) -> bool:
         """

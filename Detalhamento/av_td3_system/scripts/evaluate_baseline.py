@@ -483,7 +483,7 @@ class BaselineEvaluationPipeline:
                         'throttle': control.throttle,
                         'brake': control.brake
                     })
-
+                # TODO: we need to investigate why we declared it and didn't use
                 obs_dict = next_obs_dict
 
             # Episode finished - LOG WHY IT ENDED

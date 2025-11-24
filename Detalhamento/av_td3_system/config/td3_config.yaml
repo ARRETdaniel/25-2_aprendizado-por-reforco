@@ -212,7 +212,7 @@ reward:
   weights:
     efficiency: 1.0  # Reward for maintaining target speed
     lane_keeping: 5.0  # INCREASED from 2.0: Prioritize lane centering (literature-validated, fixes WARNING-001)
-    comfort: 0  # Penalty for high jerk / Reward for smooth driving (only when moving!)
+    comfort: 0.5  # Penalty for high jerk / Reward for smooth driving (only when moving!)
     safety: 1.0  # FIXED: Changed from -100.0. Penalties are already negative values.
     progress: 1.0  # REDUCED from 5.0: Reward for forward progress (prevent domination)
 

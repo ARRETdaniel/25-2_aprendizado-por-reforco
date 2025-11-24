@@ -236,7 +236,7 @@ reward:
   weights:
     efficiency: 1.0      # INCREASED from 1.0 to strongly encourage movement
     lane_keeping: 5.0   # REDUCED from 2.0 to balance with efficiency
-    comfort: 0
+    comfort: 0.5
     safety: 1.0  # FIXED from -100.0: Penalties are already negative, positive weight needed!
 
   # Efficiency reward parameters (target speed tracking)
