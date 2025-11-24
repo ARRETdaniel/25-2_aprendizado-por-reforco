@@ -405,43 +405,97 @@ class WaypointManager:
 
     def get_target_heading(self, vehicle_location) -> float:
         """
-        Get target heading to next waypoint.
+        Get target heading (route tangent direction) at vehicle's current position.
+
+        FIX #1 (Jan 26, 2025): Route Tangent vs. Vehicle-to-Waypoint Bearing
+        =====================================================================
+
+        Previous Implementation (BUGGY):
+            - Calculated bearing FROM vehicle TO next waypoint: atan2(next_wp - vehicle)
+            - This is NOT the route's direction, it's vehicle→waypoint bearing
+            - Caused huge heading errors when vehicle slightly off-center (even 1cm!)
+            - Example: 1cm lateral deviation with 1cm waypoint spacing → 45° error
+            - Efficiency reward: cos(45°)=0.71 instead of cos(0°)=1.0 for good driving
+
+        Root Cause:
+            - Dense waypoints (26,396 at 1cm spacing) amplified position sensitivity
+            - Small vehicle position changes → large bearing angle changes
+            - "Works" at spawn only because vehicle exactly at WP0
+
+        New Implementation (CORRECT):
+            Method A (Fallback): Use waypoint-to-waypoint direction (route segment tangent)
+                - Calculate: atan2(WP[i+1] - WP[i])
+                - Independent of vehicle position within segment
+                - Stable heading regardless of lateral deviation
+
+            Method B (Primary): Use CARLA Waypoint API (ROBUST)
+                - Project vehicle to nearest lane center using CARLA map
+                - Use waypoint.transform.rotation.yaw (road tangent from OpenDRIVE)
+                - Handles curves, intersections, lane changes automatically
+                - Official CARLA documentation recommended method
+
+        Expected Impact:
+            - Heading error ~0° for aligned vehicle, regardless of position
+            - Efficiency reward: consistent values for good driving
+            - Wrong-way penalty: triggers correctly for backward motion
+            - Both issues resolved (efficiency + wrong_way from same root cause)
+
+        Reference:
+            - CARLA Waypoint API: https://carla.readthedocs.io/en/latest/python_api/#carla.Waypoint
+            - Analysis: docs/day-24/ROOT_CAUSE_ANALYSIS_HEADING_ERROR.md
 
         Args:
             vehicle_location: Current vehicle location (can be carla.Location or tuple (x,y,z))
 
         Returns:
-            Target heading in radians (0=North, π/2=East)
+            Target heading in radians (route tangent direction)
+            Uses CARLA convention: 0=East, π/2=South, ±π=West, -π/2=North
         """
-        if self.current_waypoint_idx >= len(self.waypoints):
-            return 0.0
+        # Method B: Use CARLA Waypoint API (preferred, handles curves/intersections)
+        if hasattr(self, 'carla_map') and self.carla_map is not None and carla is not None:
+            # Convert to carla.Location if needed
+            if hasattr(vehicle_location, 'x'):  # Already carla.Location
+                loc = vehicle_location
+            else:  # Tuple (x, y, z)
+                loc = carla.Location(
+                    x=vehicle_location[0],
+                    y=vehicle_location[1],
+                    z=vehicle_location[2] if len(vehicle_location) > 2 else 0.0
+                )
 
-        # Handle both carla.Location and tuple inputs
-        if hasattr(vehicle_location, 'x'):  # carla.Location object
-            vx, vy = vehicle_location.x, vehicle_location.y
-        else:  # Tuple (x, y, z)
-            vx, vy = vehicle_location[0], vehicle_location[1]
+            # Get waypoint at lane center (projects vehicle to road)
+            waypoint = self.carla_map.get_waypoint(
+                loc,
+                project_to_road=True,
+                lane_type=carla.LaneType.Driving
+            )
 
-        next_wp = self.waypoints[self.current_waypoint_idx]
-        dx = next_wp[0] - vx  # X-component (East in CARLA)
-        dy = next_wp[1] - vy  # Y-component (North in CARLA)
+            if waypoint is not None:
+                # ✅ CORRECT: Use road's tangent direction from OpenDRIVE
+                # This is the direction of the lane at this location
+                heading_rad = np.radians(waypoint.transform.rotation.yaw)
+                return heading_rad
 
-        # Calculate target heading to match CARLA's yaw convention
-        # CARLA yaw: 0° = EAST (+X), 90° = SOUTH (+Y), 180° = WEST (-X), 270° = NORTH (-Y)
-        # Standard atan2(dy, dx): 0 rad = East (+X), π/2 rad = North (+Y)
-        #
-        # CARLA uses the SAME angle convention as standard math!
-        # No conversion needed, just use atan2 directly
-        #
-        # This is because:
-        #   - When dx>0, dy=0 (East): atan2=0 → CARLA yaw=0° ✓
-        #   - When dx=0, dy>0 (South): atan2=π/2 → CARLA yaw=90° ✓
-        #   - When dx<0, dy=0 (West): atan2=±π → CARLA yaw=180° ✓
-        #   - When dx=0, dy<0 (North): atan2=-π/2 → CARLA yaw=270° or -90° ✓
+        # Method A: Fallback to waypoint-to-waypoint direction (route segment tangent)
+        if self.current_waypoint_idx >= len(self.waypoints) - 1:
+            # At end of route, use last segment direction
+            idx = len(self.waypoints) - 2
+        else:
+            idx = self.current_waypoint_idx
 
-        heading_carla = math.atan2(dy, dx)  # CARLA uses same convention as atan2!
+        # Get two consecutive waypoints defining the current route segment
+        wp_current = self.waypoints[idx]
+        wp_next = self.waypoints[idx + 1]
 
-        return heading_carla
+        # ✅ CORRECT: Calculate route segment direction (WP[i] → WP[i+1])
+        # This is the tangent direction of the route, NOT vehicle→waypoint bearing
+        dx = wp_next[0] - wp_current[0]  # Route direction X
+        dy = wp_next[1] - wp_current[1]  # Route direction Y
+
+        # Calculate tangent heading (independent of vehicle position)
+        heading_rad = math.atan2(dy, dx)
+
+        return heading_rad
 
     def get_lateral_deviation(self, vehicle_location) -> float:
         """

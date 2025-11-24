@@ -765,6 +765,8 @@ class CARLANavigationEnv(Env):
             distance_to_nearest_obstacle=distance_to_nearest_obstacle,
             time_to_collision=time_to_collision,
             collision_impulse=collision_impulse,
+            # FIX #3: Pass wrong-way penalty value (not just boolean)
+            wrong_way_penalty=vehicle_state.get("wrong_way_penalty", 0.0),
         )
 
         reward = reward_dict["total"]
@@ -1119,22 +1121,29 @@ class CARLANavigationEnv(Env):
             # Fallback to config value if vehicle is off-road or waypoint not found
             lane_half_width = self.reward_calculator.lateral_tolerance
 
-        # Check if going backwards (wrong way)
-        forward_vec = self.vehicle.get_transform().get_forward_vector()
-        velocity_vec_normalized = velocity_vec
-        if velocity > 0.1:
-            velocity_vec_normalized = carla.Vector3D(
-                velocity_vec.x / velocity,
-                velocity_vec.y / velocity,
-                velocity_vec.z / velocity,
-            )
-            dot_product = (
-                forward_vec.x * velocity_vec_normalized.x
-                + forward_vec.y * velocity_vec_normalized.y
-            )
-            wrong_way = dot_product < -0.5  # Heading ~180° opposite
-        else:
-            wrong_way = False
+        # FIX #3 (Nov 24, 2025): Wrong-Way Detection
+        # ============================================
+        # ISSUE: No wrong-way penalty triggered despite backward movement (Steps 95-96)
+        #
+        # ROOT CAUSE: Current implementation checks velocity direction, not heading vs. route
+        #   - Vehicle facing 180° from goal but stationary → wrong_way=False (no penalty)
+        #   - Vehicle moving slowly backward → wrong_way=False (velocity < 0.1 m/s threshold)
+        #   - Checks: dot(forward_vec, velocity_vec) < -0.5
+        #   - Problem: Physics-based (velocity) not navigation-based (heading vs. route)
+        #
+        # SOLUTION: Check heading relative to route direction
+        #   - Get intended route direction from next waypoint
+        #   - Calculate heading error: vehicle_yaw - route_direction
+        #   - Wrong-way if: |heading_error| > 90° AND moving (velocity > 0.5 m/s)
+        #   - Scale penalty by severity: 90° = -1.0, 180° = -5.0
+        #
+        # Expected Impact:
+        #   - Step 95 (backward, heading ~180° from route): -3.0 to -5.0 penalty
+        #   - Total reward: -0.83 → -3.83 to -5.83 (strong discouragement)
+        #
+        # Reference: CORRECTED_ANALYSIS_SUMMARY.md - Issue #3
+        wrong_way_penalty = self._check_wrong_way_penalty(velocity)
+        wrong_way = wrong_way_penalty != 0.0  # Boolean for state dict
 
         return {
             "velocity": velocity,
@@ -1143,9 +1152,121 @@ class CARLANavigationEnv(Env):
             "lateral_deviation": lateral_deviation,
             "heading_error": float(heading_error),
             "wrong_way": wrong_way,
+            "wrong_way_penalty": wrong_way_penalty,  # NEW: Actual penalty value for reward
             "lane_half_width": lane_half_width,  # NEW: CARLA lane width
             "dt": self.fixed_delta_seconds,  # NEW: Time step for jerk computation
         }
+
+    def _check_wrong_way_penalty(self, velocity: float) -> float:
+        """
+        Check if vehicle is facing wrong direction relative to route and return penalty.
+
+        FIX #3 (Nov 24, 2025): Wrong-Way Detection Based on Heading vs. Route
+        ======================================================================
+        FIX #1 (Jan 26, 2025): Use Corrected Heading Calculation (Route Tangent)
+        =========================================================================
+
+        Previous Implementation (BUGGY):
+            v1 (Before Nov 24): Checked velocity direction vs. vehicle heading
+            v2 (Nov 24 - Jan 25): Used vehicle→waypoint bearing (same bug as efficiency!)
+
+            Problem: Calculated route_direction = atan2(next_waypoint - vehicle)
+                    - This is vehicle→waypoint bearing, NOT route tangent
+                    - Small position changes → large heading calculation errors
+                    - Same root cause as efficiency reward bug
+
+        New Implementation (CORRECT):
+            - Uses waypoint_manager.get_target_heading() for route tangent
+            - Consistent with efficiency reward calculation
+            - Single source of truth for route direction
+
+        Algorithm:
+            1. Get route tangent direction from waypoint_manager (corrected method)
+            2. Calculate heading error: vehicle_yaw - route_tangent
+            3. Normalize to [-180°, 180°]
+            4. If |heading_error| > 90° AND velocity > 0.5 m/s:
+                - Base penalty: -1.0 (at 90°) to -5.0 (at 180°)
+                - Scale by velocity (0-1): stationary = 0%, full speed = 100%
+            5. Return penalty (negative float)
+
+        Expected Impact:
+            - Consistent heading regardless of vehicle position in segment
+            - Wrong-way penalty triggers correctly for backward driving
+            - No false positives from lateral deviations
+
+        Reference:
+            - docs/day-24/ROOT_CAUSE_ANALYSIS_HEADING_ERROR.md
+            - CORRECTED_ANALYSIS_SUMMARY.md - Issue #3
+
+        Args:
+            velocity: Current vehicle velocity magnitude (m/s)
+
+        Returns:
+            Penalty value (0.0 if correct direction, -1.0 to -5.0 if wrong-way)
+
+        Literature Support:
+            - Chen et al. (2019): Traffic rule violations need explicit constraints
+            - Safety-critical RL: Hard safety constraints require large penalties
+        """
+        # Early exit if no route plan available
+        if not hasattr(self, 'waypoint_manager') or self.waypoint_manager is None:
+            return 0.0
+
+        waypoints = self.waypoint_manager.waypoints
+        if waypoints is None or len(waypoints) < 2:
+            return 0.0
+
+        # Get current vehicle transform
+        vehicle_transform = self.vehicle.get_transform()
+        vehicle_location = vehicle_transform.location
+        vehicle_yaw = vehicle_transform.rotation.yaw  # degrees, [-180, 180]
+
+        # ✅ FIX: Use corrected heading calculation (route tangent, not bearing)
+        # This uses the same method as efficiency reward for consistency
+        route_direction_rad = self.waypoint_manager.get_target_heading(vehicle_location)
+        route_direction_deg = np.degrees(route_direction_rad)  # Convert to degrees
+
+        # Calculate heading error: vehicle_yaw - route_direction
+        heading_error = vehicle_yaw - route_direction_deg
+
+        # Normalize to [-180, 180]
+        while heading_error > 180.0:
+            heading_error -= 360.0
+        while heading_error < -180.0:
+            heading_error += 360.0
+
+        abs_heading_error = abs(heading_error)
+
+        # Wrong-way threshold: >90° means facing away from route
+        if abs_heading_error > 90.0:
+            # Calculate severity: 0.0 (at 90°) to 1.0 (at 180°)
+            severity = (abs_heading_error - 90.0) / 90.0  # [0, 1]
+
+            # Base penalty scales with severity
+            # 90° → -1.0 (slightly wrong)
+            # 135° → -3.0 (moderately wrong)
+            # 180° → -5.0 (completely backward)
+            base_penalty = -1.0 - severity * 4.0
+
+            # Scale by velocity: stationary = 0% penalty, moving = up to 100%
+            # Threshold: 0.5 m/s (1.8 km/h) - allows stopped vehicle to recover
+            velocity_scale = min(velocity / 2.0, 1.0)  # [0, 1]
+
+            penalty = base_penalty * velocity_scale
+            penalty = max(penalty, -5.0)  # Cap at -5.0
+
+            self.logger.warning(
+                f"[WRONG-WAY] Heading error: {heading_error:.1f}° "
+                f"(vehicle: {vehicle_yaw:.1f}°, route: {route_direction_deg:.1f}°), "
+                f"Velocity: {velocity:.2f} m/s, "
+                f"Severity: {severity:.2f}, "
+                f"Penalty: {penalty:.2f}"
+            )
+
+            return penalty
+
+        # Correct direction - no penalty
+        return 0.0
 
     def _check_termination(self, vehicle_state: Dict) -> Tuple[bool, str]:
         """
