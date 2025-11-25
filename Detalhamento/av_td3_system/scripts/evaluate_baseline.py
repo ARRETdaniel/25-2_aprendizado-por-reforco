@@ -30,6 +30,7 @@ sys.path.insert(0, project_root)
 import argparse
 import json
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -179,6 +180,14 @@ class BaselineEvaluationPipeline:
         self.episode_jerks = []
         self.episode_lateral_accels = []
         self.episode_trajectories = []
+
+        # NEW: Statistics for paper-ready metrics
+        self.episode_jerks_list = []           # Avg jerk per episode (m/s³)
+        self.episode_lateral_accels_list = []  # Avg lateral accel per episode (m/s²)
+        self.episode_ttc_list = []             # Avg TTC per episode (seconds)
+        self.episode_collisions_per_km = []    # Collisions/km per episode
+        self.episode_completion_times = []     # Episode duration (seconds)
+        self.episode_route_distances_km = []   # Route length traveled (km)
 
         # Setup debug visualization if enabled
         if self.debug:
@@ -433,7 +442,21 @@ class BaselineEvaluationPipeline:
             episode_speeds = []
             episode_jerks = []
             episode_lateral_accels = []
+            episode_ttc_values = []  # Time-to-Collision measurements
             trajectory = []
+
+            # Track velocity and acceleration history for jerk calculation
+            velocity_history = []  # m/s
+            acceleration_history = []  # m/s²
+            prev_velocity = 0.0
+            prev_acceleration = 0.0
+
+            # Track route length traveled for collisions/km metric
+            route_distance_traveled = 0.0
+            prev_vehicle_location = None
+
+            # Track episode start time for completion time metric
+            episode_start_time = time.time()
 
             done = False
             truncated = False
@@ -466,11 +489,57 @@ class BaselineEvaluationPipeline:
 
                 # Get vehicle state for metrics
                 debug_info = self.controller.get_debug_info(vehicle)
-                episode_speeds.append(debug_info['speed_m_s'])
+                current_speed = debug_info['speed_m_s']
+                episode_speeds.append(current_speed)
 
-                # Calculate jerk (requires velocity history)
-                # For now, approximate from acceleration changes
-                # TODO: Implement proper jerk calculation with velocity history
+                # ===============================================================
+                # SAFETY METRIC: Time-to-Collision (TTC)
+                # ===============================================================
+                # Get distance to nearest obstacle from info dict
+                distance_to_obstacle = info.get('distance_to_nearest_obstacle', float('inf'))
+                if distance_to_obstacle < float('inf') and current_speed > 0.1:
+                    ttc = distance_to_obstacle / current_speed
+                    episode_ttc_values.append(ttc)
+
+                # ===============================================================
+                # COMFORT METRIC: Longitudinal Jerk (rate of change of acceleration)
+                # ===============================================================
+                # Calculate current acceleration from velocity change
+                current_acceleration = (current_speed - prev_velocity) / self.dt if episode_length > 0 else 0.0
+
+                # Calculate jerk from acceleration change
+                if episode_length > 1:
+                    jerk = (current_acceleration - prev_acceleration) / self.dt
+                    episode_jerks.append(abs(jerk))  # Store magnitude
+
+                # Update history
+                prev_velocity = current_speed
+                prev_acceleration = current_acceleration
+                velocity_history.append(current_speed)
+                acceleration_history.append(current_acceleration)
+
+                # ===============================================================
+                # COMFORT METRIC: Lateral Acceleration
+                # ===============================================================
+                # Get lateral acceleration from vehicle state
+                # lateral_accel = v² * curvature = v² / radius
+                # For small dt, we can approximate from steering angle and speed
+                # lateral_accel ≈ v² * tan(steering_angle) / wheelbase
+                wheelbase = 2.89  # meters (typical for CARLA vehicles)
+                steering_angle = control.steer * 0.7  # Convert normalized [-1,1] to radians (max ~40°)
+                if abs(steering_angle) > 0.01:  # Avoid division by small values
+                    lateral_accel = abs((current_speed ** 2) * np.tan(steering_angle) / wheelbase)
+                    episode_lateral_accels.append(lateral_accel)
+
+                # ===============================================================
+                # EFFICIENCY METRIC: Route Distance Traveled (for collisions/km)
+                # ===============================================================
+                current_location = np.array([debug_info['position']['x'],
+                                            debug_info['position']['y']])
+                if prev_vehicle_location is not None:
+                    distance_step = np.linalg.norm(current_location - prev_vehicle_location)
+                    route_distance_traveled += distance_step
+                prev_vehicle_location = current_location
 
                 # Store trajectory
                 if self.save_trajectory:
@@ -481,9 +550,12 @@ class BaselineEvaluationPipeline:
                         'speed': debug_info['speed_m_s'],
                         'steer': control.steer,
                         'throttle': control.throttle,
-                        'brake': control.brake
+                        'brake': control.brake,
+                        'acceleration': current_acceleration,
+                        'jerk': abs(jerk) if episode_length > 1 else 0.0,
+                        'lateral_accel': lateral_accel if abs(steering_angle) > 0.01 else 0.0
                     })
-                # TODO: we need to investigate why we declared it and didn't use
+
                 obs_dict = next_obs_dict
 
             # Episode finished - LOG WHY IT ENDED
@@ -526,7 +598,27 @@ class BaselineEvaluationPipeline:
             avg_speed_ms = np.mean(episode_speeds) if episode_speeds else 0.0
             avg_speed_kmh = avg_speed_ms * 3.6
 
-            # Store episode statistics
+            # ===============================================================
+            # Calculate per-episode aggregated metrics
+            # ===============================================================
+
+            # EFFICIENCY: Episode completion time
+            episode_completion_time = time.time() - episode_start_time
+
+            # SAFETY: Collisions per kilometer
+            route_distance_km = route_distance_traveled / 1000.0 if route_distance_traveled > 0 else 0.0
+            collisions_per_km = collision_count / route_distance_km if route_distance_km > 0 else 0.0
+
+            # SAFETY: Average Time-to-Collision (TTC)
+            avg_ttc = np.mean(episode_ttc_values) if episode_ttc_values else float('inf')
+
+            # COMFORT: Average longitudinal jerk
+            avg_jerk = np.mean(episode_jerks) if episode_jerks else 0.0
+
+            # COMFORT: Average lateral acceleration
+            avg_lateral_accel = np.mean(episode_lateral_accels) if episode_lateral_accels else 0.0
+
+            # Store episode statistics (existing)
             self.episode_rewards.append(episode_reward)
             self.episode_successes.append(success)
             self.episode_collisions.append(collision_count)
@@ -534,17 +626,30 @@ class BaselineEvaluationPipeline:
             self.episode_lengths.append(episode_length)
             self.episode_speeds.append(avg_speed_kmh)
 
+            # Store NEW episode statistics (comfort, safety, efficiency)
+            self.episode_jerks_list.append(avg_jerk)
+            self.episode_lateral_accels_list.append(avg_lateral_accel)
+            self.episode_ttc_list.append(avg_ttc)
+            self.episode_collisions_per_km.append(collisions_per_km)
+            self.episode_completion_times.append(episode_completion_time)
+            self.episode_route_distances_km.append(route_distance_km)
+
             if self.save_trajectory:
                 self.episode_trajectories.append(trajectory)
 
-            # Print episode summary
+            # Print episode summary (enhanced)
             print(f"[EVAL] Episode {episode + 1} complete:")
             print(f"       Reward: {episode_reward:.2f}")
             print(f"       Success: {bool(success)}")
-            print(f"       Collisions: {collision_count}")
+            print(f"       Collisions: {collision_count} ({collisions_per_km:.3f} per km)")
             print(f"       Lane Invasions: {lane_invasion_count}")
-            print(f"       Length: {episode_length} steps")
+            print(f"       Length: {episode_length} steps ({episode_completion_time:.1f}s)")
+            print(f"       Distance: {route_distance_km:.3f} km")
             print(f"       Avg Speed: {avg_speed_kmh:.2f} km/h")
+            print(f"       Avg Jerk: {avg_jerk:.3f} m/s³")
+            print(f"       Avg Lateral Accel: {avg_lateral_accel:.3f} m/s²")
+            if avg_ttc < float('inf'):
+                print(f"       Avg TTC: {avg_ttc:.2f} s")
 
         # Calculate aggregate metrics
         metrics = self._calculate_metrics()
@@ -566,24 +671,55 @@ class BaselineEvaluationPipeline:
         """
         Calculate aggregate evaluation metrics.
 
+        Metrics align with paper requirements:
+        - Safety: Success Rate, Collisions/km, TTC
+        - Efficiency: Avg Speed, Route Completion Time
+        - Comfort: Longitudinal Jerk, Lateral Acceleration
+
         Returns:
             Dictionary with mean and std for each metric
         """
+        # Filter valid TTC values (exclude infinity)
+        valid_ttc_values = [ttc for ttc in self.episode_ttc_list if ttc < float('inf')]
+
         metrics = {
-            # Safety metrics
+            # ===============================================================
+            # SAFETY METRICS
+            # ===============================================================
             'success_rate': np.mean(self.episode_successes),
             'avg_collisions': np.mean(self.episode_collisions),
             'std_collisions': np.std(self.episode_collisions),
+            'avg_collisions_per_km': np.mean(self.episode_collisions_per_km),
+            'std_collisions_per_km': np.std(self.episode_collisions_per_km),
             'avg_lane_invasions': np.mean(self.episode_lane_invasions),
             'std_lane_invasions': np.std(self.episode_lane_invasions),
+            'avg_ttc_seconds': np.mean(valid_ttc_values) if valid_ttc_values else float('inf'),
+            'std_ttc_seconds': np.std(valid_ttc_values) if valid_ttc_values else 0.0,
+            'min_ttc_seconds': np.min(valid_ttc_values) if valid_ttc_values else float('inf'),
 
-            # Efficiency metrics
+            # ===============================================================
+            # EFFICIENCY METRICS
+            # ===============================================================
             'mean_reward': np.mean(self.episode_rewards),
             'std_reward': np.std(self.episode_rewards),
             'avg_speed_kmh': np.mean(self.episode_speeds),
             'std_speed_kmh': np.std(self.episode_speeds),
             'avg_episode_length': np.mean(self.episode_lengths),
             'std_episode_length': np.std(self.episode_lengths),
+            'avg_completion_time_s': np.mean(self.episode_completion_times),
+            'std_completion_time_s': np.std(self.episode_completion_times),
+            'avg_route_distance_km': np.mean(self.episode_route_distances_km),
+            'std_route_distance_km': np.std(self.episode_route_distances_km),
+
+            # ===============================================================
+            # COMFORT METRICS
+            # ===============================================================
+            'avg_jerk_m_s3': np.mean(self.episode_jerks_list),
+            'std_jerk_m_s3': np.std(self.episode_jerks_list),
+            'max_jerk_m_s3': np.max(self.episode_jerks_list) if self.episode_jerks_list else 0.0,
+            'avg_lateral_accel_m_s2': np.mean(self.episode_lateral_accels_list),
+            'std_lateral_accel_m_s2': np.std(self.episode_lateral_accels_list),
+            'max_lateral_accel_m_s2': np.max(self.episode_lateral_accels_list) if self.episode_lateral_accels_list else 0.0,
 
             # Raw data for further analysis
             'num_episodes': self.num_episodes,
@@ -594,24 +730,47 @@ class BaselineEvaluationPipeline:
         return metrics
 
     def _print_summary(self, metrics: Dict):
-        """Print evaluation summary."""
+        """Print evaluation summary with all paper-ready metrics."""
         print("\n" + "="*70)
-        print("EVALUATION SUMMARY")
+        print("BASELINE EVALUATION SUMMARY - PID + PURE PURSUIT")
         print("="*70)
-        print(f"\nSafety Metrics:")
-        print(f"  Success Rate: {metrics['success_rate']*100:.1f}%")
-        print(f"  Avg Collisions: {metrics['avg_collisions']:.2f} ± {metrics['std_collisions']:.2f}")
-        print(f"  Avg Lane Invasions: {metrics['avg_lane_invasions']:.2f} ± {metrics['std_lane_invasions']:.2f}")
 
-        print(f"\nEfficiency Metrics:")
-        print(f"  Mean Reward: {metrics['mean_reward']:.2f} ± {metrics['std_reward']:.2f}")
-        print(f"  Avg Speed: {metrics['avg_speed_kmh']:.2f} ± {metrics['std_speed_kmh']:.2f} km/h")
-        print(f"  Avg Episode Length: {metrics['avg_episode_length']:.1f} ± {metrics['std_episode_length']:.1f} steps")
+        print(f"\n{'='*70}")
+        print("SAFETY METRICS")
+        print(f"{'='*70}")
+        print(f"  Success Rate:          {metrics['success_rate']*100:.1f}%")
+        print(f"  Avg Collisions:        {metrics['avg_collisions']:.2f} ± {metrics['std_collisions']:.2f}")
+        print(f"  Avg Collisions/km:     {metrics['avg_collisions_per_km']:.3f} ± {metrics['std_collisions_per_km']:.3f}")
+        print(f"  Avg Lane Invasions:    {metrics['avg_lane_invasions']:.2f} ± {metrics['std_lane_invasions']:.2f}")
+        if metrics['avg_ttc_seconds'] < float('inf'):
+            print(f"  Avg TTC:               {metrics['avg_ttc_seconds']:.2f} ± {metrics['std_ttc_seconds']:.2f} s")
+            print(f"  Min TTC:               {metrics['min_ttc_seconds']:.2f} s")
+        else:
+            print(f"  Avg TTC:               N/A (no obstacles detected)")
 
-        print(f"\nConfiguration:")
-        print(f"  Scenario: {self.scenario}")
-        print(f"  Episodes: {metrics['num_episodes']}")
-        print(f"  Seed: {metrics['seed']}")
+        print(f"\n{'='*70}")
+        print("EFFICIENCY METRICS")
+        print(f"{'='*70}")
+        print(f"  Mean Reward:           {metrics['mean_reward']:.2f} ± {metrics['std_reward']:.2f}")
+        print(f"  Avg Speed:             {metrics['avg_speed_kmh']:.2f} ± {metrics['std_speed_kmh']:.2f} km/h")
+        print(f"  Avg Completion Time:   {metrics['avg_completion_time_s']:.1f} ± {metrics['std_completion_time_s']:.1f} s")
+        print(f"  Avg Route Distance:    {metrics['avg_route_distance_km']:.3f} ± {metrics['std_route_distance_km']:.3f} km")
+        print(f"  Avg Episode Length:    {metrics['avg_episode_length']:.1f} ± {metrics['std_episode_length']:.1f} steps")
+
+        print(f"\n{'='*70}")
+        print("COMFORT METRICS")
+        print(f"{'='*70}")
+        print(f"  Avg Jerk:              {metrics['avg_jerk_m_s3']:.3f} ± {metrics['std_jerk_m_s3']:.3f} m/s³")
+        print(f"  Max Jerk:              {metrics['max_jerk_m_s3']:.3f} m/s³")
+        print(f"  Avg Lateral Accel:     {metrics['avg_lateral_accel_m_s2']:.3f} ± {metrics['std_lateral_accel_m_s2']:.3f} m/s²")
+        print(f"  Max Lateral Accel:     {metrics['max_lateral_accel_m_s2']:.3f} m/s²")
+
+        print(f"\n{'='*70}")
+        print("CONFIGURATION")
+        print(f"{'='*70}")
+        print(f"  Scenario:              {self.scenario} (NPC density)")
+        print(f"  Episodes:              {metrics['num_episodes']}")
+        print(f"  Seed:                  {metrics['seed']}")
         print("="*70 + "\n")
 
     def _save_results(self, metrics: Dict):
@@ -656,6 +815,82 @@ class BaselineEvaluationPipeline:
             json.dump(results, f, indent=2)
 
         print(f"[SAVE] Results saved to {filepath}")
+
+        # Generate LaTeX table
+        latex_table = self._generate_latex_table(metrics)
+        latex_file = self.output_dir / f"latex_table_{scenario_name}_{timestamp}.tex"
+        with open(latex_file, 'w') as f:
+            f.write(latex_table)
+        print(f"[SAVE] LaTeX table saved to {latex_file}")
+
+    def _generate_latex_table(self, metrics: Dict) -> str:
+        """
+        Generate LaTeX table for paper with baseline performance metrics.
+
+        Aligns with paper requirements (ourPaper.tex):
+        - Safety: Success Rate, Collisions/km, TTC
+        - Efficiency: Avg Speed, Completion Time
+        - Comfort: Jerk, Lateral Acceleration
+
+        Args:
+            metrics: Dictionary of calculated metrics
+
+        Returns:
+            LaTeX table code as string
+        """
+        latex = "% Baseline Controller Performance - PID + Pure Pursuit\n"
+        latex += "% Generated by evaluate_baseline.py\n"
+        latex += f"% Scenario: {self.scenario}, Episodes: {self.num_episodes}, Seed: {self.seed}\n\n"
+
+        latex += "\\begin{table}[htbp]\n"
+        latex += "\\centering\n"
+        latex += "\\caption{Baseline Controller Performance (PID + Pure Pursuit)}\n"
+        latex += "\\label{tab:baseline_performance}\n"
+        latex += "\\begin{tabular}{|l|c|c|}\n"
+        latex += "\\hline\n"
+        latex += "\\textbf{Metric} & \\textbf{Mean} & \\textbf{Std Dev} \\\\\n"
+        latex += "\\hline\n"
+        latex += "\\hline\n"
+
+        # Safety Metrics Section
+        latex += "\\multicolumn{3}{|l|}{\\textbf{Safety Metrics}} \\\\\n"
+        latex += "\\hline\n"
+        latex += f"Success Rate (\\%) & {metrics['success_rate']*100:.1f} & -- \\\\\n"
+        latex += f"Avg Collisions & {metrics['avg_collisions']:.2f} & {metrics['std_collisions']:.2f} \\\\\n"
+        latex += f"Collisions/km & {metrics['avg_collisions_per_km']:.3f} & {metrics['std_collisions_per_km']:.3f} \\\\\n"
+        latex += f"Lane Invasions & {metrics['avg_lane_invasions']:.2f} & {metrics['std_lane_invasions']:.2f} \\\\\n"
+
+        if metrics['avg_ttc_seconds'] < float('inf'):
+            latex += f"Avg TTC (s) & {metrics['avg_ttc_seconds']:.2f} & {metrics['std_ttc_seconds']:.2f} \\\\\n"
+            latex += f"Min TTC (s) & {metrics['min_ttc_seconds']:.2f} & -- \\\\\n"
+        else:
+            latex += f"Avg TTC (s) & N/A & -- \\\\\n"
+
+        latex += "\\hline\n"
+
+        # Efficiency Metrics Section
+        latex += "\\multicolumn{3}{|l|}{\\textbf{Efficiency Metrics}} \\\\\n"
+        latex += "\\hline\n"
+        latex += f"Avg Speed (km/h) & {metrics['avg_speed_kmh']:.2f} & {metrics['std_speed_kmh']:.2f} \\\\\n"
+        latex += f"Completion Time (s) & {metrics['avg_completion_time_s']:.1f} & {metrics['std_completion_time_s']:.1f} \\\\\n"
+        latex += f"Route Distance (km) & {metrics['avg_route_distance_km']:.3f} & {metrics['std_route_distance_km']:.3f} \\\\\n"
+        latex += f"Episode Length (steps) & {metrics['avg_episode_length']:.1f} & {metrics['std_episode_length']:.1f} \\\\\n"
+        latex += f"Mean Reward & {metrics['mean_reward']:.2f} & {metrics['std_reward']:.2f} \\\\\n"
+        latex += "\\hline\n"
+
+        # Comfort Metrics Section
+        latex += "\\multicolumn{3}{|l|}{\\textbf{Comfort Metrics}} \\\\\n"
+        latex += "\\hline\n"
+        latex += f"Avg Jerk (m/s³) & {metrics['avg_jerk_m_s3']:.3f} & {metrics['std_jerk_m_s3']:.3f} \\\\\n"
+        latex += f"Max Jerk (m/s³) & {metrics['max_jerk_m_s3']:.3f} & -- \\\\\n"
+        latex += f"Avg Lateral Accel (m/s²) & {metrics['avg_lateral_accel_m_s2']:.3f} & {metrics['std_lateral_accel_m_s2']:.3f} \\\\\n"
+        latex += f"Max Lateral Accel (m/s²) & {metrics['max_lateral_accel_m_s2']:.3f} & -- \\\\\n"
+        latex += "\\hline\n"
+
+        latex += "\\end{tabular}\n"
+        latex += "\\end{table}\n"
+
+        return latex
 
     def close(self):
         """Clean up environment."""

@@ -193,6 +193,94 @@ def analyze_speed_profile(episodes: List[List[Dict]]) -> Dict:
     }
 
 
+def analyze_comfort_metrics(episodes: List[List[Dict]]) -> Dict:
+    """
+    Analyze comfort metrics across episodes.
+
+    Metrics:
+    - Longitudinal jerk (m/s³): Rate of change of acceleration
+    - Lateral acceleration (m/s²): Centripetal acceleration from steering
+
+    Returns:
+        Dict with statistics for jerk and lateral acceleration
+    """
+    all_jerks = []
+    all_lateral_accels = []
+
+    for episode in episodes:
+        for point in episode:
+            # Extract jerk if available (added in evaluate_baseline.py)
+            if 'jerk' in point:
+                all_jerks.append(point['jerk'])
+
+            # Extract lateral acceleration if available
+            if 'lateral_accel' in point:
+                all_lateral_accels.append(point['lateral_accel'])
+
+    jerk_stats = {
+        'mean': np.mean(all_jerks) if all_jerks else 0.0,
+        'std': np.std(all_jerks) if all_jerks else 0.0,
+        'max': np.max(all_jerks) if all_jerks else 0.0,
+        'min': np.min(all_jerks) if all_jerks else 0.0,
+        'median': np.median(all_jerks) if all_jerks else 0.0,
+        'p95': np.percentile(all_jerks, 95) if all_jerks else 0.0,
+        'count': len(all_jerks)
+    }
+
+    lateral_accel_stats = {
+        'mean': np.mean(all_lateral_accels) if all_lateral_accels else 0.0,
+        'std': np.std(all_lateral_accels) if all_lateral_accels else 0.0,
+        'max': np.max(all_lateral_accels) if all_lateral_accels else 0.0,
+        'min': np.min(all_lateral_accels) if all_lateral_accels else 0.0,
+        'median': np.median(all_lateral_accels) if all_lateral_accels else 0.0,
+        'p95': np.percentile(all_lateral_accels, 95) if all_lateral_accels else 0.0,
+        'count': len(all_lateral_accels)
+    }
+
+    return {
+        'jerk': jerk_stats,
+        'lateral_accel': lateral_accel_stats
+    }
+
+
+def analyze_safety_metrics(episodes: List[List[Dict]]) -> Dict:
+    """
+    Analyze safety metrics from trajectory data.
+
+    Note: TTC (Time-to-Collision) is calculated during evaluation
+    and stored in the main results JSON, not in trajectory points.
+    This function analyzes trajectory-based safety indicators.
+
+    Returns:
+        Dict with safety-related statistics
+    """
+    all_accelerations = []
+    all_speeds = []
+    harsh_braking_events = 0  # Deceleration > 5 m/s²
+
+    for episode in episodes:
+        for point in episode:
+            # Extract acceleration if available
+            if 'acceleration' in point:
+                accel = point['acceleration']
+                all_accelerations.append(accel)
+
+                # Count harsh braking (negative acceleration magnitude > 5 m/s²)
+                if accel < -5.0:
+                    harsh_braking_events += 1
+
+            # Extract speed for analysis
+            all_speeds.append(point['speed'])
+
+    return {
+        'harsh_braking_events': harsh_braking_events,
+        'avg_acceleration': np.mean(all_accelerations) if all_accelerations else 0.0,
+        'std_acceleration': np.std(all_accelerations) if all_accelerations else 0.0,
+        'max_deceleration': np.min(all_accelerations) if all_accelerations else 0.0,  # Most negative
+        'avg_speed_mps': np.mean(all_speeds) if all_speeds else 0.0
+    }
+
+
 def plot_trajectory_map(episodes: List[List[Dict]], waypoints: np.ndarray, output_dir: Path):
     """
     Plot trajectory map showing vehicle path vs waypoints (like TCC module_7.py).
@@ -364,6 +452,8 @@ def generate_report(episodes: List[List[Dict]], waypoints: np.ndarray, output_fi
     crosstrack_stats = analyze_crosstrack_error(episodes, waypoints)
     heading_stats = analyze_heading_error(episodes, waypoints)
     speed_stats = analyze_speed_profile(episodes)
+    comfort_stats = analyze_comfort_metrics(episodes)
+    safety_stats = analyze_safety_metrics(episodes)
 
     # Generate report
     report = f"""# Phase 3: Waypoint Following Verification - Analysis Report
@@ -375,7 +465,7 @@ def generate_report(episodes: List[List[Dict]], waypoints: np.ndarray, output_fi
 
 ## Executive Summary
 
-The baseline controller (PID + Pure Pursuit) was evaluated for waypoint following performance over {len(episodes)} episodes. This report analyzes crosstrack error, heading error, and speed tracking.
+The baseline controller (PID + Pure Pursuit) was evaluated for waypoint following performance over {len(episodes)} episodes. This report analyzes crosstrack error, heading error, speed tracking, comfort metrics (jerk, lateral acceleration), and safety indicators.
 
 ---
 
@@ -455,31 +545,68 @@ The baseline controller (PID + Pure Pursuit) was evaluated for waypoint followin
 
 ---
 
-## Controller Performance Assessment
+## Comfort Metrics Analysis
 
-### Zigzag Behavior Analysis
+### Longitudinal Jerk (m/s³)
 
-**Observation**: Controller exhibits zigzag pattern (repeated lane marking touches).
+**Definition**: Rate of change of acceleration - indicates smoothness of longitudinal control.
 
-**Evidence from Data**:
-- Mean lateral deviation: {crosstrack_stats['mean']:.3f} m
-- 95th percentile: {crosstrack_stats['p95']:.3f} m
-- Max deviation: {crosstrack_stats['max']:.3f} m
+| Metric | Value (m/s³) |
+|--------|--------------|
+| Mean | {comfort_stats['jerk']['mean']:.3f} |
+| Std Dev | {comfort_stats['jerk']['std']:.3f} |
+| Median | {comfort_stats['jerk']['median']:.3f} |
+| Max | {comfort_stats['jerk']['max']:.3f} |
+| 95th Percentile | {comfort_stats['jerk']['p95']:.3f} |
 
-**Root Causes** (Hypothesis):
+**Total Samples**: {comfort_stats['jerk']['count']}
 
-1. **Aggressive Steering Gains**:
-   - Pure Pursuit `kp_heading = 8.0` may be too high
-   - Causes overcorrection when lateral error detected
+**Interpretation**:
+- Lower jerk values indicate smoother acceleration/braking
+- Typical comfortable driving: < 2.0 m/s³
+- Current mean: {comfort_stats['jerk']['mean']:.3f} m/s³
 
-2. **Lookahead Distance Too Short**:
-   - Current: 2.0m lookahead
-   - At 30 km/h (8.33 m/s), vehicle travels lookahead distance in 0.24s
-   - Short planning horizon → reactive, oscillatory behavior
+### Lateral Acceleration (m/s²)
 
-3. **Speed-Crosstrack Coupling Missing**:
-   - Current: `k_speed_crosstrack = 0.0` (disabled)
-   - No speed reduction when off-center → aggressive corrections at full speed
+**Definition**: Centripetal acceleration from steering maneuvers.
+
+| Metric | Value (m/s²) |
+|--------|--------------|
+| Mean | {comfort_stats['lateral_accel']['mean']:.3f} |
+| Std Dev | {comfort_stats['lateral_accel']['std']:.3f} |
+| Median | {comfort_stats['lateral_accel']['median']:.3f} |
+| Max | {comfort_stats['lateral_accel']['max']:.3f} |
+| 95th Percentile | {comfort_stats['lateral_accel']['p95']:.3f} |
+
+**Total Samples**: {comfort_stats['lateral_accel']['count']}
+
+**Interpretation**:
+- Lower lateral acceleration indicates smoother steering
+- Typical comfortable driving: < 3.0 m/s²
+- Current mean: {comfort_stats['lateral_accel']['mean']:.3f} m/s²
+
+---
+
+## Safety Metrics Analysis
+
+**Note**: TTC (Time-to-Collision) is calculated during evaluation and stored in main results JSON.
+
+### Harsh Braking Events
+
+**Definition**: Deceleration events exceeding 5 m/s² (emergency braking threshold).
+
+- **Total Events**: {safety_stats['harsh_braking_events']}
+- **Average Acceleration**: {safety_stats['avg_acceleration']:.3f} m/s²
+- **Max Deceleration**: {safety_stats['max_deceleration']:.3f} m/s² (most negative)
+
+**Interpretation**:
+- Fewer harsh braking events indicate smoother, safer driving
+- Emergency braking threshold: -5.0 m/s²
+- Current harsh braking count: {safety_stats['harsh_braking_events']}
+
+---
+
+## Controller Performance
 
 ### Recommended Controller Tuning
 
@@ -511,36 +638,6 @@ kd: 0.15 # Increase for smoother response
 
 ---
 
-## Next Steps
-
-### Phase 3 Completion ✅
-
-- [x] Run 3 episodes with baseline controller
-- [x] Collect trajectory data
-- [x] Analyze crosstrack error
-- [x] Analyze heading error
-- [x] Analyze speed profile
-- [x] Identify controller issues (zigzag behavior)
-
-### Recommended Actions
-
-1. **Controller Tuning** (Optional - before Phase 4):
-   - Modify `config/baseline_config.yaml` with recommended parameters
-   - Re-run Phase 3 to verify improvement
-   - Document tuning results
-
-2. **Proceed to Phase 4**:
-   - Test NPC interaction with current controller
-   - Observe behavior in traffic scenarios
-   - Collect additional data for final evaluation
-
-3. **Defer Tuning** (Alternative):
-   - Accept current baseline performance as-is
-   - Proceed with evaluation protocol
-   - Document limitations in paper
-
----
-
 ## Files Generated
 
 - `results/baseline_evaluation/phase3_analysis/lateral_deviation.png`
@@ -549,9 +646,6 @@ kd: 0.15 # Increase for smoother response
 - `results/baseline_evaluation/phase3_analysis/control_commands.png`
 - `results/baseline_evaluation/phase3_analysis/PHASE3_ANALYSIS_REPORT.md` (this file)
 
----
-
-**Status**: Phase 3 Complete ✅
 """
 
     output_file.write_text(report)
