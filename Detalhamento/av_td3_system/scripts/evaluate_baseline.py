@@ -759,7 +759,7 @@ def main():
         # Automatically run trajectory analysis
         if not args.skip_analysis and not args.no_trajectory:
             print("\n" + "="*80)
-            print("📊 AUTOMATIC TRAJECTORY ANALYSIS")
+            print("AUTOMATIC TRAJECTORY ANALYSIS")
             print("="*80)
 
             # Import and run analysis script
@@ -768,14 +768,14 @@ def main():
             # Let the analysis script auto-detect the trajectory file
             cmd = ['python3', 'scripts/analyze_phase3_trajectories.py']
 
-            print(f"\n🔧 Running: {' '.join(cmd)}\n")
+            print(f"\nRunning: {' '.join(cmd)}\n")
             print("   (auto-detecting latest trajectory file...)\n")
 
             result = subprocess.run(cmd, cwd=project_root)
 
             if result.returncode == 0:
-                print("\n✅ Trajectory analysis completed successfully!")
-                print("📁 Analysis results saved")
+                print("\nTrajectory analysis completed successfully!")
+                print("Analysis results saved")
                 print("   Plots generated:")
                 print("   - trajectory_map.png (NEW: top-down 2D view)")
                 print("   - lateral_deviation.png")
@@ -784,7 +784,7 @@ def main():
                 print("   - control_commands.png")
                 print("   - PHASE3_ANALYSIS_REPORT.md")
             else:
-                print(f"\n⚠️ Trajectory analysis failed with exit code {result.returncode}")
+                print(f"\nTrajectory analysis failed with exit code {result.returncode}")
                 print("You can run analysis manually with:")
                 print("  python scripts/analyze_phase3_trajectories.py")
 
