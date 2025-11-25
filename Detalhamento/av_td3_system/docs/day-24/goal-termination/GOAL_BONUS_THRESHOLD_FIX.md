@@ -1,7 +1,7 @@
 # Goal Bonus Threshold Alignment Fix
 
-**Date:** January 26, 2025  
-**Status:** ✅ IMPLEMENTED  
+**Date:** January 26, 2025
+**Status:** ✅ IMPLEMENTED
 **Severity:** HIGH - Reward Inflation / Policy Corruption Risk
 
 ---
@@ -12,7 +12,7 @@ Fixed a threshold mismatch between goal detection (`check_goal_reached()`) and e
 
 **Root Cause:** `check_goal_reached()` used 5.0m threshold while `is_route_finished()` used 3.0m, creating a 2-meter "bonus spam zone".
 
-**Fix:** 
+**Fix:**
 1. Aligned thresholds to 3.0m for both functions
 2. Added single-bonus flag to ensure goal bonus awarded only once per episode
 
@@ -115,7 +115,7 @@ Terminal states shouldn't receive bootstrapped future value because there is no 
 ## Documentation Research
 
 ### TD3 Algorithm (Spinning Up - OpenAI)
-> **Target Calculation:**  
+> **Target Calculation:**
 > `y(r,s',d) = r + γ (1 - d) min_{i=1,2} Q_{φ_i,targ}(s', a'(s'))`
 >
 > The done signal `d` is used to correctly handle terminal states where there is no future value.
@@ -123,7 +123,7 @@ Terminal states shouldn't receive bootstrapped future value because there is no 
 **Interpretation:** Terminal rewards should be given **once** at the terminal step, not continuously before termination.
 
 ### Gymnasium API
-> **step() returns:**  
+> **step() returns:**
 > - `reward`: The reward as a result of taking the action.
 > - `terminated`: Whether the agent reaches the terminal state... If true, the user needs to call reset().
 
@@ -238,7 +238,7 @@ for wait_step in range(max_termination_wait):
     if reward > 100.0:
         goal_bonus_count += 1
         logger.info(f"🎯 GOAL BONUS #{goal_bonus_count} detected: reward={reward:.3f}")
-    
+
     if terminated:
         # FIX #3.2: Verify single goal bonus
         if goal_bonus_count != 1:
