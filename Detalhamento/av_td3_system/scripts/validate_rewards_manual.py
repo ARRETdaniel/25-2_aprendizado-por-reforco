@@ -631,7 +631,7 @@ def main():
                     # CRITICAL FIX: Check if goal was reached for special celebration
                     goal_just_reached = (reason == "route_completed" and info.get("goal_reached", False))
                     if goal_just_reached:
-                        print("[SUCCESS] 🎉 GOAL REACHED! +100 bonus applied to progress reward!")
+                        print("[SUCCESS] GOAL REACHED! +100 bonus applied to progress reward!")
                     print("[INFO] Press 'R' to reset or 'Q' to quit")
 
                     # Wait for user command

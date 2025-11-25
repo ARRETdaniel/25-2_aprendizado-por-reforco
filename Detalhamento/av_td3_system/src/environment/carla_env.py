@@ -225,6 +225,12 @@ class CARLANavigationEnv(Env):
         self.current_step = 0
         self.episode_start_time = None
         self.episode_count = 0  # Track episode number for diagnostics
+
+        # FIX #3.2: Goal bonus flag (Jan 26, 2025)
+        # Ensures +100.0 goal bonus awarded only ONCE per episode
+        # Prevents reward inflation from multiple bonuses near goal
+        self.goal_bonus_awarded = False
+
         #  FIX: Read max_time_steps from config (not max_duration_seconds)
         # Config has episode.max_time_steps (5000) directly in steps
         self.max_episode_steps = self.carla_config.get("episode", {}).get("max_time_steps", 1000)
@@ -568,7 +574,7 @@ class CARLANavigationEnv(Env):
             )
 
             self.logger.info(
-                f"🗺️ Using LEGACY static waypoints:\n"
+                f"Using LEGACY static waypoints:\n"
                 f"   Total waypoints in route: {len(self.waypoint_manager.waypoints)}\n"
                 f"   Spawn location: ({route_start[0]:.2f}, {route_start[1]:.2f}, {spawn_z:.2f})\n"
                 f"   Spawn heading: {initial_yaw:.2f}°\n"
@@ -583,7 +589,7 @@ class CARLANavigationEnv(Env):
 
         try:
             self.vehicle = self.world.spawn_actor(vehicle_bp, spawn_point)
-            self.logger.info(f"✅ Ego vehicle spawned successfully at ({route_start[0]:.2f}, {route_start[1]:.2f}, {spawn_z:.2f})")
+            self.logger.info(f"Ego vehicle spawned successfully at ({route_start[0]:.2f}, {route_start[1]:.2f}, {spawn_z:.2f})")
         except RuntimeError as e:
             raise RuntimeError(f"Failed to spawn ego vehicle: {e}")
 
@@ -596,6 +602,11 @@ class CARLANavigationEnv(Env):
         # Initialize state tracking
         self.current_step = 0
         self.episode_start_time = time.time()
+
+        # FIX #3.2: Reset goal bonus flag (Jan 26, 2025)
+        # Ensures each episode can award goal bonus exactly once
+        self.goal_bonus_awarded = False
+
         self.waypoint_manager.reset()
         self.reward_calculator.reset()
 
@@ -603,7 +614,7 @@ class CARLANavigationEnv(Env):
         self.world.tick()
         self.sensors.tick()
 
-        # ✅ SPAWN VERIFICATION (after physics settled)
+        #  SPAWN VERIFICATION (after physics settled)
         # Reference: ISSUE_1_CORRECTED_ANALYSIS.md - Fix spawn verification timing
         actual_transform = self.vehicle.get_transform()
         forward_vec = actual_transform.get_forward_vector()
@@ -618,13 +629,13 @@ class CARLANavigationEnv(Env):
             expected_fwd = [expected_dx/expected_mag, expected_dy/expected_mag, 0.0] if expected_mag > 0 else [1.0, 0.0, 0.0]
 
             self.logger.info(
-                f"🔍 SPAWN VERIFICATION (post-tick):\n"
+                f"SPAWN VERIFICATION (post-tick):\n"
                 f"   Requested spawn yaw: {spawn_point.rotation.yaw:.2f}°\n"
                 f"   Actual vehicle yaw: {actual_transform.rotation.yaw:.2f}°\n"
                 f"   Actual forward vector: [{forward_vec.x:.3f}, {forward_vec.y:.3f}, {forward_vec.z:.3f}]\n"
                 f"   Expected forward (route): [{expected_fwd[0]:.3f}, {expected_fwd[1]:.3f}, {expected_fwd[2]:.3f}]\n"
                 f"   Yaw difference: {abs(actual_transform.rotation.yaw - spawn_point.rotation.yaw):.2f}°\n"
-                f"   Alignment: {'✅ ALIGNED' if abs(forward_vec.x - expected_fwd[0]) < 0.1 and abs(forward_vec.y - expected_fwd[1]) < 0.1 else '⚠️ MISALIGNED'}"
+                f"   Alignment: {' ALIGNED' if abs(forward_vec.x - expected_fwd[0]) < 0.1 and abs(forward_vec.y - expected_fwd[1]) < 0.1 else ' MISALIGNED'}"
             )
 
         # Get initial observation
@@ -704,9 +715,31 @@ class CARLANavigationEnv(Env):
         distance_to_goal = self.waypoint_manager.get_route_distance_to_goal(vehicle_location)
 
         waypoint_reached = self.waypoint_manager.check_waypoint_reached()
-        goal_reached = self.waypoint_manager.check_goal_reached(vehicle_location)
 
-        # ========================================================================
+        # FIX #3: Align goal detection threshold with termination threshold (Jan 26, 2025)
+        # ==============================================================================
+        # Problem: check_goal_reached() default threshold=5.0m, but is_route_finished() uses 3.0m
+        # Result: Vehicle gets +100.0 bonus every step from 5.0m to 3.0m (17 times, +1700 total!)
+        # This creates reward inflation and perverse incentive to linger near goal.
+        #
+        # Fix: Pass threshold=3.0 to match is_route_finished() (300 segments = 3.0m)
+        # Ensures goal bonus awarded only when vehicle is truly at goal (within 3.0m)
+        # Aligns with TD3 terminal state semantics: terminal rewards given once, not continuously
+        #
+        # Reference:
+        # - TD3 paper: y(r,s',d) = r + γ(1-d)min(Q₁,Q₂) → terminal rewards NOT bootstrapped
+        # - Gymnasium API: "terminated=True when agent reaches goal state"
+        # - GOAL_TERMINATION_BUG_ANALYSIS.md - Investigation of multiple goal bonuses
+        goal_detected = self.waypoint_manager.check_goal_reached(vehicle_location, threshold=3.0)
+
+        # FIX #3.2: Only award goal bonus ONCE per episode (Jan 26, 2025)
+        # Even with aligned thresholds, vehicle could take multiple steps in 3.0m zone
+        # before termination due to Euclidean vs route distance divergence on curves.
+        # Solution: Track if bonus already awarded this episode using flag.
+        goal_reached = goal_detected and not self.goal_bonus_awarded
+        if goal_reached:
+            self.goal_bonus_awarded = True
+            self.logger.info("[GOAL] First goal detection - bonus will be awarded (flag set)")        # ========================================================================
         # PRIORITY 1 & 3: Get dense safety metrics for PBRS guidance
         # ========================================================================
         # Get distance to nearest obstacle from obstacle detector sensor
@@ -1033,24 +1066,24 @@ class CARLANavigationEnv(Env):
             ]
         ).astype(np.float32)
 
-        # 📊 DEBUG: Log observation details every 100 steps (throttled logging)
+        # DEBUG: Log observation details every 100 steps (throttled logging)
         if self.current_step % 100 == 0:
             self.logger.info(
-                f"📊 OBSERVATION (Step {self.current_step}):\n"
-                f"   🚗 Vehicle State (Raw):\n"
+                f"OBSERVATION (Step {self.current_step}):\n"
+                f"   Vehicle State (Raw):\n"
                 f"      Velocity: {vehicle_state['velocity']:.2f} m/s ({vehicle_state['velocity']*3.6:.1f} km/h)\n"
                 f"      Lateral deviation: {vehicle_state['lateral_deviation']:.3f} m\n"
                 f"      Heading error: {np.degrees(vehicle_state['heading_error']):.2f}° ({vehicle_state['heading_error']:.3f} rad)\n"
-                f"   📍 Waypoints (Raw, vehicle frame):\n"
+                f"   Waypoints (Raw, vehicle frame):\n"
                 f"      Total waypoints: {len(next_waypoints)}\n"
                 f"      First 3 waypoints: {next_waypoints[:3].tolist() if len(next_waypoints) > 0 else 'None'}\n"
                 f"      Lookahead distance: {lookahead_distance:.1f} m\n"
-                f"   🔢 Normalized Vector Features (passed to TD3/CNN):\n"
+                f"   Normalized Vector Features (passed to TD3/CNN):\n"
                 f"      Velocity (normalized): {velocity_normalized:.4f} (÷30.0)\n"
                 f"      Lateral dev (normalized): {lateral_deviation_normalized:.4f} (÷3.5)\n"
                 f"      Heading err (normalized): {heading_error_normalized:.4f} (÷π)\n"
                 f"      Waypoints (normalized): shape={waypoints_normalized.shape}, range=[{waypoints_normalized.min():.3f}, {waypoints_normalized.max():.3f}] (÷{lookahead_distance})\n"
-                f"   📦 Final Observation Shapes:\n"
+                f"   Final Observation Shapes:\n"
                 f"      Image: {image_obs.shape} (dtype={image_obs.dtype}, range=[{image_obs.min():.2f}, {image_obs.max():.2f}])\n"
                 f"      Vector: {vector_obs.shape} (dtype={vector_obs.dtype}, sum={vector_obs.sum():.3f})"
             )
@@ -1221,7 +1254,7 @@ class CARLANavigationEnv(Env):
         vehicle_location = vehicle_transform.location
         vehicle_yaw = vehicle_transform.rotation.yaw  # degrees, [-180, 180]
 
-        # ✅ FIX: Use corrected heading calculation (route tangent, not bearing)
+        #  FIX: Use corrected heading calculation (route tangent, not bearing)
         # This uses the same method as efficiency reward for consistency
         route_direction_rad = self.waypoint_manager.get_target_heading(vehicle_location)
         route_direction_deg = np.degrees(route_direction_rad)  # Convert to degrees

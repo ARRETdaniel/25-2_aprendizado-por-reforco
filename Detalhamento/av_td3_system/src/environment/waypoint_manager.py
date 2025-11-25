@@ -394,14 +394,39 @@ class WaypointManager:
         Check if vehicle has reached end of route.
 
         Returns:
-            True if reached final waypoint
+            True if within goal distance threshold of route end
 
-        Note: current_waypoint_idx now tracks position in DENSE waypoints (26k+),
-              not original waypoints (86). Must compare against dense_waypoints length.
+        CRITICAL FIX (Jan 26, 2025): Goal Termination Bug
+        ==================================================
+
+        Previous Implementation (BUG):
+            return self.current_waypoint_idx >= len(self.dense_waypoints) - 2
+
+        Problem:
+            - Threshold too strict: Required vehicle within 2cm of exact goal location!
+            - With 26,396 dense waypoints at 1cm spacing, check required idx >= 26393
+            - Vehicle at idx=26205 (1.90m from goal) → FALSE (no termination!)
+            - Episode ran for 115 steps giving +100.0 reward each time without terminating!
+
+        Root Cause:
+            - Misunderstood segment indexing: N waypoints → N-1 segments
+            - Last segment is index N-2 ✓ (correct for segment bounds)
+            - BUT goal detection needs DISTANCE threshold, not exact index!
+
+        Fix:
+            - Use generous threshold: 300 segments = 3.0 meters (1.5× car length)
+            - Aligns with typical goal_distance_threshold in AV research (2-3m)
+            - Ensures termination before reward function gives goal bonus (2.0m threshold)
+
+        Reference:
+            - GOAL_TERMINATION_BUG_ANALYSIS.md - Full investigation
+            - Gymnasium API: "terminated=True when agent reaches goal state"
+            - TD3 paper: Episodes terminate at goal (prevents infinite value estimates)
         """
-        # FIX: current_waypoint_idx is now an index into dense_waypoints, not waypoints!
-        # After progressive search fix, we track position in dense waypoints array.
-        return self.current_waypoint_idx >= len(self.dense_waypoints) - 2
+        # FIX: Use distance-based threshold (300 segments = 3.0m with 1cm spacing)
+        # This ensures episode terminates when vehicle reaches goal region (within 3.0m)
+        goal_threshold_segments = 300  # 3.0 meters (configurable in future)
+        return self.current_waypoint_idx >= len(self.dense_waypoints) - goal_threshold_segments
 
     def get_target_heading(self, vehicle_location) -> float:
         """
@@ -471,7 +496,7 @@ class WaypointManager:
             )
 
             if waypoint is not None:
-                # ✅ CORRECT: Use road's tangent direction from OpenDRIVE
+                # CORRECT: Use road's tangent direction from OpenDRIVE
                 # This is the direction of the lane at this location
                 heading_rad = np.radians(waypoint.transform.rotation.yaw)
                 return heading_rad
@@ -487,7 +512,7 @@ class WaypointManager:
         wp_current = self.waypoints[idx]
         wp_next = self.waypoints[idx + 1]
 
-        # ✅ CORRECT: Calculate route segment direction (WP[i] → WP[i+1])
+        # CORRECT: Calculate route segment direction (WP[i] → WP[i+1])
         # This is the tangent direction of the route, NOT vehicle→waypoint bearing
         dx = wp_next[0] - wp_current[0]  # Route direction X
         dy = wp_next[1] - wp_current[1]  # Route direction Y

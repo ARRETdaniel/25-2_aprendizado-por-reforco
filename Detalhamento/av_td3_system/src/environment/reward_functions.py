@@ -305,7 +305,7 @@ class RewardCalculator:
                 f"      Raw: {safety:.4f}\n"
                 f"      Weight: {self.weights['safety']:.2f}\n"
                 f"      Contribution: {self.weights['safety']*safety:.4f}\n"
-                f"      Status: {' COLLISION' if collision_detected else ' OFFROAD' if offroad_detected else '✅ SAFE'}\n"
+                f"      Status: {' COLLISION' if collision_detected else ' OFFROAD' if offroad_detected else 'SAFE'}\n"
                 f"   ──────────────────────────────────────\n"
                 f"   PROGRESS (goal-directed movement):\n"
                 f"      Raw: {progress:.4f}\n"
