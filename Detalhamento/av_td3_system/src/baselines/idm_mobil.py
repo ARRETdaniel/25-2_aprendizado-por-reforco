@@ -1,3 +1,5 @@
+# DEPRECATED 
+
 """
 Intelligent Driver Model (IDM) + MOBIL lane change decision.
 Classical baseline for autonomous vehicle control comparison with DRL agents.

@@ -62,6 +62,7 @@ class CARLANavigationEnv(Env):
         port: int = 2000,
         headless: bool = True,
         tm_port: Optional[int] = None,
+        use_ros_bridge: bool = False,
     ):
         """
         Initialize CARLA environment.
@@ -77,11 +78,40 @@ class CARLANavigationEnv(Env):
                      Use different ports for training vs evaluation environments
                      to avoid Traffic Manager registry conflicts.
                      Reference: EVALUATION_BUG_ANALYSIS.md
+            use_ros_bridge: Whether to publish control commands via ROS 2 Bridge
+                           topics instead of direct CARLA API. Default: False.
+                           Set to True for ROS integration testing (Phase 5).
 
         Raises:
             RuntimeError: If cannot connect to CARLA server or invalid config
         """
         self.logger = logging.getLogger(__name__)
+
+        # ROS Bridge control (Phase 5 integration)
+        self.use_ros_bridge = use_ros_bridge
+        self.ros_interface = None
+
+        if self.use_ros_bridge:
+            try:
+                from src.utils.ros_bridge_interface import ROSBridgeInterface
+                self.ros_interface = ROSBridgeInterface(
+                    node_name='carla_env_controller',
+                    use_docker_exec=True
+                )
+                self.logger.info("[ROS BRIDGE] Initialized ROS Bridge interface for vehicle control")
+
+                # Wait for topics to be available
+                if not self.ros_interface.wait_for_topics(timeout=10.0):
+                    self.logger.error("[ROS BRIDGE] ROS topics not available, falling back to direct CARLA API")
+                    self.use_ros_bridge = False
+                    self.ros_interface = None
+                else:
+                    self.logger.info("[ROS BRIDGE] Successfully connected to ROS topics")
+            except Exception as e:
+                self.logger.warning(f"[ROS BRIDGE] Failed to initialize ROS Bridge: {e}")
+                self.logger.warning("[ROS BRIDGE] Falling back to direct CARLA API control")
+                self.use_ros_bridge = False
+                self.ros_interface = None
 
         # Load configurations
         with open(carla_config_path, "r") as f:
@@ -904,16 +934,36 @@ class CARLANavigationEnv(Env):
             throttle = 0.0
             brake = -throttle_brake
 
-        # Create control
-        control = carla.VehicleControl(
-            throttle=throttle,
-            brake=brake,
-            steer=steering,
-            hand_brake=False,
-            reverse=False,
-        )
+        # Apply control via ROS Bridge (Phase 5) or direct CARLA API
+        if self.use_ros_bridge and self.ros_interface is not None:
+            # Publish via ROS 2 topics
+            self.ros_interface.publish_control(
+                throttle=throttle,
+                steer=steering,
+                brake=brake,
+                hand_brake=False,
+                reverse=False
+            )
 
-        self.vehicle.apply_control(control)
+            # For debug logging, create equivalent VehicleControl object
+            # (won't be applied to vehicle, just for logging)
+            control = carla.VehicleControl(
+                throttle=throttle,
+                brake=brake,
+                steer=steering,
+                hand_brake=False,
+                reverse=False,
+            )
+        else:
+            # Original direct CARLA API control
+            control = carla.VehicleControl(
+                throttle=throttle,
+                brake=brake,
+                steer=steering,
+                hand_brake=False,
+                reverse=False,
+            )
+            self.vehicle.apply_control(control)
 
         # DEBUG: Log control application and vehicle response (first 10 steps)
         if self.current_step < 100:
@@ -1609,6 +1659,15 @@ class CARLANavigationEnv(Env):
             return
 
         self.logger.info("Closing CARLA environment...")
+
+        # Close ROS Bridge interface if active (Phase 5)
+        if self.ros_interface is not None:
+            try:
+                self.logger.info("[ROS BRIDGE] Closing ROS interface...")
+                self.ros_interface.close()
+                self.ros_interface = None
+            except Exception as e:
+                self.logger.warning(f"[ROS BRIDGE] Error closing ROS interface: {e}")
 
         # Phase 1: Destroy actors (sensors, vehicle, NPCs)
         self._cleanup_episode()

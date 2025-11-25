@@ -31,3 +31,6 @@ docker run --rm --runtime nvidia -e NVIDIA_VISIBLE_DEVICES=all carlasim/carla:0.
 /workspace/PythonAPI/examples/ros2
 /workspace/PythonAPI/examples/ros2/rviz/ros2_native.rviz
 /workspace/PythonAPI/examples/ros2/ros2_native.py
+
+
+READ files: av_td3_system/docker/README.md and av_td3_system/docker/PYTHON_COMPATIBILITY_ISSUE.md and av_td3_system/docker/BRIDGE_VERSION_COMPATIBILITY.md

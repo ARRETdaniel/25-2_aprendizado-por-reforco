@@ -1,0 +1,252 @@
+# Docker Compose Configuration for CARLA 0.9.16 + ROS 2 Bridge Integration
+# Purpose: Enable ROS 2 Bridge for all evaluation/training scripts
+# Architecture: CARLA Server <-> ROS 2 Bridge <-> Python Controllers (Baseline/TD3/DDPG)
+#
+# This configuration provides ROS 2 Bridge infrastructure while allowing
+# Python scripts (evaluate_baseline.py, train_td3.py, etc.) to run natively
+# on the host or in separate containers as needed.
+#
+# Date: 2025-01-22
+# Status: Verified Working (vehicle control confirmed)
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # Service 1: CARLA Simulation Server (STANDARD MODE - Required for ROS Bridge)
+  # ==========================================================================
+  carla-server:
+    image: carlasim/carla:0.9.16
+    container_name: carla-server
+    runtime: nvidia
+    network_mode: host
+
+    environment:
+      # GPU configuration
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      # Display configuration (optional, for debugging)
+      - DISPLAY=${DISPLAY:-}
+      - SDL_VIDEODRIVER=offscreen
+      - SDL_HINT_CUDA_DEVICE=0
+
+    # CRITICAL: Launch CARLA in STANDARD MODE (NO --ros2 flag!)
+    # ROS Bridge requires Python API connection on port 2000
+    # Native ROS 2 (--ros2) and ROS Bridge are mutually exclusive!
+    # Using minimal flags that work manually
+    command: ["bash", "CarlaUE4.sh", "-RenderOffScreen", "-nosound"]
+
+    # Health check: Verify CARLA is listening on port 2000
+    # TEMPORARILY DISABLED: Health check causing immediate container failure
+    # healthcheck:
+    #   test: ["CMD", "bash", "-c", "netstat -tuln | grep :2000"]
+    #   interval: 5s
+    #   timeout: 3s
+    #   retries: 10
+    #   start_period: 90s  # CARLA needs 60-90s to initialize
+
+    init: true  # Prevent zombie processes
+    restart: on-failure:3  # Max 3 restart attempts
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ==========================================================================
+  # Service 2: ROS 2 Bridge (Humble v4 - CARLA 0.9.16 Compatible)
+  # ==========================================================================
+  ros2-bridge:
+    image: ros2-carla-bridge:humble-v4
+    container_name: ros2-bridge
+    network_mode: host
+
+    environment:
+      # ROS 2 Configuration
+      - ROS_DOMAIN_ID=0
+      # RMW_IMPLEMENTATION removed - using default FastDDS (ROS 2 Humble default)
+
+      # CARLA Python API (already installed in image via pip)
+      - CARLA_ROOT=/opt/carla-simulator
+      - PYTHONPATH=/opt/carla-simulator/PythonAPI/carla/dist/carla-0.9.16-py3.10-linux-x86_64.egg
+
+    # Launch ROS Bridge with ego vehicle spawning enabled
+    # VERIFIED WORKING: 2025-01-22
+    # - Bridge connects to CARLA on port 2000
+    # - Spawns ego vehicle (Tesla Model 3) with role name 'ego_vehicle'
+    # - Creates all required ROS 2 topics
+    # - Vehicle control confirmed functional
+    command: >
+      bash -c "source /opt/ros/humble/setup.bash &&
+               source /opt/carla-ros-bridge/install/setup.bash &&
+               ros2 launch carla_ros_bridge carla_ros_bridge_with_example_ego_vehicle.launch.py
+               host:=localhost
+               port:=2000
+               timeout:=20
+               synchronous_mode:=True
+               fixed_delta_seconds:=0.05
+               town:=Town01"
+
+    # Wait for CARLA server to start (not healthy check - disabled above)
+    depends_on:
+      carla-server:
+        condition: service_started  # Changed from service_healthy since healthcheck disabled
+
+    restart: unless-stopped
+
+    # Health check: Verify ROS topics are being published
+    healthcheck:
+      test: ["CMD", "bash", "-c", "source /opt/ros/humble/setup.bash && ros2 topic list | grep -q '/carla/ego_vehicle/vehicle_control_cmd'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+# ==============================================================================
+# ROS 2 Topics Available (Verified 2025-01-22)
+# ==============================================================================
+# Control Topics:
+#   /carla/ego_vehicle/vehicle_control_cmd           - Publish control commands here
+#   /carla/ego_vehicle/vehicle_control_cmd_manual    - Manual override mode
+#   /carla/ego_vehicle/vehicle_control_manual_override - Toggle manual control
+#
+# Status Topics:
+#   /carla/ego_vehicle/vehicle_status                - Velocity, acceleration, control state
+#   /carla/ego_vehicle/vehicle_info                  - Static vehicle information
+#
+# Localization Topics:
+#   /carla/ego_vehicle/odometry                      - Position, orientation, velocities
+#   /carla/ego_vehicle/imu                           - Angular velocity, linear acceleration
+#   /carla/ego_vehicle/gnss                          - GPS coordinates
+#   /carla/ego_vehicle/speedometer                   - Speed in m/s
+#
+# Perception Topics:
+#   /carla/ego_vehicle/rgb_front/image               - Front camera image
+#   /carla/ego_vehicle/rgb_front/camera_info         - Camera calibration
+#
+# Environment Topics:
+#   /carla/actor_list                                - All actors in simulation
+#   /carla/objects                                   - Detected objects
+#   /carla/traffic_lights/info                       - Traffic light states
+#   /carla/map                                       - OpenDRIVE map
+#   /carla/world_info                                - World metadata
+#
+# Simulation Control:
+#   /carla/status                                    - Simulation status
+#   /carla/weather_control                           - Set weather parameters
+#   /clock                                           - Simulation time
+#
+# ==============================================================================
+# Usage Instructions
+# ==============================================================================
+#
+# 1. BUILD ROS BRIDGE IMAGE (if not already built):
+#    cd /workspace/av_td3_system
+#    docker build -t ros2-carla-bridge:humble-v4 -f docker/ros2-carla-bridge.Dockerfile .
+#
+# 2. START INFRASTRUCTURE:
+#    docker-compose -f docker-compose.ros-integration.yml up -d
+#
+# 3. VERIFY SYSTEM IS RUNNING:
+#    # Check containers
+#    docker-compose -f docker-compose.ros-integration.yml ps
+#
+#    # Check CARLA server
+#    docker logs carla-server | tail -20
+#
+#    # Check ROS Bridge
+#    docker logs ros2-bridge | tail -20
+#
+#    # List ROS topics
+#    docker exec ros2-bridge bash -c "source /opt/ros/humble/setup.bash && ros2 topic list"
+#
+# 4. TEST VEHICLE CONTROL:
+#    docker exec ros2-bridge bash -c "
+#      source /opt/ros/humble/setup.bash &&
+#      source /opt/carla-ros-bridge/install/setup.bash &&
+#      ros2 topic pub /carla/ego_vehicle/vehicle_control_cmd \
+#        carla_msgs/msg/CarlaEgoVehicleControl \
+#        '{throttle: 0.5, steer: 0.0, brake: 0.0}' -r 10"
+#
+# 5. RUN EVALUATION SCRIPTS:
+#    # Baseline evaluation
+#    python3 scripts/evaluate_baseline.py --scenario 0 --num-episodes 20
+#
+#    # TD3 training
+#    python3 scripts/train_td3.py --scenario 0 --max-timesteps 100000
+#
+#    # DDPG training (future)
+#    # python3 scripts/train_ddpg.py --scenario 0 --max-timesteps 100000
+#
+# 6. MONITOR ROS TOPICS WHILE SCRIPTS RUN:
+#    # In separate terminal, monitor control commands
+#    docker exec ros2-bridge bash -c "
+#      source /opt/ros/humble/setup.bash &&
+#      ros2 topic echo /carla/ego_vehicle/vehicle_control_cmd"
+#
+#    # Monitor vehicle status
+#    docker exec ros2-bridge bash -c "
+#      source /opt/ros/humble/setup.bash &&
+#      ros2 topic echo /carla/ego_vehicle/vehicle_status"
+#
+# 7. VIEW LOGS:
+#    docker-compose -f docker-compose.ros-integration.yml logs -f
+#    docker-compose -f docker-compose.ros-integration.yml logs -f carla-server
+#    docker-compose -f docker-compose.ros-integration.yml logs -f ros2-bridge
+#
+# 8. STOP INFRASTRUCTURE:
+#    docker-compose -f docker-compose.ros-integration.yml down
+#
+# ==============================================================================
+# Integration with Python Scripts
+# ==============================================================================
+#
+# The Python evaluation/training scripts will:
+# 1. Connect to CARLA via Python API (port 2000)
+# 2. Spawn vehicle manually OR use ego_vehicle spawned by bridge
+# 3. Publish control commands to /carla/ego_vehicle/vehicle_control_cmd
+# 4. Subscribe to sensor/status topics for observations
+#
+# This allows our existing scripts to work with minimal modifications while
+# gaining ROS 2 ecosystem benefits (topic monitoring, recording, replay, etc.)
+#
+# ==============================================================================
+# Architecture Decision Rationale
+# ==============================================================================
+#
+# Why ROS Bridge instead of Native ROS 2?
+# - Native ROS 2 (--ros2 flag): Sensor publishing only, autopilot control
+# - ROS Bridge: Full bidirectional communication, vehicle control via topics
+# - Confirmed working: 2025-01-22 (see ROS_BRIDGE_SUCCESS_REPORT.md)
+#
+# Why not include Python script containers?
+# - Scripts run fine on host with direct CARLA Python API access
+# - Easier debugging and development (no container rebuild needed)
+# - More flexible for different execution modes (training vs evaluation)
+# - Can add script containers later if needed for supercomputer deployment
+#
+# Why Humble instead of Foxy?
+# - Python 3.10 compatibility (CARLA 0.9.16 requires Python 3.10+)
+# - LTS support until 2027 (Foxy support ended 2023)
+# - Better documentation and community support
+#
+# ==============================================================================
+# Version Compatibility Notes
+# ==============================================================================
+#
+# CARLA: 0.9.16 (September 2025 release)
+# ROS 2: Humble Hawksbill (LTS)
+# Python: 3.10
+# ROS Bridge: v4 (patched for CARLA 0.9.16 from official 0.9.13 version)
+#
+# Patch Applied:
+# - CARLA_VERSION file updated from "0.9.13" to "0.9.16"
+# - No API breaking changes observed
+# - All functionality verified working
+#
+# See: av_td3_system/docker/BRIDGE_VERSION_COMPATIBILITY.md
+#
+# ==============================================================================

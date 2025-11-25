@@ -19,6 +19,7 @@ ENV CARLA_ROOT=/workspace
 # Install Miniforge for Python 3.10 (uses conda-forge by default, no TOS required)
 # Miniforge is a community-driven conda distribution
 # Also install xvfb for virtual display in headless mode
+# Install Docker CLI for docker-exec mode ROS Bridge integration
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     wget \
@@ -26,7 +27,14 @@ RUN apt-get update && \
     curl \
     ca-certificates \
     xvfb \
-    mesa-utils && \
+    mesa-utils \
+    apt-transport-https \
+    gnupg \
+    lsb-release && \
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+    apt-get update && \
+    apt-get install -y docker-ce-cli && \
     rm -rf /var/lib/apt/lists/*
 
 # Download and install Miniforge (conda-forge by default, no TOS)

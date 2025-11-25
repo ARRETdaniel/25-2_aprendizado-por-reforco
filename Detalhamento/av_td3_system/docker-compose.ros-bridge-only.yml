@@ -1,0 +1,33 @@
+# Simplified Docker Compose - ROS Bridge Only
+# Use this when CARLA is running manually or in a separate container
+# Date: 2025-01-24
+
+version: '3.8'
+
+services:
+  ros2-bridge:
+    image: ros2-carla-bridge:humble-v4
+    container_name: ros2-bridge
+    network_mode: host
+
+    environment:
+      # ROS 2 Configuration
+      - ROS_DOMAIN_ID=0
+      # Removed RMW_IMPLEMENTATION - using default Fast-DDS instead of CycloneDDS
+
+      # CARLA Python API
+      - CARLA_ROOT=/opt/carla-simulator
+      - PYTHONPATH=/opt/carla-simulator/PythonAPI/carla/dist/carla-0.9.16-py3.10-linux-x86_64.egg
+
+    # Launch ROS Bridge with increased timeout (CARLA takes ~60-90s to initialize)
+    command: bash -c "source /opt/ros/humble/setup.bash && source /opt/carla-ros-bridge/install/setup.bash && ros2 launch carla_ros_bridge carla_ros_bridge.launch.py host:=localhost port:=2000 timeout:=120 town:=Town01"
+
+    restart: unless-stopped
+
+    # Health check: Verify ROS topics are being published
+    healthcheck:
+      test: ["CMD", "bash", "-c", "source /opt/ros/humble/setup.bash && ros2 topic list | grep -q '/carla'"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

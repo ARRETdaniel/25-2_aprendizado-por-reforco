@@ -61,7 +61,8 @@ class BaselineEvaluationPipeline:
         baseline_config_path: str = "config/baseline_config.yaml",
         output_dir: str = "results/baseline_evaluation",
         save_trajectory: bool = True,
-        debug: bool = False
+        debug: bool = False,
+        use_ros_bridge: bool = False
     ):
         """
         Initialize baseline evaluation pipeline.
@@ -77,6 +78,7 @@ class BaselineEvaluationPipeline:
             output_dir: Directory for evaluation results
             save_trajectory: Whether to save trajectory data
             debug: Enable debug logging
+            use_ros_bridge: Use ROS 2 Bridge for vehicle control (Phase 5)
         """
         # Set random seeds
         np.random.seed(seed)
@@ -86,6 +88,7 @@ class BaselineEvaluationPipeline:
         self.num_episodes = num_episodes
         self.save_trajectory = save_trajectory
         self.debug = debug
+        self.use_ros_bridge = use_ros_bridge
 
         # Initialize logger
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -134,11 +137,18 @@ class BaselineEvaluationPipeline:
 
         # Initialize environment
         print(f"\n[ENVIRONMENT] Initializing CARLA environment...")
+        if self.use_ros_bridge:
+            print(f"[ENVIRONMENT] ROS 2 Bridge control ENABLED (Phase 5)")
+            print(f"[ENVIRONMENT] Vehicle control via /carla/ego_vehicle/vehicle_control_cmd")
+        else:
+            print(f"[ENVIRONMENT] Using direct CARLA API control")
+
         self.env = CARLANavigationEnv(
             carla_config_path,
             agent_config_path,
             training_config_path,
-            tm_port=self.tm_port
+            tm_port=self.tm_port,
+            use_ros_bridge=self.use_ros_bridge
         )
         print(f"[ENVIRONMENT] Map: {self.carla_config.get('world', {}).get('map', 'Town01')}")
         print(f"[ENVIRONMENT] Max episode steps: {self.agent_config.get('training', {}).get('max_episode_steps', 2000)}")
@@ -954,6 +964,12 @@ def main():
     )
 
     parser.add_argument(
+        '--use-ros-bridge',
+        action='store_true',
+        help='Use ROS 2 Bridge for vehicle control (Phase 5 integration)'
+    )
+
+    parser.add_argument(
         '--skip-analysis',
         action='store_true',
         help='Skip automatic trajectory analysis after evaluation'
@@ -969,7 +985,8 @@ def main():
         baseline_config_path=args.baseline_config,
         output_dir=args.output_dir,
         save_trajectory=not args.no_trajectory,
-        debug=args.debug
+        debug=args.debug,
+        use_ros_bridge=args.use_ros_bridge
     )
 
     trajectory_file = None  # Will store the trajectory file path for analysis
