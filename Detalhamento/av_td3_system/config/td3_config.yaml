@@ -13,7 +13,7 @@ algorithm:
   # Root Cause: Previous "CARLA-specific" adjustments were WRONG - caused catastrophic failures
   # Evidence: CNN_END_TO_END_TRAINING_ANALYSIS.md shows Q-value explosion (2→1.8M in 5K steps)
   # Solution: Use EXACT hyperparameters from successful TD3 implementations
-  learning_rate: 0.001  # 1e-3, TD3 paper default for BOTH actor and critic
+  learning_rate: 0.0003  # 1e-3, TD3 paper default for BOTH actor and critic
   discount: 0.99  # TD3 paper default (γ=0.99) - DO NOT CHANGE for episode length
   # Official TD3 uses γ=0.99 for ALL environments (MuJoCo, Atari, robotics)
   # Episode length does NOT determine discount factor (Sutton & Barto misinterpretation)
@@ -50,7 +50,7 @@ algorithm:
   # Original: 25,000 (OpenAI Spinning Up default: 10,000)
   # CRITICAL FIX (Nov 17, 2025): Reduced from 2500 to 1000 to match OpenAI standard
   # use 25k for full training runs
-  learning_starts: 2500  # Start learning after 1K steps (OpenAI Spinning Up default)
+  learning_starts: 10000  # Start learning after 1K steps (OpenAI Spinning Up default)
 
   # CRITICAL FIX (Nov 17, 2025): Changed from train_freq=1 to match OpenAI Spinning Up
   # Root Cause: train_freq=1 caused 31× more gradient updates than recommended
@@ -210,11 +210,11 @@ reward:
   #   - TD3 paper (Fujimoto et al. 2018): Balanced reward components critical
   #   - Contextual papers (Elallid et al., Chen et al.): Multi-component rewards
   weights:
-    efficiency: 1.0  # Reward for maintaining target speed
-    lane_keeping: 5.0  # INCREASED from 2.0: Prioritize lane centering (literature-validated, fixes WARNING-001)
-    comfort: 0.5  # Penalty for high jerk / Reward for smooth driving (only when moving!)
-    safety: 1.0  # FIXED: Changed from -100.0. Penalties are already negative values.
-    progress: 1.0  # REDUCED from 5.0: Reward for forward progress (prevent domination)
+    efficiency: 2.0  # Reward for maintaining target speed
+    lane_keeping: 2.0  # INCREASED from 2.0: Prioritize lane centering (literature-validated, fixes WARNING-001)
+    comfort: 1.0  # Penalty for high jerk / Reward for smooth driving (only when moving!)
+    safety: 0.3  # FIXED: Changed from -100.0. Penalties are already negative values.
+    progress: 3.0  # REDUCED from 5.0: Reward for forward progress (prevent domination)
 
   # Efficiency reward parameters
   efficiency:
@@ -233,9 +233,9 @@ reward:
 
   # Safety penalty parameters
   safety:
-    collision_penalty: -1000.0  # Terminal penalty for collision
-    offroad_penalty: -500.0  # Terminal penalty for going off-road
-    wrong_way_penalty: -200.0  # Penalty for driving in wrong direction
+    collision_penalty: -100  # Terminal penalty for collision
+    offroad_penalty: -50  # Terminal penalty for going off-road
+    wrong_way_penalty: -5  # Penalty for driving in wrong direction
 
   # Progress reward parameters (NEW: Goal-directed navigation)
   # LITERATURE-VALIDATED FIX (WARNING-001 & WARNING-002):
@@ -244,7 +244,7 @@ reward:
   # Reference: Chen et al. (2019) "Lateral Control" - balanced multi-component design
   progress:
     waypoint_bonus: 1.0  # REDUCED from 10.0: Prevent discrete bonus domination
-    distance_scale: 1.0  # INCREASED from 0.1: Emphasize continuous distance reduction (literature-backed)
+    distance_scale: 5.0  # INCREASED from 0.1: Emphasize continuous distance reduction (literature-backed)
     goal_reached_bonus: 100.0  # REDUCED from 100.0: Still significant but not overwhelming
 
 # Training configuration

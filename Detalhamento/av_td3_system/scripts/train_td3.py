@@ -214,7 +214,7 @@ class TD3TrainingPipeline:
         print(f"[AGENT] CNN training mode: ENABLED (weights will be updated during training)")
 
         # Initialize TD3Agent WITH SEPARATE CNNs for end-to-end training
-        # 🔧 FIX: Calculate state_dim dynamically from config
+        # FIX: Calculate state_dim dynamically from config
         # State = 512 (CNN features) + 3 (kinematic) + (num_waypoints * 2)
         num_waypoints = self.carla_config.get("route", {}).get("num_waypoints_ahead", 25)
         state_dim = 512 + 3 + (num_waypoints * 2)  # 512 + 3 + 50 = 565
@@ -663,7 +663,7 @@ class TD3TrainingPipeline:
         print(f"   Vector shape: {obs_dict['vector'].shape}")
         print(f"{'='*70}\n")
 
-        start_timesteps = self.agent_config.get('algorithm', {}).get('learning_starts', 10000)
+        start_timesteps = self.agent_config.get('algorithm', {}).get('learning_starts', 25000)
         batch_size = self.agent_config.get('algorithm', {}).get('batch_size', 256)
 
         # Phase logging
@@ -683,7 +683,7 @@ class TD3TrainingPipeline:
             # Log every 10 steps to show training is progressing
             if t % 100 == 0:
                 phase = "EXPLORATION" if t <= start_timesteps else "LEARNING"
-                print(f"[{phase}] Processing step {t:6d}/{self.max_timesteps:,}...", flush=True)
+                print(f"[{phase}] Processing step {t:6d}/{self.max_timesteps:,}. The t is {t:6d}...", flush=True)
 
 
             # Select action based on training phase
@@ -699,7 +699,7 @@ class TD3TrainingPipeline:
                 # This ensures vehicle accumulates driving experience instead of staying stationary.
                 action = np.array([
                     np.random.uniform(-1, 1),   # Steering: random left/right
-                    np.random.uniform(0, 1)      # Throttle: forward only (0=idle, 1=full throttle)
+                    np.random.uniform(-1, 1)   # Throttle/brake
                 ])
             else:
                 # Learning phase: use policy with exploration noise
@@ -772,111 +772,113 @@ class TD3TrainingPipeline:
             # BUG FIX: Debug visualization should use NEXT observation (current frame after action)
             # Previous bug: Used obs_dict (old frame before action) causing 1-frame delay
             # BUG fix debug logging only for 100 steps each time
-            self._visualize_debug(next_obs_dict, action, reward, info, t)
+            if self.debug:
+                self._visualize_debug(next_obs_dict, action, reward, info, t)
 
                 # DEBUG: Print detailed step info to terminal every 100 steps
                 # OPTIMIZATION: Reduced from every 10 steps to every 100 steps
                 # to minimize logging overhead while maintaining sufficient visibility
                 #if t % 100 == 0:
              # TODO: changed from print every 100 steps, check if its problematic
-            vehicle_state = info.get('vehicle_state', {})
-            reward_breakdown = info.get('reward_breakdown', {})
+            if t % 100 == 0 and self.debug:
+                vehicle_state = info.get('vehicle_state', {})
+                reward_breakdown = info.get('reward_breakdown', {})
 
-            # Extract observation data for debugging
-            vector_obs = next_obs_dict.get('vector', np.array([]))
-            image_obs = next_obs_dict.get('image', np.array([]))
+                # Extract observation data for debugging
+                vector_obs = next_obs_dict.get('vector', np.array([]))
+                image_obs = next_obs_dict.get('image', np.array([]))
 
-            # Parse vector observation (velocity, lat_dev, heading_error, waypoints[20])
-            velocity = vector_obs[0] if len(vector_obs) > 0 else 0.0
-            lat_dev = vector_obs[1] if len(vector_obs) > 1 else 0.0
-            heading_err = vector_obs[2] if len(vector_obs) > 2 else 0.0
+                # Parse vector observation (velocity, lat_dev, heading_error, waypoints[20])
+                velocity = vector_obs[0] if len(vector_obs) > 0 else 0.0
+                lat_dev = vector_obs[1] if len(vector_obs) > 1 else 0.0
+                heading_err = vector_obs[2] if len(vector_obs) > 2 else 0.0
 
-            # Waypoints are elements [3:23] (10 waypoints × 2 coords = 20 values)
-            waypoints_flat = vector_obs[3:23] if len(vector_obs) >= 23 else []
+                # Waypoints are elements [3:23] (10 waypoints × 2 coords = 20 values)
+                waypoints_flat = vector_obs[3:23] if len(vector_obs) >= 23 else []
 
-            # Image statistics (4 stacked frames, 84×84)
-            if len(image_obs.shape) == 3:  # (4, 84, 84)
-                img_mean = np.mean(image_obs)
-                img_std = np.std(image_obs)
-                img_min = np.min(image_obs)
-                img_max = np.max(image_obs)
-            else:
-                img_mean = img_std = img_min = img_max = 0.0
+                # Image statistics (4 stacked frames, 84×84)
+                if len(image_obs.shape) == 3:  # (4, 84, 84)
+                    img_mean = np.mean(image_obs)
+                    img_std = np.std(image_obs)
+                    img_min = np.min(image_obs)
+                    img_max = np.max(image_obs)
+                else:
+                    img_mean = img_std = img_min = img_max = 0.0
 
-            # Reward breakdown (format: reward_breakdown is already the "breakdown" dict)
-            # Each component is a tuple: (weight, raw_value, weighted_value)
-            eff_tuple = reward_breakdown.get('efficiency', (0, 0, 0))
-            lane_tuple = reward_breakdown.get('lane_keeping', (0, 0, 0))
-            comfort_tuple = reward_breakdown.get('comfort', (0, 0, 0))
-            safety_tuple = reward_breakdown.get('safety', (0, 0, 0))
-            progress_tuple = reward_breakdown.get('progress', (0, 0, 0))
+                # Reward breakdown (format: reward_breakdown is already the "breakdown" dict)
+                # Each component is a tuple: (weight, raw_value, weighted_value)
+                eff_tuple = reward_breakdown.get('efficiency', (0, 0, 0))
+                lane_tuple = reward_breakdown.get('lane_keeping', (0, 0, 0))
+                comfort_tuple = reward_breakdown.get('comfort', (0, 0, 0))
+                safety_tuple = reward_breakdown.get('safety', (0, 0, 0))
+                progress_tuple = reward_breakdown.get('progress', (0, 0, 0))
 
-            # Extract weighted values (index 2)
-            eff_reward = eff_tuple[2] if isinstance(eff_tuple, tuple) else 0.0
-            lane_reward = lane_tuple[2] if isinstance(lane_tuple, tuple) else 0.0
-            comfort_reward = comfort_tuple[2] if isinstance(comfort_tuple, tuple) else 0.0
-            safety_reward = safety_tuple[2] if isinstance(safety_tuple, tuple) else 0.0
-            progress_reward = progress_tuple[2] if isinstance(progress_tuple, tuple) else 0.0
+                # Extract weighted values (index 2)
+                eff_reward = eff_tuple[2] if isinstance(eff_tuple, tuple) else 0.0
+                lane_reward = lane_tuple[2] if isinstance(lane_tuple, tuple) else 0.0
+                comfort_reward = comfort_tuple[2] if isinstance(comfort_tuple, tuple) else 0.0
+                safety_reward = safety_tuple[2] if isinstance(safety_tuple, tuple) else 0.0
+                progress_reward = progress_tuple[2] if isinstance(progress_tuple, tuple) else 0.0
 
-            # LITERATURE-VALIDATED FIX (WARNING-002): Accumulate reward components
-            # Track components to verify progress doesn't dominate (was 88.9%)
-            self.episode_reward_components['efficiency'] += eff_reward
-            self.episode_reward_components['lane_keeping'] += lane_reward
-            self.episode_reward_components['comfort'] += comfort_reward
-            self.episode_reward_components['safety'] += safety_reward
-            self.episode_reward_components['progress'] += progress_reward
+                # LITERATURE-VALIDATED FIX (WARNING-002): Accumulate reward components
+                # Track components to verify progress doesn't dominate (was 88.9%)
+                self.episode_reward_components['efficiency'] += eff_reward
+                self.episode_reward_components['lane_keeping'] += lane_reward
+                self.episode_reward_components['comfort'] += comfort_reward
+                self.episode_reward_components['safety'] += safety_reward
+                self.episode_reward_components['progress'] += progress_reward
 
-            # Print main debug line
-            print(
-                f"\n[DEBUG Step {t:4d}] "
-                f"Act=[steer:{action[0]:+.3f}, thr/brk:{action[1]:+.3f}] | "
-                f"Rew={reward:+7.2f} | "
-                f"Speed={vehicle_state.get('velocity', 0)*3.6:5.1f} km/h | "
-                f"LatDev={vehicle_state.get('lateral_deviation', 0):+.2f}m | "
-                f"Collisions={self.episode_collision_count}"
-            )
-
-            # Print reward breakdown
-            print(
-                f"   [Reward] Efficiency={eff_reward:+.2f} | "
-                f"Lane={lane_reward:+.2f} | "
-                f"Comfort={comfort_reward:+.2f} | "
-                f"Safety={safety_reward:+.2f} | "
-                f"Progress={progress_reward:+.2f}"
-            )
-
-            # Print first 3 waypoints (most relevant)
-            if len(waypoints_flat) >= 6:
-                wp1_x, wp1_y = waypoints_flat[0], waypoints_flat[1]
-                wp2_x, wp2_y = waypoints_flat[2], waypoints_flat[3]
-                wp3_x, wp3_y = waypoints_flat[4], waypoints_flat[5]
-
-                # Calculate distances
-                dist1 = np.sqrt(wp1_x**2 + wp1_y**2)
-                dist2 = np.sqrt(wp2_x**2 + wp2_y**2)
-                dist3 = np.sqrt(wp3_x**2 + wp3_y**2)
-
+                # Print main debug line
                 print(
-                    f"   [Waypoints] (vehicle frame): "
-                    f"WP1=[{wp1_x:+6.1f}, {wp1_y:+6.1f}]m (d={dist1:5.1f}m) | "
-                    f"WP2=[{wp2_x:+6.1f}, {wp2_y:+6.1f}]m (d={dist2:5.1f}m) | "
-                    f"WP3=[{wp3_x:+6.1f}, {wp3_y:+6.1f}]m (d={dist3:5.1f}m)"
+                    f"\n[DEBUG Step {t:4d}] "
+                    f"Act=[steer:{action[0]:+.3f}, thr/brk:{action[1]:+.3f}] | "
+                    f"Rew={reward:+7.2f} | "
+                    f"Speed={vehicle_state.get('velocity', 0)*3.6:5.1f} km/h | "
+                    f"LatDev={vehicle_state.get('lateral_deviation', 0):+.2f}m | "
+                    f"Collisions={self.episode_collision_count}"
                 )
 
-            # Print image statistics
-            print(
-                f"   [Image] shape={image_obs.shape} | "
-                f"mean={img_mean:.3f} | std={img_std:.3f} | "
-                f"range=[{img_min:.3f}, {img_max:.3f}]"
-            )
+                # Print reward breakdown
+                print(
+                    f"   [Reward] Efficiency={eff_reward:+.2f} | "
+                    f"Lane={lane_reward:+.2f} | "
+                    f"Comfort={comfort_reward:+.2f} | "
+                    f"Safety={safety_reward:+.2f} | "
+                    f"Progress={progress_reward:+.2f}"
+                )
 
-            # Print state vector info
-            print(
-                f"   [State] velocity={velocity:.2f} m/s | "
-                f"lat_dev={lat_dev:+.3f}m | "
-                f"heading_err={heading_err:+.3f} rad ({np.degrees(heading_err):+.1f}°) | "
-                f"vector_dim={len(vector_obs)}"
-            )
+                # Print first 3 waypoints (most relevant)
+                if len(waypoints_flat) >= 6:
+                    wp1_x, wp1_y = waypoints_flat[0], waypoints_flat[1]
+                    wp2_x, wp2_y = waypoints_flat[2], waypoints_flat[3]
+                    wp3_x, wp3_y = waypoints_flat[4], waypoints_flat[5]
+
+                    # Calculate distances
+                    dist1 = np.sqrt(wp1_x**2 + wp1_y**2)
+                    dist2 = np.sqrt(wp2_x**2 + wp2_y**2)
+                    dist3 = np.sqrt(wp3_x**2 + wp3_y**2)
+
+                    print(
+                        f"   [Waypoints] (vehicle frame): "
+                        f"WP1=[{wp1_x:+6.1f}, {wp1_y:+6.1f}]m (d={dist1:5.1f}m) | "
+                        f"WP2=[{wp2_x:+6.1f}, {wp2_y:+6.1f}]m (d={dist2:5.1f}m) | "
+                        f"WP3=[{wp3_x:+6.1f}, {wp3_y:+6.1f}]m (d={dist3:5.1f}m)"
+                    )
+
+                # Print image statistics
+                print(
+                    f"   [Image] shape={image_obs.shape} | "
+                    f"mean={img_mean:.3f} | std={img_std:.3f} | "
+                    f"range=[{img_min:.3f}, {img_max:.3f}]"
+                )
+
+                # Print state vector info
+                print(
+                    f"   [State] velocity={velocity:.2f} m/s | "
+                    f"lat_dev={lat_dev:+.3f}m | "
+                    f"heading_err={heading_err:+.3f} rad ({np.degrees(heading_err):+.1f}°) | "
+                    f"vector_dim={len(vector_obs)}"
+                )
 
             # Track episode metrics
             self.episode_reward += reward
@@ -915,7 +917,10 @@ class TD3TrainingPipeline:
             obs_dict = next_obs_dict
 
             # Train agent (only after exploration phase)
-            if t > start_timesteps:
+            # CRITICAL FIX: Use >= instead of > to match official TD3 implementation
+            # Official TD3 (sfujim/TD3/main.py line 133): if t >= args.start_timesteps
+            # This ensures training starts at SAME timestep as policy-based actions
+            if t >= start_timesteps:
                 # Log transition to learning phase (only once)
                 if not first_training_logged:
                     print(f"\n{'='*70}")
@@ -936,7 +941,7 @@ class TD3TrainingPipeline:
                     if 'actor_loss' in metrics:  # Actor updated only on delayed steps
                         self.writer.add_scalar('train/actor_loss', metrics['actor_loss'], t)
 
-                    # 🔍 DIAGNOSTIC LOGGING: Q-value explosion debugging (Nov 18, 2025)
+                    # DIAGNOSTIC LOGGING: Q-value explosion debugging (Nov 18, 2025)
                     # Log all debug metrics for root cause analysis
 
                     # Q-value statistics (critic update)
@@ -973,7 +978,7 @@ class TD3TrainingPipeline:
                         self.writer.add_scalar('debug/done_ratio', metrics['debug/done_ratio'], t)
                         self.writer.add_scalar('debug/effective_discount', metrics['debug/effective_discount'], t)
 
-                    # 🔍 CRITICAL: Actor Q-values (THE SMOKING GUN for Hypothesis 2)
+                    # CRITICAL: Actor Q-values (THE SMOKING GUN for Hypothesis 2)
                     if 'debug/actor_q_mean' in metrics:
                         self.writer.add_scalar('debug/actor_q_mean', metrics['debug/actor_q_mean'], t)
                         self.writer.add_scalar('debug/actor_q_std', metrics['debug/actor_q_std'], t)
@@ -983,7 +988,7 @@ class TD3TrainingPipeline:
                     # ===== GRADIENT EXPLOSION MONITORING (Solution A Validation) =====
                     # Track gradient norms to detect potential explosion
 
-                    # 🔧 CRITICAL FIX (Nov 20, 2025): Log AFTER-clipping metrics for validation
+                    # CRITICAL FIX (Nov 20, 2025): Log AFTER-clipping metrics for validation
                     # These verify gradient clipping is working correctly
                     # Expected: AFTER values should be ≤ max_norm (1.0 for actor, 10.0 for critic)
                     if 'debug/actor_grad_norm_BEFORE_clip' in metrics:
@@ -1016,14 +1021,14 @@ class TD3TrainingPipeline:
                         actor_cnn_grad = metrics['actor_cnn_grad_norm']
                         self.writer.add_scalar('gradients/actor_cnn_norm', actor_cnn_grad, t)
 
-                        # 🔧 CRITICAL FIX (Nov 20, 2025): Updated alert thresholds
+                        # CRITICAL FIX (Nov 20, 2025): Updated alert thresholds
                         # OLD: 50,000 critical, 10,000 warning (designed for extreme Day-18 explosions)
                         # NEW: 2.0 critical, 1.5 warning (detect 2× violations of 1.0 limit)
                         # Rationale: Actor CNN should be clipped to ≤1.0, so >2.0 means clipping failed
                         if actor_cnn_grad > 2.0:  # 2× over limit
                             self.writer.add_scalar('alerts/gradient_explosion_critical', 1, t)
                             print(f"\n{'!'*70}")
-                            print(f"🔴 CRITICAL ALERT: Actor CNN gradient violation detected!")
+                            print(f"   CRITICAL ALERT: Actor CNN gradient violation detected!")
                             print(f"   Step: {t:,}")
                             print(f"   Actor CNN grad norm: {actor_cnn_grad:.4f}")
                             print(f"   Limit: 1.0, Critical threshold: 2.0 (2× violation)")
@@ -1031,7 +1036,7 @@ class TD3TrainingPipeline:
                             print(f"{'!'*70}\n")
                         elif actor_cnn_grad > 1.5:  # 1.5× over limit
                             self.writer.add_scalar('alerts/gradient_explosion_warning', 1, t)
-                            print(f"\n⚠️  WARNING: Actor CNN gradient elevated at step {t:,}: {actor_cnn_grad:.4f} (limit: 1.0)")
+                            print(f"\n WARNING: Actor CNN gradient elevated at step {t:,}: {actor_cnn_grad:.4f} (limit: 1.0)")
                         else:
                             self.writer.add_scalar('alerts/gradient_explosion_critical', 0, t)
                             self.writer.add_scalar('alerts/gradient_explosion_warning', 0, t)
@@ -1040,7 +1045,7 @@ class TD3TrainingPipeline:
                         critic_cnn_grad = metrics['critic_cnn_grad_norm']
                         self.writer.add_scalar('gradients/critic_cnn_norm', critic_cnn_grad, t)
 
-                        # 🔧 CRITICAL FIX (Nov 20, 2025): Alert for critic CNN gradient violations
+                        # CRITICAL FIX (Nov 20, 2025): Alert for critic CNN gradient violations
                         # Critic CNN should be clipped to ≤10.0
                         if critic_cnn_grad > 20.0:  # 2× over limit
                             self.writer.add_scalar('alerts/critic_gradient_explosion_critical', 1, t)
@@ -1131,7 +1136,7 @@ class TD3TrainingPipeline:
                         print(f"{'='*70}\n")
 
             # ALWAYS log progress every 100 steps (not just debug mode)
-            if t % 10 == 0:
+            if t % 100 == 0:
                 phase = "EXPLORATION" if t <= start_timesteps else "LEARNING"
                 vehicle_state = info.get('vehicle_state', {})
                 speed_kmh = vehicle_state.get('velocity', 0) * 3.6
@@ -1146,13 +1151,13 @@ class TD3TrainingPipeline:
                 )
 
                 # Log step-based metrics every 100 steps (so TensorBoard has data even during exploration)
-                self.writer.add_scalar('progress/buffer_size', len(self.agent.replay_buffer), t)
-                self.writer.add_scalar('progress/episode_steps', self.episode_timesteps, t)
-                self.writer.add_scalar('progress/current_reward', reward, t)
-                self.writer.add_scalar('progress/speed_kmh', speed_kmh, t)
+            self.writer.add_scalar('progress/buffer_size', len(self.agent.replay_buffer), t)
+            self.writer.add_scalar('progress/episode_steps', self.episode_timesteps, t)
+            self.writer.add_scalar('progress/current_reward', reward, t)
+            self.writer.add_scalar('progress/speed_kmh', speed_kmh, t)
 
-                # Flush TensorBoard writer every 100 steps to ensure data is written to disk
-                self.writer.flush()            # Episode termination
+            # Flush TensorBoard writer every 100 steps to ensure data is written to disk
+            self.writer.flush()            # Episode termination
             if done or truncated:
                 # Log episode metrics
                 self.training_rewards.append(self.episode_reward)
@@ -1373,6 +1378,7 @@ class TD3TrainingPipeline:
             while not done and episode_length < max_eval_steps:
                 # DETERMINISTIC action (NO exploration noise)
                 # This is the key difference between EVAL and LEARNING phases
+
                 action = self.agent.select_action(
                     obs_dict,
                     deterministic=True  # TD3 paper: evaluate with deterministic policy
@@ -1380,6 +1386,9 @@ class TD3TrainingPipeline:
 
                 # Step TRAINING environment (same instance used in training loop)
                 next_obs_dict, reward, done, truncated, info = self.env.step(action)
+
+                if self.debug:
+                    self._visualize_debug(next_obs_dict, action, reward, info, episode_length)
 
                 episode_reward += reward
                 episode_length += 1

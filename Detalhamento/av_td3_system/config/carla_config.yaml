@@ -210,7 +210,7 @@ waypoints:
 # EPISODE SETTINGS
 # ============================================================================
 episode:
-  # 🔧 FIX: Reduced from 5000 to 1000 steps for faster learning cycles
+  # FIX: Reduced from 5000 to 1000 steps for faster learning cycles
   # At 20 Hz: 1000 steps = 50 seconds per episode (reasonable for training)
   # Original 5000 steps = 250 seconds was causing ultra-long episodes
   max_time_steps: 1000  # Maximum steps per episode (~50 seconds at 20 Hz)
@@ -234,10 +234,10 @@ episode:
 reward:
   # Component weights (must match RewardCalculator expected structure)
   weights:
-    efficiency: 1.0      # INCREASED from 1.0 to strongly encourage movement
-    lane_keeping: 5.0   # REDUCED from 2.0 to balance with efficiency
-    comfort: 0.5
-    safety: 1.0  # FIXED from -100.0: Penalties are already negative, positive weight needed!
+    efficiency: 2.0      # INCREASED from 1.0 to strongly encourage movement
+    lane_keeping: 2.0   # REDUCED from 2.0 to balance with efficiency
+    comfort: 1.0
+    safety: 0.3  # FIXED from -100.0: Penalties are already negative, positive weight needed!
 
   # Efficiency reward parameters (target speed tracking)
   efficiency:
@@ -257,8 +257,8 @@ reward:
 
   # Safety penalty (collisions, off-road)
   safety:
-    collision_penalty: -200.0  # Large negative reward
-    off_road_penalty: -100.0
+    collision_penalty: -100  # Large negative reward
+    off_road_penalty: -50
 
     # FIX #3: Increased lane invasion penalty from -10.0 to -50.0
     # Reference: CARLA research best practices (#file:SYSTEMATIC_FIX_ANALYSIS.md)

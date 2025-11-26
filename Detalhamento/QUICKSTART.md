@@ -1,17 +1,20 @@
 # TD3
 
-docker stop carla-server
+docker stop carla-server &&
 docker stop ros2-bridge
 
-docker start ros2-bridge
+docker start ros2-bridge &&
 docker start carla-server
-docker rm carla-server
+
+docker rm carla-server &&
+docker rm ros2-bridge
+
 
 docker run -d --name carla-server --runtime=nvidia --net=host --env=NVIDIA_VISIBLE_DEVICES=all --env=NVIDIA_DRIVER_CAPABILITIES=all carlasim/carla:0.9.16 bash CarlaUE4.sh -RenderOffScreen -nosound
 
 ## headless
 
-cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system && docker run --rm --network host --runtime nvidia   -e NVIDIA_VISIBLE_DEVICES=all   -e NVIDIA_DRIVER_CAPABILITIES=all   -e PYTHONUNBUFFERED=1   -e PYTHONPATH=/workspace   -v $(pwd):/workspace   -w /workspace   av-td3-system:ubuntu22.04-test   python3 scripts/train_td3.py     --scenario 0     --max-timesteps 100000     --eval-freq 20000     --checkpoint-freq 10000     --seed 42  --device cpu     2>&1 | tee /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system/docs/day-25/run-validation-runtest_$(date +%Y%m%d_%H%M%S).log
+cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system && docker run --rm --network host --runtime nvidia   -e NVIDIA_VISIBLE_DEVICES=all   -e NVIDIA_DRIVER_CAPABILITIES=all   -e PYTHONUNBUFFERED=1   -e PYTHONPATH=/workspace   -v $(pwd):/workspace   -w /workspace   av-td3-system:ubuntu22.04-test   python3 scripts/train_td3.py     --scenario 0     --max-timesteps 30000     --eval-freq 40000     --checkpoint-freq 10000     --seed 42  --device cpu     2>&1 | tee /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system/docs/day-26/config-changed.log
 
 
 ## DEBUG - CAMERA:
@@ -31,7 +34,7 @@ cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_
   -v $(pwd):/workspace \
   -w /workspace \
   --privileged \
-  av-td3-system:ubuntu22.04-test   python3 scripts/train_td3.py     --scenario 0     --max-timesteps 5000     --eval-freq 3001     --checkpoint-freq 5001     --seed 42  --debug   --device cpu     2>&1 | tee /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system/docs/day-25/RewardProgress.log
+  av-td3-system:ubuntu22.04-test   python3 scripts/train_td3.py     --scenario 0     --max-timesteps 30000     --eval-freq 10001     --checkpoint-freq 10001     --seed 42  --debug   --device cpu     2>&1 | tee /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system/docs/day-26/lerningRate-rewardConfig.log
 
 
 # then
@@ -91,6 +94,8 @@ cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_
 
 
 # MANUAL VALIDATION WITH DEBUG LOGGING (CORRECTED):
+
+xhost +local:docker 2>/dev/null || echo "xhost not available, proceeding anyway"
 
 cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system && \
 docker run --rm --network host --runtime nvidia \

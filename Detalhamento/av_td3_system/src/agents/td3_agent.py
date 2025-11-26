@@ -52,8 +52,8 @@ class TD3Agent:
         action_dim: int = 2,
         max_action: float = 1.0,
         cnn_extractor: Optional[torch.nn.Module] = None,  # DEPRECATED: Use actor_cnn/critic_cnn instead
-        actor_cnn: Optional[torch.nn.Module] = None,  # 🔧 FIX: Separate CNN for actor
-        critic_cnn: Optional[torch.nn.Module] = None,  # 🔧 FIX: Separate CNN for critic
+        actor_cnn: Optional[torch.nn.Module] = None,  #  FIX: Separate CNN for actor
+        critic_cnn: Optional[torch.nn.Module] = None,  #  FIX: Separate CNN for critic
         use_dict_buffer: bool = True,  # Use DictReplayBuffer for gradient-enabled training
         config: Optional[Dict] = None,
         config_path: Optional[str] = None,
@@ -116,7 +116,8 @@ class TD3Agent:
         self.buffer_size = training_config.get('buffer_size', algo_config_training.get('buffer_size', 1000000))
         print(f"[DEBUG] Buffer size from config: {self.buffer_size}")
         self.start_timesteps = training_config.get('start_timesteps', training_config.get('learning_starts',
-                                                   algo_config_training.get('learning_starts', 500)))
+                                                   algo_config_training.get('learning_starts', 25000)))
+        print(f"[DEBUG] Start timesteps from config: {self.start_timesteps}")
 
         # Exploration config (handle both nested and flat structures)
         # NOTE: expl_noise stored for reference but not used in select_action
@@ -626,7 +627,7 @@ class TD3Agent:
         # Compute critic loss (MSE on both Q-networks)
         critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
 
-        # 🔍 DIAGNOSTIC LOGGING #1: Detailed Q-value and reward analysis
+        # DIAGNOSTIC LOGGING #1: Detailed Q-value and reward analysis
         # Added to diagnose Q-value explosion (actor loss = -2.4M issue)
         if self.logger.isEnabledFor(logging.DEBUG) and self.total_it % 100 == 0:
             self.logger.debug(
@@ -689,7 +690,7 @@ class TD3Agent:
             if self.total_it % 100 == 0:
                 self.logger.debug(f"  Critic gradient norm AFTER clip: {critic_grad_norm_after:.4f} (max=10.0)")
                 if critic_grad_norm_after > 10.1:  # Allow small numerical error
-                    self.logger.warning(f"  ❌ CLIPPING FAILED! Critic grad {critic_grad_norm_after:.4f} > 10.0")
+                    self.logger.warning(f"CLIPPING FAILED! Critic grad {critic_grad_norm_after:.4f} > 10.0")
         else:
             critic_grad_norm_before = 0.0
             critic_grad_norm_after = 0.0
@@ -1623,54 +1624,3 @@ class TD3Agent:
         )
 
         return float(total_norm.item())
-
-
-# Example usage and testing
-if __name__ == "__main__":
-    print("Testing TD3Agent...")
-
-    # Initialize agent (will load config from file)
-    agent = TD3Agent(
-        state_dim=535,
-        action_dim=2,
-        max_action=1.0
-    )
-
-    print("\nAgent stats:", agent.get_stats())
-
-    # Test action selection
-    dummy_state = np.random.randn(535)
-    action = agent.select_action(dummy_state, noise=0.1)
-    print(f"\nSelected action: {action}")
-    print(f"  Steering: {action[0]:.3f}")
-    print(f"  Throttle/Brake: {action[1]:.3f}")
-
-    # Add some transitions to replay buffer
-    print("\nFilling replay buffer...")
-    for i in range(1000):
-        state = np.random.randn(535)
-        action = np.random.randn(2)
-        next_state = np.random.randn(535)
-        reward = np.random.randn()
-        done = (i % 100 == 0)
-
-        agent.replay_buffer.add(state, action, next_state, reward, done)
-
-    print(f"Buffer size: {len(agent.replay_buffer)}")
-
-    # Test training
-    print("\nPerforming training step...")
-    metrics = agent.train(batch_size=32)
-    print("Training metrics:")
-    for key, value in metrics.items():
-        print(f"  {key}: {value:.4f}")
-
-    # Test checkpoint save/load
-    checkpoint_path = "/tmp/test_td3_checkpoint.pth"
-    print(f"\nSaving checkpoint to {checkpoint_path}...")
-    agent.save_checkpoint(checkpoint_path)
-
-    print("Loading checkpoint...")
-    agent.load_checkpoint(checkpoint_path)
-
-    print("\n✓ TD3Agent tests passed!")
