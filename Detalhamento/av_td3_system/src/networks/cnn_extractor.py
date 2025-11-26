@@ -8,14 +8,8 @@ This module is part of a Twin Delayed Deep Deterministic Policy Gradient (TD3) s
 autonomous vehicle navigation in CARLA simulator, combining visual perception with kinematic
 state for robust decision-making in complex driving scenarios.
 
-References:
-    - Mnih et al., "Human-level control through deep reinforcement learning," Nature (2015)
-    - Fujimoto et al., "Addressing Function Approximation Error in Actor-Critic Methods," ICML (2018)
-    - Perot et al., "End-to-End Race Driving with Deep Reinforcement Learning," ICRA (2017)
-    - Ben Elallid et al., "Deep Reinforcement Learning for Autonomous Vehicle Intersection Navigation" (2023)
-
-Author: Daniel Terra
-Date: 2025-01-16
+Author: Daniel Terra Gomes
+2025
 """
 
 import torch

@@ -4,11 +4,8 @@ Dynamic Route Manager for CARLA Navigation
 Uses CARLA's GlobalRoutePlanner API to generate waypoints dynamically
 instead of relying on static waypoints.txt file.
 
-Benefits:
-- Topology-aware route planning
-- Correct Z-coordinates at road surface
-- Scalable to any CARLA map
-- Maintains fixed start/end for reproducibility
+Author: Daniel Terra Gomes
+2025
 """
 
 import numpy as np

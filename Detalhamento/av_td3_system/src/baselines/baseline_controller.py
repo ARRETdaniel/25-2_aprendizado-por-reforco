@@ -36,13 +36,8 @@ Performance Expectations:
 - Heading error < 6° during normal operation
 - Stable up to 20 m/s (72 km/h)
 
-References:
-- PID: Åström & Murray, "Feedback Systems" (2008)
-- Pure Pursuit: Coulter, "Implementation of Pure Pursuit" CMU-RI-TR-92-01 (1992)
-- Working Implementation: Course1FinalProject/controller2d.py
-
-Author: GitHub Copilot Agent
-Date: 2025-01-23 (Updated: True Pure Pursuit implementation)
+Author: Daniel Terra Gomes
+2025
 """
 
 from typing import List, Tuple, Optional, Dict, Any

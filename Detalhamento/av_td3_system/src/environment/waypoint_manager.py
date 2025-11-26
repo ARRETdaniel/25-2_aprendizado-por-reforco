@@ -5,7 +5,10 @@ Manages loading, processing, and providing waypoints for the vehicle to follow.
 Transforms global waypoints to the vehicle's local coordinate frame.
 Implements route completion detection and next waypoint lookahead.
 
-Based on: FinalProject/waypoints.txt (Town01 route format)
+Based on: FinalProject/waypoints.txt (Town01 route format) from my TCC
+
+Author: Daniel Terra Gomes
+2025
 """
 
 import numpy as np

@@ -27,8 +27,8 @@ Message mapping (Twist → CARLA Control):
     - twist.linear.x < 0 → reverse throttle
     - twist.angular.z → steering (normalized by max_steering_angle)
 
-Author: Daniel Terra
-Date: 2025-01-25 (Phase 5 - Native ROS 2 Migration)
+Author: Daniel Terra Gomes
+2025
 """
 
 import logging

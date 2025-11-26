@@ -147,7 +147,7 @@ class TD3Agent:
         # Create target actor as deep copy
         self.actor_target = copy.deepcopy(self.actor)
 
-        # 🔧 CRITICAL FIX (Nov 20, 2025): Store CNN references BEFORE creating optimizers
+        # CRITICAL FIX (Nov 20, 2025): Store CNN references BEFORE creating optimizers
         # Must assign actor_cnn and critic_cnn BEFORE using them in optimizer creation
         # This prevents AttributeError when checking if self.actor_cnn is not None
 
@@ -166,7 +166,7 @@ class TD3Agent:
         self.critic_cnn = critic_cnn
         self.use_dict_buffer = use_dict_buffer
 
-        # 🔧 CRITICAL FIX (Nov 20, 2025): Merge CNN parameters into main optimizers
+        # CRITICAL FIX (Nov 20, 2025): Merge CNN parameters into main optimizers
         # ROOT CAUSE: Separate CNN optimizers were applying UNCLIPPED gradients!
         # Evidence: TensorBoard showed Actor CNN 2.42 > 1.0 limit, Critic CNN 24.69 > 10.0 limit
         # Solution: Include CNN parameters in main optimizers (matches official TD3/SB3)
@@ -203,7 +203,7 @@ class TD3Agent:
         # Create target critics as deep copy
         self.critic_target = copy.deepcopy(self.critic)
 
-        # 🔧 CRITICAL FIX (Nov 20, 2025): Merge CNN parameters into main optimizers
+        # CRITICAL FIX (Nov 20, 2025): Merge CNN parameters into main optimizers
         # ROOT CAUSE: Separate CNN optimizers were applying UNCLIPPED gradients!
         # Evidence: TensorBoard showed Critic CNN 24.69 > 10.0 limit
         # Solution: Include CNN parameters in main optimizers (matches official TD3/SB3)
@@ -221,7 +221,7 @@ class TD3Agent:
         )
         self.logger.info(f"  Critic optimizer created: lr={self.critic_lr}, total_params={sum(p.numel() for p in critic_params)}")
 
-        # 🔧 CRITICAL FIX (Nov 20, 2025): REMOVED separate CNN optimizers
+        # CRITICAL FIX (Nov 20, 2025): REMOVED separate CNN optimizers
         # These were causing gradient clipping to fail by applying unclipped gradients!
         # CNN parameters are now included in main actor/critic optimizers (lines ~150-170)
         # Reference: IMMEDIATE_ACTION_PLAN.md Task 1-3, CNN_END_TO_END_TRAINING_ANALYSIS.md Part 4
@@ -281,7 +281,7 @@ class TD3Agent:
                 max_size=self.buffer_size,
                 device=self.device
             )
-            print(f"  Using standard ReplayBuffer (CNN not trained)")
+            print(f"WARNING: using standard ReplayBuffer (CNN not trained)")
 
         # Training iteration counter for delayed updates
         self.total_it = 0
@@ -292,7 +292,7 @@ class TD3Agent:
         # Logger already initialized earlier (line 176)
         # Removed duplicate: self.logger = logging.getLogger(__name__)
 
-        # ✅ LOGGING FIX: Action statistics tracking for monitoring control commands
+        # LOGGING FIX: Action statistics tracking for monitoring control commands
         # Track recent actions to compute mean/std/min/max for steering and throttle
         # Helps validate exploration noise, detect biases, and debug control generation
         self.action_buffer = []  # Rolling buffer of recent actions
@@ -371,7 +371,7 @@ class TD3Agent:
             # Clip to valid action range
             action = np.clip(action, -self.max_action, self.max_action)
 
-        # ✅ LOGGING FIX: Track action for statistics (before returning)
+        # LOGGING FIX: Track action for statistics (before returning)
         # Enables monitoring of control command distribution via get_action_stats()
         self.action_buffer.append(action.copy())
         if len(self.action_buffer) > self.action_buffer_size:
@@ -719,7 +719,7 @@ class TD3Agent:
                     f"   Critic grad norm: {critic_grad_norm:.4f}"
                 )
 
-        # 🔍 ENHANCED CNN DIAGNOSTICS #1: Capture gradients (after backward, before step)
+        # ENHANCED CNN DIAGNOSTICS #1: Capture gradients (after backward, before step)
         if self.cnn_diagnostics is not None:
             self.cnn_diagnostics.capture_gradients()
 
@@ -727,7 +727,7 @@ class TD3Agent:
             if self.total_it % 100 == 0:
                 self._log_detailed_gradient_flow(self.critic_cnn, "critic_cnn")
 
-        # 🔍 ENHANCED CNN DIAGNOSTICS #2: Capture features for diversity analysis
+        # ENHANCED CNN DIAGNOSTICS #2: Capture features for diversity analysis
         if self.cnn_diagnostics is not None and self.use_dict_buffer and self.critic_cnn is not None:
             with torch.no_grad():
                 sample_features = self.critic_cnn(obs_dict['image'])
@@ -737,18 +737,18 @@ class TD3Agent:
                 if self.total_it % 100 == 0:
                     self._log_feature_diversity(sample_features, "critic_cnn")
 
-        # 🔧 CRITICAL FIX (Nov 20, 2025): Single optimizer.step() now updates BOTH critic MLP and CNN
+        # CRITICAL FIX (Nov 20, 2025): Single optimizer.step() now updates BOTH critic MLP and CNN
         # CNN parameters are included in critic_optimizer (see __init__ lines ~170-180)
         # This ensures gradient clipping is applied BEFORE optimizer step
         # Reference: PyTorch DQN Tutorial, TD3/TD3.py line 95, SB3 td3.py line 198
         self.critic_optimizer.step()
 
-        # 🔍 ENHANCED CNN DIAGNOSTICS #3: Capture weight changes (after optimizer step)
+        # ENHANCED CNN DIAGNOSTICS #3: Capture weight changes (after optimizer step)
         if self.cnn_diagnostics is not None and self.critic_cnn is not None:
             self.cnn_diagnostics.capture_weights()
 
-            # Log weight statistics every 1000 steps
-            if self.total_it % 1000 == 0:
+            # Log weight statistics every 100 steps
+            if self.total_it % 100 == 0:
                 self._log_weight_statistics(self.critic_cnn, "critic_cnn")
 
         # Prepare metrics
@@ -756,14 +756,14 @@ class TD3Agent:
             'critic_loss': critic_loss.item(),
             'q1_value': current_Q1.mean().item(),
             'q2_value': current_Q2.mean().item(),
-            # � CRITICAL FIX (Nov 20, 2025): Gradient clipping monitoring
+            # CRITICAL FIX (Nov 20, 2025): Gradient clipping monitoring
             # These metrics verify that gradient clipping is working correctly
             # Expected: AFTER values should be ≤ max_norm (10.0 for critic)
             # Reference: IMMEDIATE_ACTION_PLAN.md Task 1-2, CNN_END_TO_END_TRAINING_ANALYSIS.md Part 4
             'debug/critic_grad_norm_BEFORE_clip': critic_grad_norm_before,
             'debug/critic_grad_norm_AFTER_clip': critic_grad_norm_after,
             'debug/critic_grad_clip_ratio': critic_grad_norm_after / max(critic_grad_norm_before, 1e-8),
-            # �🔍 DIAGNOSTIC #2: Detailed Q-value statistics for Q-explosion debugging
+            # DIAGNOSTIC #2: Detailed Q-value statistics for Q-explosion debugging
             # Added Nov 18, 2025 to diagnose actor loss = -2.4M issue
             'debug/q1_std': current_Q1.std().item(),
             'debug/q1_min': current_Q1.min().item(),
@@ -771,7 +771,7 @@ class TD3Agent:
             'debug/q2_std': current_Q2.std().item(),
             'debug/q2_min': current_Q2.min().item(),
             'debug/q2_max': current_Q2.max().item(),
-            # 🔍 DIAGNOSTIC #6: Twin critic divergence monitoring (Added Nov 19, 2025)
+            # DIAGNOSTIC #6: Twin critic divergence monitoring (Added Nov 19, 2025)
             # Critical for TD3: Large Q1-Q2 differences indicate overestimation by one network
             # Expected: <10% of Q-value magnitude (Fujimoto et al., 2018)
             # Reference: TD3 paper Section 4.1 "Clipped Double Q-Learning"
@@ -781,15 +781,15 @@ class TD3Agent:
             'debug/target_q_std': target_Q.std().item(),
             'debug/target_q_min': target_Q.min().item(),
             'debug/target_q_max': target_Q.max().item(),
-            # 🔍 DIAGNOSTIC #3: TD error and Bellman components
+            # DIAGNOSTIC #3: TD error and Bellman components
             'debug/td_error_q1': (current_Q1 - target_Q).abs().mean().item(),
             'debug/td_error_q2': (current_Q2 - target_Q).abs().mean().item(),
-            # 🔍 DIAGNOSTIC #4: Reward analysis (check for >1000/step)
+            # DIAGNOSTIC #4: Reward analysis (check for >1000/step)
             'debug/reward_mean': reward.mean().item(),
             'debug/reward_std': reward.std().item(),
             'debug/reward_min': reward.min().item(),
             'debug/reward_max': reward.max().item(),
-            # 🔍 DIAGNOSTIC #5: Done signal and discount factor
+            # DIAGNOSTIC #5: Done signal and discount factor
             'debug/done_ratio': (~not_done.bool()).sum().item() / batch_size,
             'debug/effective_discount': (not_done * self.discount).mean().item(),
         }
@@ -798,7 +798,7 @@ class TD3Agent:
         # Add gradient norms to metrics for TensorBoard tracking
         # These metrics enable real-time monitoring of gradient explosion
 
-        # 🔧 CRITICAL FIX (Nov 21, 2025): Add AFTER-clipping CNN gradient norms to metrics
+        # CRITICAL FIX (Nov 21, 2025): Add AFTER-clipping CNN gradient norms to metrics
         # These verify gradient clipping is working correctly
         # Expected: AFTER values should be ≤ max_norm (10.0 for critic CNN)
         # FIXED: Use PyTorch's clip_grad_norm_ to calculate (not clip) the TRUE global L2 norm
@@ -839,7 +839,7 @@ class TD3Agent:
                 state_for_actor = state  # Use same state from standard buffer
 
             # Compute actor loss: -Q1(s, μ_φ(s))
-            # 🔍 CRITICAL DIAGNOSTIC: Compute Q-values BEFORE taking mean
+            # CRITICAL DIAGNOSTIC: Compute Q-values BEFORE taking mean
             # This reveals the ACTUAL Q-values driving policy learning
             # If actor_loss = -2.4M, then actor_q_values should average +2.4M
             actor_q_values = self.critic.Q1(state_for_actor, self.actor(state_for_actor))
@@ -852,7 +852,7 @@ class TD3Agent:
                     f"   TRAINING STEP {self.total_it} - ACTOR UPDATE (delayed, freq={self.policy_freq}):\n"
                     f"   Actor loss: {actor_loss.item():.4f}\n"
                     f"   Q-value under current policy: {-actor_loss.item():.2f}\n"
-                    f"   🔍 ACTUAL Q-values driving policy:\n"
+                    f"      ACTUAL Q-values driving policy:\n"
                     f"      mean={actor_q_values.mean().item():.2f}, std={actor_q_values.std().item():.2f}\n"
                     f"      min={actor_q_values.min().item():.2f}, max={actor_q_values.max().item():.2f}\n"
                     f"   (If mean ≈ +2.4M and actor_loss ≈ -2.4M → Critic overestimation confirmed)\n"
@@ -914,7 +914,7 @@ class TD3Agent:
                 if self.total_it % 100 == 0:
                     self.logger.debug(f"  Actor gradient norm AFTER clip: {actor_grad_norm_after:.4f} (max=1.0)")
                     if actor_grad_norm_after > 1.1:  # Allow small numerical error
-                        self.logger.warning(f"  ❌ CLIPPING FAILED! Actor grad {actor_grad_norm_after:.4f} > 1.0")
+                        self.logger.warning(f"  CLIPPING FAILED! Actor grad {actor_grad_norm_after:.4f} > 1.0")
             else:
                 actor_grad_norm_before = 0.0
                 actor_grad_norm_after = 0.0
@@ -948,7 +948,7 @@ class TD3Agent:
             # ===== GRADIENT EXPLOSION MONITORING (Solution A Validation) =====
             # Add actor gradient norms to metrics for TensorBoard tracking
             # CRITICAL: Actor CNN gradients are the primary concern (7.4M explosion in Run #2)
-            # 🔧 CRITICAL FIX (Nov 21, 2025): Add BEFORE/AFTER clipping metrics
+            # CRITICAL FIX (Nov 21, 2025): Add BEFORE/AFTER clipping metrics
             # These verify gradient clipping is working correctly
             # Expected: AFTER values should be ≤ max_norm (1.0 for actor)
             # FIXED: Use PyTorch's clip_grad_norm_ to calculate the TRUE global L2 norm
@@ -980,7 +980,7 @@ class TD3Agent:
             # ADD: After-clipping MLP gradient norm for validation
             metrics['debug/actor_mlp_grad_norm_AFTER_clip'] = actor_mlp_grad_norm
 
-            # 🔍 ENHANCED CNN DIAGNOSTICS #1: Capture actor gradients (after backward, before step)
+            # ENHANCED CNN DIAGNOSTICS #1: Capture actor gradients (after backward, before step)
             if self.cnn_diagnostics is not None:
                 self.cnn_diagnostics.capture_gradients()
 
@@ -988,7 +988,7 @@ class TD3Agent:
                 if self.total_it % 100 == 0:
                     self._log_detailed_gradient_flow(self.actor_cnn, "actor_cnn")
 
-            # 🔍 ENHANCED CNN DIAGNOSTICS #2: Capture actor features for diversity analysis
+            # ENHANCED CNN DIAGNOSTICS #2: Capture actor features for diversity analysis
             if self.cnn_diagnostics is not None and self.use_dict_buffer and self.actor_cnn is not None:
                 with torch.no_grad():
                     sample_features = self.actor_cnn(obs_dict['image'])
@@ -998,13 +998,13 @@ class TD3Agent:
                     if self.total_it % 100 == 0:
                         self._log_feature_diversity(sample_features, "actor_cnn")
 
-            # 🔧 CRITICAL FIX (Nov 20, 2025): Single optimizer.step() now updates BOTH actor MLP and CNN
+            # CRITICAL FIX (Nov 20, 2025): Single optimizer.step() now updates BOTH actor MLP and CNN
             # CNN parameters are included in actor_optimizer (see __init__ lines ~150-170)
             # This ensures gradient clipping is applied BEFORE optimizer step
             # Reference: PyTorch DQN Tutorial, TD3/TD3.py line 100, SB3 td3.py line 207
             self.actor_optimizer.step()
 
-            # 🔍 ENHANCED CNN DIAGNOSTICS #3: Capture actor weight changes (after optimizer step)
+            # ENHANCED CNN DIAGNOSTICS #3: Capture actor weight changes (after optimizer step)
             if self.cnn_diagnostics is not None and self.actor_cnn is not None:
                 self.cnn_diagnostics.capture_weights()
 
@@ -1025,7 +1025,7 @@ class TD3Agent:
 
             metrics['actor_loss'] = actor_loss.item()
 
-            # 🔍 DIAGNOSTIC #6: ACTUAL Q-values fed to actor (THE SMOKING GUN)
+            # DIAGNOSTIC #6: ACTUAL Q-values fed to actor (THE SMOKING GUN)
             # These are the Q-values that drive policy learning
             # If actor_loss = -2.4M, these should average +2.4M
             # Compare with debug/target_q_mean to check consistency
@@ -1397,14 +1397,14 @@ class TD3Agent:
 
                 # Determine status
                 if grad_norm < vanishing_threshold:
-                    status = "⚠️ VANISHING"
+                    status = "VANISHING"
                 elif grad_norm > exploding_threshold:
-                    status = "🔥 EXPLODING"
+                    status = "EXPLODING"
                 else:
-                    status = "✅ OK"
+                    status = "OK"
 
                 self.logger.debug(
-                    f"🔄 [{network_name}] Gradient {name}: {grad_norm:.6f} {status}"
+                    f"[{network_name}] Gradient {name}: {grad_norm:.6f} {status}"
                 )
 
         if gradient_norms:
@@ -1418,16 +1418,15 @@ class TD3Agent:
             # Assess overall health
             issues = []
             if min_norm < vanishing_threshold:
-                issues.append("⚠️ Vanishing gradients")
+                issues.append("Vanishing gradients")
             if max_norm > exploding_threshold:
-                issues.append("🔥 Exploding gradients")
+                issues.append("Exploding gradients")
             if flow_ratio < 0.1 or flow_ratio > 10.0:
-                issues.append(f"⚠️ Poor flow ratio ({flow_ratio:.2f})")
+                issues.append(f"Poor flow ratio ({flow_ratio:.2f})")
 
-            health_status = " | ".join(issues) if issues else "✅ HEALTHY"
-
+            health_status = " | ".join(issues) if issues else "HEALTHY"
             self.logger.debug(
-                f"📊 [{network_name}] Gradient Flow Summary (Step {self.total_it}):\n"
+                f"   [{network_name}] Gradient Flow Summary (Step {self.total_it}):\n"
                 f"   Min: {min_norm:.6f}, Max: {max_norm:.6f}, Avg: {avg_norm:.6f}\n"
                 f"   Flow ratio (first/last): {flow_ratio:.3f}\n"
                 f"   Status: {health_status}"
@@ -1471,19 +1470,19 @@ class TD3Agent:
             correlation_threshold = 0.3
             issues = []
             if avg_corr > 0.7:
-                issues.append("⚠️ High correlation (feature collapse)")
+                issues.append("High correlation (feature collapse)")
             elif avg_corr > correlation_threshold:
-                issues.append("⚠️ Moderate correlation")
+                issues.append("Moderate correlation")
 
             if sparsity < 0.05:
-                issues.append("⚠️ Too dense")
+                issues.append("Too dense")
             elif sparsity > 0.5:
-                issues.append("⚠️ Too sparse")
+                issues.append("Too sparse")
 
-            diversity_status = " | ".join(issues) if issues else "✅ DIVERSE"
+            diversity_status = " | ".join(issues) if issues else "DIVERSE"
 
             self.logger.debug(
-                f"🎨 [{network_name}] Feature Diversity (Step {self.total_it}):\n"
+                f"   [{network_name}] Feature Diversity (Step {self.total_it}):\n"
                 f"   Avg correlation: {avg_corr:.3f} (target: <{correlation_threshold})\n"
                 f"   Sparsity: {sparsity*100:.1f}% (target: 10-30%)\n"
                 f"   Effective rank: {effective_rank:.1f} / {n_features}\n"
@@ -1509,7 +1508,7 @@ class TD3Agent:
         if cnn is None:
             return
 
-        self.logger.debug(f"⚖️  [{network_name}] Weight Statistics (Step {self.total_it}):")
+        self.logger.debug(f"   [{network_name}] Weight Statistics (Step {self.total_it}):")
 
         for name, param in cnn.named_parameters():
             if 'weight' in name:  # Only log weight parameters, not biases
@@ -1523,11 +1522,11 @@ class TD3Agent:
 
                 # Detect issues
                 if std < 1e-6:
-                    status = "⚠️ DEAD (zero variance)"
+                    status = "DEAD (zero variance)"
                 elif norm > 100.0:
-                    status = "🔥 EXCESSIVE (large norm)"
+                    status = "EXCESSIVE (large norm)"
                 else:
-                    status = "✅ OK"
+                    status = "OK"
 
                 self.logger.debug(
                     f"   {name}:\n"
@@ -1555,14 +1554,14 @@ class TD3Agent:
 
             # Assess learning rate health
             if lr < 1e-6:
-                lr_status = "⚠️ TOO LOW"
+                lr_status = "TOO LOW"
             elif lr > 1e-2:
-                lr_status = "🔥 TOO HIGH"
+                lr_status = "TOO HIGH"
             else:
-                lr_status = "✅ OK"
+                lr_status = "OK"
 
             self.logger.debug(
-                f"📈 [{optimizer_name}] Learning Rate Group {idx}: {lr:.6e} {lr_status}"
+                f"   [{optimizer_name}] Learning Rate Group {idx}: {lr:.6e} {lr_status}"
             )
 
     def get_gradient_stats(self) -> Dict[str, float]:

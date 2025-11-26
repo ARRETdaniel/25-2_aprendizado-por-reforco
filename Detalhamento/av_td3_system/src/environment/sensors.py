@@ -9,6 +9,9 @@ Handles all sensor data collection, preprocessing, and queuing:
 
 Paper Reference: "End-to-End Visual Autonomous Navigation with Twin Delayed DDPG"
 Section III.A: Visual input processing (4 stacked frames, 84×84 grayscale)
+
+Author: Daniel Terra Gomes
+2025
 """
 
 import numpy as np

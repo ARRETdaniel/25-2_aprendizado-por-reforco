@@ -8,8 +8,8 @@ Implements OpenAI Gym interface for CARLA vehicle control with:
 - Waypoint-based navigation
 - Episode management and termination logic
 
-Paper Reference: "End-to-End Visual Autonomous Navigation with Twin Delayed DDPG"
-Section III: System Architecture and Environment Setup
+Author: Daniel Terra Gomes
+2025
 """
 
 import numpy as np

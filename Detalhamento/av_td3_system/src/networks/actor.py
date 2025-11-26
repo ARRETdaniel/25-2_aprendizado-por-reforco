@@ -11,6 +11,9 @@ Architecture:
 - Output scaling: Multiplied by max_action to scale to [-1, 1]
 
 Paper Reference: "Addressing Function Approximation Error in Actor-Critic Methods" (TD3)
+
+Author: Daniel Terra Gomes
+2025
 """
 
 import torch

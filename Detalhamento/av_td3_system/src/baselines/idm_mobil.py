@@ -1,4 +1,4 @@
-# DEPRECATED 
+# DEPRECATED USING PID+Pure pursuit now
 
 """
 Intelligent Driver Model (IDM) + MOBIL lane change decision.

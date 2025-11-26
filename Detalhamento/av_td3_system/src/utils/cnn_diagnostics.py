@@ -9,8 +9,8 @@ Based on:
 - PyTorch best practices for monitoring neural networks
 - Real-world debugging experience from production deep learning systems
 
-Author: Daniel Terra
-Date: 2025-01-XX
+Author: Daniel Terra Gomes
+2025
 """
 
 import torch

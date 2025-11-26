@@ -3,6 +3,7 @@
 docker stop carla-server
 docker stop ros2-bridge
 
+docker start ros2-bridge
 docker start carla-server
 docker rm carla-server
 

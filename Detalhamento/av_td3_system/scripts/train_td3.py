@@ -1045,7 +1045,7 @@ class TD3TrainingPipeline:
                         if critic_cnn_grad > 20.0:  # 2× over limit
                             self.writer.add_scalar('alerts/critic_gradient_explosion_critical', 1, t)
                             print(f"\n{'!'*70}")
-                            print(f"🔴 CRITICAL ALERT: Critic CNN gradient violation detected!")
+                            print(f"   CRITICAL ALERT: Critic CNN gradient violation detected!")
                             print(f"   Step: {t:,}")
                             print(f"   Critic CNN grad norm: {critic_cnn_grad:.4f}")
                             print(f"   Limit: 10.0, Critical threshold: 20.0 (2× violation)")
@@ -1053,7 +1053,7 @@ class TD3TrainingPipeline:
                             print(f"{'!'*70}\n")
                         elif critic_cnn_grad > 15.0:  # 1.5× over limit
                             self.writer.add_scalar('alerts/critic_gradient_explosion_warning', 1, t)
-                            print(f"\n⚠️  WARNING: Critic CNN gradient elevated at step {t:,}: {critic_cnn_grad:.4f} (limit: 10.0)")
+                            print(f"\n   WARNING: Critic CNN gradient elevated at step {t:,}: {critic_cnn_grad:.4f} (limit: 10.0)")
                         else:
                             self.writer.add_scalar('alerts/critic_gradient_explosion_critical', 0, t)
                             self.writer.add_scalar('alerts/critic_gradient_explosion_warning', 0, t)
@@ -1065,7 +1065,8 @@ class TD3TrainingPipeline:
                         self.writer.add_scalar('gradients/critic_mlp_norm', metrics['critic_mlp_grad_norm'], t)
 
                     # Log CNN diagnostics every 100 steps (if debug mode enabled)
-                    # 🔧 FIX: Pass writer parameter to log_to_tensorboard
+                    # FIX: Pass writer parameter to log_to_tensorboard
+                    #TODO: validate diagnostics
                     if self.debug and self.agent.cnn_diagnostics is not None:
                         self.agent.cnn_diagnostics.log_to_tensorboard(self.writer, t)
 

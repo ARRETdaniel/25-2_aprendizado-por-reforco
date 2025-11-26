@@ -26,6 +26,9 @@ Official Documentation:
     - Stable-Baselines3: https://stable-baselines3.readthedocs.io/en/master/modules/td3.html
     - OpenAI Spinning Up: https://spinningup.openai.com/en/latest/algorithms/td3.html
     - Original Implementation: https://github.com/sfujim/TD3
+
+Author: Daniel Terra Gomes
+2025
 """
 
 import torch

@@ -27,14 +27,8 @@ This approach provides naturally smooth tracking because:
 2. Smaller lookahead at low speeds → precise tracking
 3. Geometric formula inherently dampens oscillations
 
-References:
-- Coulter, R. C. (1992). "Implementation of the Pure Pursuit Path Tracking Algorithm"
-  CMU-RI-TR-92-01, Robotics Institute, Carnegie Mellon University
-- Course1FinalProject/controller2d.py (working implementation)
-
-Author: GitHub Copilot Agent
-Date: 2025-01-23 (Fixed: Replaced Stanley with true Pure Pursuit)
-Based on: ARRETdaniel/Self-Driving_Cars_Specialization/Course1FinalProject/controller2d.py
+Author: Daniel Terra Gomes
+2025
 """
 
 from typing import List, Tuple

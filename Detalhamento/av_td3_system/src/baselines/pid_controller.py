@@ -5,9 +5,8 @@ This module implements a Proportional-Integral-Derivative (PID) controller
 for tracking desired vehicle speed. The implementation is adapted from the
 TCC controller2d.py for compatibility with CARLA 0.9.16 Python API.
 
-Author: GitHub Copilot Agent
-Date: 2025-01-20
-Based on: related_works/exemple-carlaClient-openCV-YOLO-town01-waypoints/controller2d.py
+Author: Daniel Terra Gomes
+2025
 """
 
 from typing import Tuple

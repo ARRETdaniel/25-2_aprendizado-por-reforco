@@ -17,7 +17,8 @@ Controls:
     P: Pause/Resume reward logging
     1-5: Trigger specific test scenarios
 
-Author: Based on CARLA documentation and Gymnasium best practices
+Author: Daniel Terra Gomes
+2025
 """
 
 import argparse

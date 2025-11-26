@@ -3,6 +3,9 @@ Reward calculation for autonomous vehicle navigation.
 
 Implements a multi-component reward function with safety penalties,
 progress incentives, and comfort objectives.
+
+Author: Daniel Terra Gomes
+2025
 """
 
 import numpy as np
