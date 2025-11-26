@@ -1,250 +1,176 @@
+#!/usr/bin/env python3
 """
 ROS 2 Bridge Interface for CARLA Vehicle Control
 
-This module provides a Python interface to ROS 2 Bridge topics, allowing
-our existing evaluation/training scripts (evaluate_baseline.py, train_td3.py)
-to control the CARLA vehicle via ROS 2 topics while maintaining backward
-compatibility with direct Python API control.
+This module provides a minimal interface to publish vehicle control commands
+via ROS 2 topics to the external CARLA ROS Bridge using standard geometry_msgs/Twist.
 
 Architecture:
-    CARLA Server <-> ROS 2 Bridge <-> This Interface <-> Python Scripts
+    Training Container (Ubuntu 22.04) → Native rclpy → ROS 2 Topics →
+    Twist to Control Node (ROS Bridge) → CARLA Python API → CARLA Server
 
-Features:
-    - Publish vehicle control commands to ROS topics
-    - Subscribe to vehicle status, odometry, sensors
-    - Automatic ROS 2 environment setup
-    - Fallback to Python API if ROS 2 unavailable
-    - Thread-safe topic publishing/subscribing
+Why Twist instead of CarlaEgoVehicleControl?
+    - geometry_msgs/Twist is a STANDARD ROS 2 message (no extra packages needed)
+    - CARLA ROS Bridge includes carla_twist_to_control node that converts Twist → VehicleControl
+    - This keeps our training container lightweight (no need to build carla_msgs)
 
-Usage:
-    # Initialize interface
-    ros_interface = ROSBridgeInterface()
+Reference:
+    - CARLA Twist to Control: https://carla.readthedocs.io/projects/ros-bridge/en/latest/carla_twist_to_control/
+    - geometry_msgs/Twist: https://docs.ros.org/en/humble/p/geometry_msgs/interfaces/msg/Twist.html
+    - ROS 2 Python Tutorial: https://docs.ros.org/en/foxy/Tutorials/Beginner-Client-Libraries/Writing-A-Simple-Py-Publisher-And-Subscriber.html
 
-    # Publish control command
-    ros_interface.publish_control(throttle=0.5, steer=0.0, brake=0.0)
+Topic:
+    /carla/ego_vehicle/twist (geometry_msgs/msg/Twist)
 
-    # Get vehicle status
-    status = ros_interface.get_vehicle_status()
-    velocity = status['velocity']  # m/s
+Message mapping (Twist → CARLA Control):
+    - twist.linear.x > 0 → throttle (normalized by MAX_LON_ACCELERATION=10)
+    - twist.linear.x < 0 → reverse throttle
+    - twist.angular.z → steering (normalized by max_steering_angle)
 
-    # Cleanup
-    ros_interface.close()
-
-Requirements:
-    - Docker compose with ROS Bridge running (docker-compose.ros-integration.yml)
-    - rclpy installed (pip install rclpy)
-    - carla_msgs package available via ROS 2 Bridge
-
-Author: GitHub Copilot Agent
-Date: 2025-01-22
+Author: Daniel Terra
+Date: 2025-01-25 (Phase 5 - Native ROS 2 Migration)
 """
 
-import os
-import sys
-import subprocess
-import time
-from threading import Thread, Lock
-from typing import Dict, Optional, Tuple, Any
-import numpy as np
+import logging
+from typing import Optional
+import carla
 
-# Try to import ROS 2 Python client library
 try:
     import rclpy
     from rclpy.node import Node
-    from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+    from geometry_msgs.msg import Twist, Vector3
     ROS2_AVAILABLE = True
 except ImportError:
-    print("[WARNING] rclpy not available. ROS 2 interface disabled.")
-    print("[INFO] Install with: pip install rclpy")
     ROS2_AVAILABLE = False
-    Node = object  # Dummy base class
-
-# Try to import CARLA ROS message types
-try:
-    from carla_msgs.msg import CarlaEgoVehicleControl, CarlaEgoVehicleStatus
-    from nav_msgs.msg import Odometry
-    from sensor_msgs.msg import Image, CameraInfo, Imu
-    from std_msgs.msg import Float32
-    CARLA_MSGS_AVAILABLE = True
-except ImportError:
-    print("[WARNING] carla_msgs not available. Using manual message construction.")
-    print("[INFO] Ensure ROS Bridge container is running and sourced.")
-    CARLA_MSGS_AVAILABLE = False
+    logging.warning("[ROS BRIDGE] rclpy not available - ROS 2 control disabled")
 
 
-class ROSBridgeInterface(Node if ROS2_AVAILABLE else object):
+class ROSBridgeInterface:
     """
-    Interface for publishing control commands and subscribing to vehicle data
-    via ROS 2 Bridge topics.
+    Minimal ROS 2 publisher for CARLA vehicle control using geometry_msgs/Twist.
 
-    This class handles:
-    - ROS 2 node initialization and spinning
-    - Topic publishers (vehicle control)
-    - Topic subscribers (status, odometry, sensors)
-    - Message caching for latest values
-    - Thread-safe access to data
+    Publishes Twist messages to the CARLA Twist to Control node which converts
+    them to CARLA VehicleControl commands. This approach uses standard ROS messages,
+    eliminating the need for carla_msgs package in the training container.
 
-    Modes:
-    1. Full ROS 2 mode (use_docker_exec=False): Requires rclpy + carla_msgs installed
-    2. Docker exec mode (use_docker_exec=True): Only requires docker CLI, no rclpy needed
-    3. Fallback mode (enable_ros2=False): Use direct CARLA Python API
+    Conversion Logic (from carla_twist_to_control.py):
+        - twist.linear.x > 0  → throttle = min(10, x) / 10
+        - twist.linear.x < 0  → reverse = True, throttle = max(-10, x) / -10
+        - twist.angular.z     → steer = -z / max_steering_angle (normalized)
+
+    Usage:
+        # Initialize (once per environment)
+        ros_interface = ROSBridgeInterface(node_name='carla_env_controller')
+
+        # Publish control commands (every step)
+        ros_interface.publish_control(throttle=0.5, steer=0.1, brake=0.0)
+
+        # Cleanup
+        ros_interface.destroy()
     """
+
+    # Maximum longitudinal acceleration for Twist conversion
+    # This matches the carla_twist_to_control.py implementation
+    MAX_LON_ACCELERATION = 10.0
+
+    # Approximate max steering angle (radians) for Tesla Model 3
+    # This will be updated if we receive vehicle info from ROS Bridge
+    DEFAULT_MAX_STEER_ANGLE = 1.22  # ~70 degrees
 
     def __init__(
         self,
-        node_name: str = 'av_td3_controller',
-        ego_vehicle_role: str = 'ego_vehicle',
-        enable_ros2: bool = True,
-        use_docker_exec: bool = True  # Use docker exec for topic publishing
+        node_name: str = 'carla_vehicle_controller',
+        role_name: str = 'ego_vehicle',
+        use_docker_exec: bool = False  # Deprecated parameter (kept for backward compatibility)
     ):
         """
-        Initialize ROS 2 Bridge interface.
+        Initialize ROS 2 publisher for vehicle control via Twist messages.
 
         Args:
-            node_name: Name of this ROS 2 node
-            ego_vehicle_role: Role name of ego vehicle in CARLA (default: 'ego_vehicle')
-            enable_ros2: Whether to enable ROS 2 (disable for fallback to Python API)
-            use_docker_exec: If True, use docker exec for publishing (simpler, more reliable)
-                           This mode doesn't require rclpy installation!
+            node_name: Name of the ROS 2 node
+            role_name: Role name of the ego vehicle (default: 'ego_vehicle')
+            use_docker_exec: DEPRECATED - no longer used (native rclpy always)
+
+        Raises:
+            RuntimeError: If ROS 2 is not available
         """
-        # Docker exec mode works without rclpy, only native ROS node mode requires it
-        if use_docker_exec:
-            self.enabled = enable_ros2  # Docker exec mode doesn't need ROS2_AVAILABLE
-        else:
-            self.enabled = enable_ros2 and ROS2_AVAILABLE and CARLA_MSGS_AVAILABLE
+        self.logger = logging.getLogger(self.__class__.__name__)
 
-        self.use_docker_exec = use_docker_exec
-        self.ego_role = ego_vehicle_role
+        # Debug: Log initialization attempt
+        self.logger.info(f"[ROS BRIDGE] Attempting to initialize ROSBridgeInterface...")
+        self.logger.info(f"[ROS BRIDGE] Node name: {node_name}, Role: {role_name}")
 
-        # Cached data from subscriptions
-        self._vehicle_status: Optional[Dict] = None
-        self._odometry: Optional[Dict] = None
-        self._data_lock = Lock()
+        if not ROS2_AVAILABLE:
+            error_msg = (
+                "rclpy not available. "
+                "Ensure ROS 2 Humble is installed and sourced: "
+                "source /opt/ros/humble/setup.bash"
+            )
+            self.logger.error(f"[ROS BRIDGE] {error_msg}")
+            raise RuntimeError(error_msg)
 
-        # ROS 2 setup - only needed for native mode (not docker exec)
-        if self.enabled and not use_docker_exec:
-            # Native ROS 2 mode - requires rclpy + carla_msgs
-            if not ROS2_AVAILABLE or not CARLA_MSGS_AVAILABLE:
-                print("[WARNING] Native ROS mode requested but dependencies unavailable")
-                print("[INFO] Install rclpy and carla_msgs, or use use_docker_exec=True")
-                self.enabled = False
+        self.logger.info(f"[ROS BRIDGE] rclpy module found, proceeding with initialization...")
+
+        self.node_name = node_name
+        self.role_name = role_name
+        self.node: Optional[Node] = None
+        self.publisher = None
+        self.max_steering_angle = self.DEFAULT_MAX_STEER_ANGLE
+        self._message_count = 0  # Track published messages for diagnostic logging
+
+        # Initialize ROS 2
+        self.logger.info(f"[ROS BRIDGE] Calling _initialize_ros()...")
+        self._initialize_ros()
+        self.logger.info(f"[ROS BRIDGE] _initialize_ros() completed successfully!")
+
+        self.logger.info(f"[ROS BRIDGE] Initialized native rclpy Twist publisher")
+        self.logger.info(f"[ROS BRIDGE] Node name: {node_name}")
+        self.logger.info(f"[ROS BRIDGE] Topic: /carla/{role_name}/twist")
+        self.logger.info(f"[ROS BRIDGE] Using geometry_msgs/Twist (standard ROS 2 message)")
+
+    def _initialize_ros(self):
+        """Initialize ROS 2 node and Twist publisher."""
+        try:
+            self.logger.info("[ROS BRIDGE] Step 1: Checking rclpy context...")
+            # Initialize rclpy (if not already initialized)
+            if not rclpy.ok():
+                self.logger.info("[ROS BRIDGE] Step 2: Initializing rclpy context...")
+                rclpy.init()
+                self.logger.info("[ROS BRIDGE] Step 3: rclpy context initialized successfully!")
             else:
-                try:
-                    # Check if ROS 2 context already initialized
-                    if not rclpy.ok():
-                        rclpy.init()
+                self.logger.info("[ROS BRIDGE] Step 2: rclpy already initialized, skipping init()")
 
-                    # Initialize node
-                    super().__init__(node_name)
+            # Create ROS 2 node
+            self.logger.info(f"[ROS BRIDGE] Step 4: Creating ROS 2 node '{self.node_name}'...")
+            self.node = Node(self.node_name)
+            self.logger.info(f"[ROS BRIDGE] Step 5: Node created successfully!")
 
-                    # Create QoS profile for reliable communication
-                    qos_profile = QoSProfile(
-                        reliability=ReliabilityPolicy.RELIABLE,
-                        history=HistoryPolicy.KEEP_LAST,
-                        depth=10
-                    )
+            # Create publisher for Twist commands
+            # Topic: /carla/ego_vehicle/twist
+            # Message type: geometry_msgs/msg/Twist (standard ROS 2)
+            # QoS: Queue size 10 (standard for control commands)
+            topic_name = f'/carla/{self.role_name}/twist'
+            self.logger.info(f"[ROS BRIDGE] Step 6: Creating publisher on topic: {topic_name}")
 
-                    # Publishers
-                    control_topic = f'/carla/{ego_vehicle_role}/vehicle_control_cmd'
-                    self._control_pub = self.create_publisher(
-                        CarlaEgoVehicleControl,
-                        control_topic,
-                        qos_profile
-                    )
-                    self.get_logger().info(f"Created control publisher: {control_topic}")
+            self.publisher = self.node.create_publisher(
+                Twist,
+                topic_name,
+                10  # QoS queue size
+            )
 
-                    # Subscribers
-                    status_topic = f'/carla/{ego_vehicle_role}/vehicle_status'
-                    self._status_sub = self.create_subscription(
-                        CarlaEgoVehicleStatus,
-                        status_topic,
-                        self._vehicle_status_callback,
-                        qos_profile
-                    )
+            self.logger.info(f"[ROS BRIDGE] Step 7: Publisher created successfully!")
+            self.logger.info(f"[ROS BRIDGE] Topic: {topic_name}")
+            self.logger.info(f"[ROS BRIDGE] Message type: geometry_msgs/msg/Twist")
 
-                    odom_topic = f'/carla/{ego_vehicle_role}/odometry'
-                    self._odom_sub = self.create_subscription(
-                        Odometry,
-                        odom_topic,
-                        self._odometry_callback,
-                        qos_profile
-                    )
-
-                    # Start spinning in background thread
-                    self._spin_thread = Thread(target=self._spin_ros, daemon=True)
-                    self._spin_thread.start()
-
-                    self.get_logger().info(f"ROS 2 Bridge interface initialized for '{ego_vehicle_role}'")
-
-                except Exception as e:
-                    print(f"[ERROR] Failed to initialize ROS 2: {e}")
-                    print("[INFO] Falling back to Python API mode")
-                    self.enabled = False
-        elif self.enabled and use_docker_exec:
-            # Docker exec mode - lightweight, no ROS node needed
-            print(f"[INFO] ROS 2 Bridge interface initialized in docker-exec mode for '{ego_vehicle_role}'")
-            print("[INFO] Control commands will be published via 'docker exec ros2-bridge'")
-        else:
-            print("[INFO] ROS 2 Bridge interface disabled - using Python API mode")
-
-    def _spin_ros(self):
-        """Background thread for spinning ROS 2 node (processing callbacks)."""
-        while rclpy.ok():
-            try:
-                rclpy.spin_once(self, timeout_sec=0.1)
-            except Exception as e:
-                print(f"[ERROR] ROS spin error: {e}")
-                break
-
-    def _vehicle_status_callback(self, msg):
-        """Callback for vehicle status messages."""
-        with self._data_lock:
-            self._vehicle_status = {
-                'velocity': msg.velocity,  # m/s
-                'acceleration': {
-                    'x': msg.acceleration.linear.x,
-                    'y': msg.acceleration.linear.y,
-                    'z': msg.acceleration.linear.z
-                },
-                'control': {
-                    'throttle': msg.control.throttle,
-                    'steer': msg.control.steer,
-                    'brake': msg.control.brake,
-                    'hand_brake': msg.control.hand_brake,
-                    'reverse': msg.control.reverse,
-                    'gear': msg.control.gear
-                }
-            }
-
-    def _odometry_callback(self, msg):
-        """Callback for odometry messages."""
-        with self._data_lock:
-            self._odometry = {
-                'position': {
-                    'x': msg.pose.pose.position.x,
-                    'y': msg.pose.pose.position.y,
-                    'z': msg.pose.pose.position.z
-                },
-                'orientation': {
-                    'x': msg.pose.pose.orientation.x,
-                    'y': msg.pose.pose.orientation.y,
-                    'z': msg.pose.pose.orientation.z,
-                    'w': msg.pose.pose.orientation.w
-                },
-                'linear_velocity': {
-                    'x': msg.twist.twist.linear.x,
-                    'y': msg.twist.twist.linear.y,
-                    'z': msg.twist.twist.linear.z
-                },
-                'angular_velocity': {
-                    'x': msg.twist.twist.angular.x,
-                    'y': msg.twist.twist.angular.y,
-                    'z': msg.twist.twist.angular.z
-                }
-            }
+        except Exception as e:
+            self.logger.error(f"[ROS BRIDGE] FAILED to initialize ROS 2: {type(e).__name__}: {e}")
+            import traceback
+            self.logger.error(f"[ROS BRIDGE] Traceback:\n{traceback.format_exc()}")
+            raise
 
     def publish_control(
         self,
+        control: Optional[carla.VehicleControl] = None,
         throttle: float = 0.0,
         steer: float = 0.0,
         brake: float = 0.0,
@@ -254,271 +180,191 @@ class ROSBridgeInterface(Node if ROS2_AVAILABLE else object):
         manual_gear_shift: bool = False
     ) -> bool:
         """
-        Publish vehicle control command to ROS topic via Twist message.
+        Publish CARLA vehicle control as geometry_msgs/Twist message.
 
-        This method converts low-level actuator commands (throttle/steer/brake)
-        to high-level velocity commands (Twist) for compatibility with CARLA ROS Bridge's
-        carla_twist_to_control converter node.
+        Converts CARLA control commands to Twist format for the ROS Bridge.
 
-        Conversion logic:
-        - throttle/brake → linear.x (forward velocity in m/s)
-        - steer → angular.z (yaw rate in rad/s)
-        - The carla_twist_to_control node converts Twist back to CarlaEgoVehicleControl
+        Conversion Logic (matches carla_twist_to_control.py):
+            - throttle/brake → twist.linear.x (m/s acceleration)
+            - steering → twist.angular.z (radians)
+
+        Supports two calling patterns:
+        1. publish_control(control=carla.VehicleControl(...))
+        2. publish_control(throttle=0.5, steer=0.1, brake=0.0)
 
         Args:
+            control: CARLA VehicleControl object (if provided, other params ignored)
             throttle: Throttle value [0.0, 1.0]
-            steer: Steering value [-1.0, 1.0] (negative = left, positive = right)
+            steer: Steering value [-1.0, 1.0]
             brake: Brake value [0.0, 1.0]
-            hand_brake: Emergency brake (bool) - NOT SUPPORTED in Twist mode
-            reverse: Reverse gear (bool) - use negative linear.x instead
-            gear: Manual gear selection (int) - NOT SUPPORTED in Twist mode
-            manual_gear_shift: Enable manual transmission (bool) - NOT SUPPORTED
+            hand_brake: Hand brake enabled (triggers full stop in Twist)
+            reverse: Reverse gear enabled
+            gear: Gear number (unused in Twist conversion)
+            manual_gear_shift: Manual gear shift (unused in Twist conversion)
 
         Returns:
             True if published successfully, False otherwise
         """
-        if not self.enabled:
+        if not self.publisher:
+            self.logger.error("[ROS BRIDGE] Publisher not initialized")
             return False
 
         try:
-            # Convert throttle/brake to desired velocity (linear.x)
-            # Assume max speed of 30 km/h = 8.33 m/s (typical for urban driving)
-            max_speed = 8.33  # m/s
-
-            # Calculate net acceleration: throttle pushes forward, brake opposes
-            if throttle > brake:
-                # Accelerating: map throttle [0, 1] to velocity [0, max_speed]
-                desired_velocity = throttle * max_speed
-                if reverse:
-                    desired_velocity = -desired_velocity
+            # Extract control values
+            if control is not None:
+                # Use VehicleControl object
+                throttle_val = float(control.throttle)
+                steer_val = float(control.steer)
+                brake_val = float(control.brake)
+                hand_brake_val = bool(control.hand_brake)
+                reverse_val = bool(control.reverse)
             else:
-                # Braking: reduce velocity (set to 0 for full brake)
-                desired_velocity = throttle * max_speed * (1.0 - brake)
-                if reverse:
-                    desired_velocity = -desired_velocity
+                # Use individual parameters
+                throttle_val = float(throttle)
+                steer_val = float(steer)
+                brake_val = float(brake)
+                hand_brake_val = bool(hand_brake)
+                reverse_val = bool(reverse)
 
-            # Convert steering to angular velocity (angular.z)
-            # Steering angle = steer * max_steer_angle (typically ~70 degrees = 1.22 rad)
-            # Angular velocity = velocity * tan(steer_angle) / wheelbase
-            # Simplified: angular_z ≈ steer * k, where k is tuned empirically
-            # For low speeds, we use a simple proportional mapping
-            max_angular_vel = 1.0  # rad/s (tuned for urban driving)
-            angular_velocity = steer * max_angular_vel
+            # Create Twist message
+            msg = Twist()
 
-            if self.use_docker_exec:
-                # Publish Twist message via docker exec
-                cmd = [
-                    'docker', 'exec', 'ros2-bridge', 'bash', '-c',
-                    f"source /opt/ros/humble/setup.bash && "
-                    f"source /opt/carla-ros-bridge/install/setup.bash && "
-                    f"ros2 topic pub --once /carla/{self.ego_role}/twist "
-                    f"geometry_msgs/msg/Twist "
-                    f"\"{{linear: {{x: {desired_velocity}, y: 0.0, z: 0.0}}, "
-                    f"angular: {{x: 0.0, y: 0.0, z: {angular_velocity}}}}}\""
-                ]
-
-                result = subprocess.run(cmd, capture_output=True, timeout=5)
-                if result.returncode != 0:
-                    print(f"[WARNING] Twist publish failed: {result.stderr.decode() if result.stderr else 'unknown error'}")
-                return result.returncode == 0
-
+            # Handle special case: hand brake or full brake → full stop
+            if hand_brake_val or brake_val >= 0.99:
+                msg.linear = Vector3(x=0.0, y=0.0, z=0.0)
+                msg.angular = Vector3(x=0.0, y=0.0, z=0.0)
             else:
-                # Use ROS publisher directly (requires geometry_msgs)
-                # Note: This path requires geometry_msgs to be importable
-                try:
-                    from geometry_msgs.msg import Twist, Vector3
+                # Convert throttle/brake to longitudinal velocity command
+                # Positive linear.x → forward throttle
+                # Negative linear.x → reverse throttle
+                # Scale by MAX_LON_ACCELERATION (10 m/s²)
+                if brake_val > 0.01:
+                    # Braking: map brake [0,1] → velocity [-10, 0]
+                    # Simplified: just send negative acceleration
+                    linear_x = -brake_val * self.MAX_LON_ACCELERATION
+                elif reverse_val:
+                    # Reverse: negative velocity
+                    linear_x = -throttle_val * self.MAX_LON_ACCELERATION
+                else:
+                    # Forward: positive velocity
+                    linear_x = throttle_val * self.MAX_LON_ACCELERATION
 
-                    msg = Twist()
-                    msg.linear = Vector3(x=desired_velocity, y=0.0, z=0.0)
-                    msg.angular = Vector3(x=0.0, y=0.0, z=angular_velocity)
+                # Convert steering to angular velocity (radians)
+                # CARLA steer ∈ [-1, 1] → angular_z ∈ [-max_angle, +max_angle]
+                # NOTE: The carla_twist_to_control.py uses NEGATIVE mapping
+                angular_z = -steer_val * self.max_steering_angle
 
-                    # We need a Twist publisher (not CarlaEgoVehicleControl)
-                    # This would require modifying the __init__ method
-                    # For now, fall back to docker exec mode
-                    print("[WARNING] Native Twist publisher not implemented, use docker exec mode")
-                    return False
-                except ImportError:
-                    print("[ERROR] geometry_msgs not available")
-                    return False
+                msg.linear = Vector3(x=linear_x, y=0.0, z=0.0)
+                msg.angular = Vector3(x=0.0, y=0.0, z=angular_z)
+
+            # Publish message
+            self.publisher.publish(msg)
+
+            # Spin once to process callbacks (non-blocking)
+            rclpy.spin_once(self.node, timeout_sec=0.0)
+
+            # Increment message counter
+            self._message_count += 1
+
+            # Log first 10 messages at INFO level for diagnostics
+            if self._message_count <= 10:
+                self.logger.info(
+                    f"[ROS BRIDGE] Published Twist #{self._message_count}: "
+                    f"linear.x={msg.linear.x:.2f} m/s, angular.z={msg.angular.z:.3f} rad "
+                    f"(throttle={throttle_val:.2f}, steer={steer_val:.3f}, brake={brake_val:.2f})"
+                )
+            elif self._message_count % 100 == 0:
+                # Log every 100th message thereafter
+                self.logger.debug(
+                    f"[ROS BRIDGE] Published Twist #{self._message_count}: "
+                    f"linear.x={msg.linear.x:.2f} m/s, angular.z={msg.angular.z:.3f} rad"
+                )
+            else:
+                # Normal debug logging
+                self.logger.debug(
+                    f"[ROS BRIDGE] Published Twist: "
+                    f"linear.x={msg.linear.x:.2f} m/s, angular.z={msg.angular.z:.3f} rad "
+                    f"(throttle={throttle_val:.2f}, steer={steer_val:.3f}, brake={brake_val:.2f})"
+                )
+
+            return True
 
         except Exception as e:
-            print(f"[ERROR] Failed to publish control: {e}")
-            import traceback
-            traceback.print_exc()
+            self.logger.error(f"[ROS BRIDGE] Failed to publish Twist: {e}")
             return False
-
-    def get_vehicle_status(self) -> Optional[Dict]:
-        """
-        Get latest vehicle status from ROS topic.
-
-        Returns:
-            Dictionary with velocity, acceleration, control state
-            None if no data received yet
-        """
-        with self._data_lock:
-            return self._vehicle_status.copy() if self._vehicle_status else None
-
-    def get_odometry(self) -> Optional[Dict]:
-        """
-        Get latest odometry from ROS topic.
-
-        Returns:
-            Dictionary with position, orientation, velocities
-            None if no data received yet
-        """
-        with self._data_lock:
-            return self._odometry.copy() if self._odometry else None
 
     def wait_for_topics(self, timeout: float = 10.0) -> bool:
         """
-        Wait for ROS topics to become available.
+        Wait for ROS Bridge topics to become available.
 
-        For Twist control mode, we check for:
-        - /carla/<role>/twist (where we publish velocity commands)
+        This verifies that the external CARLA ROS Bridge with Twist to Control
+        node is running and ready to receive Twist commands.
 
         Args:
             timeout: Maximum time to wait in seconds
 
         Returns:
-            True if topics available, False if timeout
+            True if topics are available, False on timeout
         """
-        if not self.enabled:
+        import time
+
+        if not self.node:
+            self.logger.error("[ROS BRIDGE] Node not initialized")
             return False
 
-        if self.use_docker_exec:
-            # Docker exec mode: check if ros2-bridge container is running and carla_twist_to_control node is active
-            print(f"[INFO] Waiting for ROS Bridge topics (timeout: {timeout}s)...")
-            start_time = time.time()
-            while time.time() - start_time < timeout:
-                try:
-                    # Check if container is running
-                    result = subprocess.run(
-                        ['docker', 'inspect', '-f', '{{.State.Running}}', 'ros2-bridge'],
-                        capture_output=True,
-                        timeout=2,
-                        text=True
-                    )
-                    if result.returncode == 0 and result.stdout.strip() == 'true':
-                        # Container running, check if twist topic exists or can be created
-                        # The twist topic is published by us, so we just need to verify bridge is running
-                        # Check if the carla_twist_to_control node is subscribing to twist
-                        cmd = [
-                            'docker', 'exec', 'ros2-bridge', 'bash', '-c',
-                            f"source /opt/ros/humble/setup.bash && "
-                            f"source /opt/carla-ros-bridge/install/setup.bash && "
-                            f"(ros2 node list | grep -q '{self.ego_role}' || ros2 topic list | grep -q '/carla/{self.ego_role}/') && echo 'ready'"
-                        ]
-                        result = subprocess.run(cmd, capture_output=True, timeout=5, text=True)
-                        if result.returncode == 0 and 'ready' in result.stdout:
-                            print(f"[INFO] ROS Bridge is ready for Twist control")
-                            return True
-                        else:
-                            print(f"[DEBUG] Bridge check failed: returncode={result.returncode}, stdout={result.stdout[:100]}")
-                except subprocess.TimeoutExpired:
-                    print(f"[DEBUG] Command timeout, retrying...")
-                    pass  # Continue waiting
-                except Exception as e:
-                    print(f"[DEBUG] Exception during bridge check: {e}")
-                    pass  # Continue waiting
+        self.logger.info(f"[ROS BRIDGE] Waiting for Twist topic (timeout: {timeout}s)...")
 
-                time.sleep(0.5)
+        start_time = time.time()
+        topic_name = f'/carla/{self.role_name}/twist'
 
-            print(f"[WARNING] Timeout waiting for ROS Bridge after {timeout}s")
-            print(f"[INFO] Make sure carla_twist_to_control node is running in ros2-bridge container")
-            return False
-        else:
-            # Native ROS mode: check if we have received data from subscriptions
-            start_time = time.time()
-            while time.time() - start_time < timeout:
-                with self._data_lock:
-                    if self._vehicle_status is not None and self._odometry is not None:
-                        return True
-                time.sleep(0.1)
+        while (time.time() - start_time) < timeout:
+            # Get list of current topics
+            topic_names_and_types = self.node.get_topic_names_and_types()
+            topic_names = [name for name, _ in topic_names_and_types]
 
-            print(f"[WARNING] Timeout waiting for ROS topics after {timeout}s")
-            return False
+            # Check if our Twist topic exists
+            # NOTE: The twist topic is created by OUR publisher, so it will exist
+            # We should check for the ROS Bridge topics instead:
+            # - /carla/ego_vehicle/vehicle_info (indicates bridge is running)
+            # - /carla/ego_vehicle/vehicle_control_cmd (indicates twist_to_control is running)
+            check_topics = [
+                f'/carla/{self.role_name}/vehicle_info',
+                f'/carla/{self.role_name}/vehicle_control_cmd'
+            ]
 
-    def close(self):
+            found_count = sum(1 for t in check_topics if t in topic_names)
+
+            if found_count >= 1:  # At least vehicle_info should exist
+                self.logger.info(
+                    f"[ROS BRIDGE] ROS Bridge topics found ({found_count}/{len(check_topics)})!"
+                )
+                return True
+
+            # Wait a bit before checking again
+            time.sleep(0.5)
+            rclpy.spin_once(self.node, timeout_sec=0.0)
+
+        self.logger.warning(
+            f"[ROS BRIDGE] Timeout waiting for ROS Bridge topics\n"
+            f"[ROS BRIDGE] Expected topics: {check_topics}\n"
+            f"[ROS BRIDGE] Available topics (sample): {topic_names[:10]}\n"
+            f"[ROS BRIDGE] Make sure CARLA ROS Bridge is running with carla_twist_to_control!"
+        )
+        return False
+
+    def destroy(self):
         """Cleanup ROS 2 resources."""
-        if self.enabled:
-            try:
-                if self.use_docker_exec:
-                    # Docker exec mode: no ROS node to destroy
-                    print("[INFO] ROS 2 Bridge interface closed (docker-exec mode)")
-                else:
-                    # Native ROS mode: cleanup node
-                    self.destroy_node()
-                    if rclpy.ok():
-                        rclpy.shutdown()
-                    print("[INFO] ROS 2 Bridge interface closed")
-            except Exception as e:
-                print(f"[ERROR] Error closing ROS interface: {e}")
+        try:
+            if self.node:
+                self.node.destroy_node()
+                self.logger.info("[ROS BRIDGE] Node destroyed")
 
+            # Note: We don't call rclpy.shutdown() here because other nodes
+            # might be using the same rclpy context
 
-# Example usage
-if __name__ == "__main__":
-    print("=" * 80)
-    print("ROS 2 Bridge Interface Test")
-    print("=" * 80)
+        except Exception as e:
+            self.logger.warning(f"[ROS BRIDGE] Cleanup warning: {e}")
 
-    print("\n[1/5] Checking ROS 2 availability...")
-    if not ROS2_AVAILABLE:
-        print("❌ rclpy not available. Install with: pip install rclpy")
-        sys.exit(1)
-    print("✅ rclpy available")
-
-    if not CARLA_MSGS_AVAILABLE:
-        print("⚠️  carla_msgs not available - ensure ROS Bridge container running")
-
-    print("\n[2/5] Initializing ROS 2 Bridge interface...")
-    ros_interface = ROSBridgeInterface(use_docker_exec=True)
-
-    if not ros_interface.enabled:
-        print("❌ ROS 2 interface not enabled")
-        sys.exit(1)
-    print("✅ ROS 2 interface initialized")
-
-    print("\n[3/5] Waiting for topics to become available...")
-    if ros_interface.wait_for_topics(timeout=15.0):
-        print("✅ Topics available")
-    else:
-        print("❌ Topics not available - ensure docker-compose.ros-integration.yml is running")
-        ros_interface.close()
-        sys.exit(1)
-
-    print("\n[4/5] Publishing test control command (throttle=0.3, 5 seconds)...")
-    for i in range(50):  # 50 iterations * 0.1s = 5 seconds
-        success = ros_interface.publish_control(throttle=0.3, steer=0.0, brake=0.0)
-        if not success:
-            print(f"❌ Failed to publish control at iteration {i+1}")
-        time.sleep(0.1)
-
-    print("✅ Control commands published")
-
-    print("\n[5/5] Reading vehicle status...")
-    status = ros_interface.get_vehicle_status()
-    odom = ros_interface.get_odometry()
-
-    if status:
-        print(f"  Velocity: {status['velocity']:.2f} m/s")
-        print(f"  Throttle: {status['control']['throttle']:.2f}")
-        print(f"  Steering: {status['control']['steer']:.2f}")
-    else:
-        print("  ⚠️  No status data received")
-
-    if odom:
-        print(f"  Position: ({odom['position']['x']:.2f}, {odom['position']['y']:.2f}, {odom['position']['z']:.2f})")
-    else:
-        print("  ⚠️  No odometry data received")
-
-    print("\n[6/6] Cleanup...")
-    ros_interface.close()
-    print("✅ Test complete")
-
-    print("\n" + "=" * 80)
-    print("ROS 2 Bridge Interface Test Summary")
-    print("=" * 80)
-    print("✅ ROS 2 integration working")
-    print("✅ Control publishing functional")
-    print("✅ Status/odometry subscriptions functional")
-    print("\nNext step: Integrate into evaluate_baseline.py and train_td3.py")
+    def __del__(self):
+        """Destructor - ensure cleanup."""
+        self.destroy()

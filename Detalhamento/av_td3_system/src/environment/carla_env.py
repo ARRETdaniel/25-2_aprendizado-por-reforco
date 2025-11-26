@@ -93,22 +93,40 @@ class CARLANavigationEnv(Env):
 
         if self.use_ros_bridge:
             try:
-                from src.utils.ros_bridge_interface import ROSBridgeInterface
+                print("[ROS BRIDGE] Importing ROSBridgeInterface...")  # DEBUG
+                self.logger.info("[ROS BRIDGE] Importing ROSBridgeInterface...")
+                from src.utils.ros_bridge_interface import ROSBridgeInterface, ROS2_AVAILABLE
+
+                print(f"[ROS BRIDGE] ROS2_AVAILABLE = {ROS2_AVAILABLE}")  # DEBUG
+
+                if not ROS2_AVAILABLE:
+                    print("[ROS BRIDGE] WARNING: rclpy not available, skipping ROS initialization")
+                    raise RuntimeError("rclpy not available")
+
+                print("[ROS BRIDGE] Creating ROSBridgeInterface instance...")  # DEBUG
+                self.logger.info("[ROS BRIDGE] Creating ROSBridgeInterface instance...")
                 self.ros_interface = ROSBridgeInterface(
                     node_name='carla_env_controller',
-                    use_docker_exec=True
+                    use_docker_exec=False
                 )
+                print("[ROS BRIDGE] ROSBridgeInterface created successfully!")  # DEBUG
                 self.logger.info("[ROS BRIDGE] Initialized ROS Bridge interface for vehicle control")
 
                 # Wait for topics to be available
+                print("[ROS BRIDGE] Waiting for ROS topics to be available (10s timeout)...")  # DEBUG
+                self.logger.info("[ROS BRIDGE] Waiting for ROS topics to be available (10s timeout)...")
                 if not self.ros_interface.wait_for_topics(timeout=10.0):
-                    self.logger.error("[ROS BRIDGE] ROS topics not available, falling back to direct CARLA API")
-                    self.use_ros_bridge = False
-                    self.ros_interface = None
+                    print("[ROS BRIDGE] WARNING: ROS topics not available, but continuing with direct API + ROS publishing")  # DEBUG
+                    self.logger.warning("[ROS BRIDGE] ROS topics not available, but continuing with direct API + ROS publishing")
+                    # Don't disable ROS bridge - we still want to publish for monitoring
                 else:
+                    print("[ROS BRIDGE] Successfully connected to ROS topics")  # DEBUG
                     self.logger.info("[ROS BRIDGE] Successfully connected to ROS topics")
             except Exception as e:
-                self.logger.warning(f"[ROS BRIDGE] Failed to initialize ROS Bridge: {e}")
+                print(f"[ROS BRIDGE] EXCEPTION: {type(e).__name__}: {e}")  # DEBUG
+                self.logger.error(f"[ROS BRIDGE] Failed to initialize ROS Bridge: {type(e).__name__}: {e}")
+                import traceback
+                self.logger.error(f"[ROS BRIDGE] Traceback:\n{traceback.format_exc()}")
                 self.logger.warning("[ROS BRIDGE] Falling back to direct CARLA API control")
                 self.use_ros_bridge = False
                 self.ros_interface = None
@@ -934,9 +952,22 @@ class CARLANavigationEnv(Env):
             throttle = 0.0
             brake = -throttle_brake
 
-        # Apply control via ROS Bridge (Phase 5) or direct CARLA API
+        # Create CARLA VehicleControl object
+        control = carla.VehicleControl(
+            throttle=throttle,
+            brake=brake,
+            steer=steering,
+            hand_brake=False,
+            reverse=False,
+        )
+
+        # ALWAYS apply control to our vehicle via direct CARLA API
+        # This ensures our spawned vehicle moves regardless of ROS Bridge status
+        self.vehicle.apply_control(control)
+
+        # ADDITIONALLY publish via ROS 2 topics if ROS Bridge is enabled
+        # This allows external ROS 2 nodes to monitor/log our control commands
         if self.use_ros_bridge and self.ros_interface is not None:
-            # Publish via ROS 2 topics
             self.ros_interface.publish_control(
                 throttle=throttle,
                 steer=steering,
@@ -944,26 +975,6 @@ class CARLANavigationEnv(Env):
                 hand_brake=False,
                 reverse=False
             )
-
-            # For debug logging, create equivalent VehicleControl object
-            # (won't be applied to vehicle, just for logging)
-            control = carla.VehicleControl(
-                throttle=throttle,
-                brake=brake,
-                steer=steering,
-                hand_brake=False,
-                reverse=False,
-            )
-        else:
-            # Original direct CARLA API control
-            control = carla.VehicleControl(
-                throttle=throttle,
-                brake=brake,
-                steer=steering,
-                hand_brake=False,
-                reverse=False,
-            )
-            self.vehicle.apply_control(control)
 
         # DEBUG: Log control application and vehicle response (first 10 steps)
         if self.current_step < 100:
@@ -1664,7 +1675,7 @@ class CARLANavigationEnv(Env):
         if self.ros_interface is not None:
             try:
                 self.logger.info("[ROS BRIDGE] Closing ROS interface...")
-                self.ros_interface.close()
+                self.ros_interface.destroy()
                 self.ros_interface = None
             except Exception as e:
                 self.logger.warning(f"[ROS BRIDGE] Error closing ROS interface: {e}")

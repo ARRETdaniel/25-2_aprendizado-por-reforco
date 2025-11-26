@@ -1,8 +1,13 @@
 #!/bin/bash
 set -e
 
-# Source ROS 2 environment
-source /opt/ros/foxy/setup.bash
+# Source ROS 2 Humble environment (Ubuntu 22.04)
+if [ -f "/opt/ros/humble/setup.bash" ]; then
+    source /opt/ros/humble/setup.bash
+    echo "✅ Sourced ROS 2 Humble environment"
+else
+    echo "⚠️  ROS 2 Humble not found - ROS features will be disabled"
+fi
 
 # Start CARLA server in background (headless mode)
 echo "Starting CARLA server..."

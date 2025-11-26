@@ -2,6 +2,24 @@
 
 This directory contains Docker configurations for running the CARLA 0.9.16 + ROS 2 Foxy + Baseline Controller system in containers.
 
+Python Version Check:
+
+CARLA 0.9.16: Provides wheels for Python 3.10, 3.11, 3.12 (as per official release)
+ROS 2 Foxy: Requires Python 3.8 (Ubuntu 20.04 default)
+ROS 2 Humble: Requires Python 3.10 (Ubuntu 22.04 default)
+Our current setup:
+
+Base image: CARLA 0.9.16 (Ubuntu 20.04 Focal)
+Python: 3.10 (installed via Miniforge)
+ROS 2: Trying to install Foxy (requires Python 3.8) THIS WON'T WORK!
+
+
+CARLA 0.9.16: Requires Python 3.10/3.11/3.12 (no 3.8 wheels)
+ROS 2 Foxy: Requires Python 3.8 (Ubuntu 20.04 default)
+ROS 2 Humble: Requires Python 3.10 + Ubuntu 22.04
+Root Cause: Our container uses Python 3.10 (for CARLA), but base image is Ubuntu 20.04 (which only supports ROS 2 Foxy/Python 3.8).
+
+
 ## Architecture
 
 The system uses a **multi-container architecture** with 3 main services:

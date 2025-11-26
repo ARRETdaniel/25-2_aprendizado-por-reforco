@@ -70,6 +70,16 @@ RUN python -m pip install gymnasium==0.29.1
 # Install PyTorch with CUDA 12.1 support (for RTX 2060 compatibility)
 RUN python -m pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
 
+# NOTE: We do NOT install rclpy here due to Python version incompatibility
+# - CARLA 0.9.16 requires Python 3.10 (for wheels)
+# - ROS 2 Foxy (Ubuntu 20.04) requires Python 3.8
+# - ROS 2 Humble (Ubuntu 22.04) requires Python 3.10 BUT requires Ubuntu 22.04 base
+#
+# SOLUTION: Use docker-exec mode for ROS communication (see ros_bridge_interface.py)
+# This keeps containers properly separated and avoids dependency conflicts!
+#
+# Future improvement: Upgrade to Ubuntu 22.04 base + ROS 2 Humble + native rclpy
+
 # Install other Python dependencies
 RUN python -m pip install \
     numpy==1.24.3 \

@@ -718,7 +718,7 @@ class TD3TrainingPipeline:
                 if t % 10 == 0:
                     self.writer.add_scalar('train/exploration_noise', current_noise, t)
 
-                    # ✅ LOGGING FIX: Log action statistics every 100 steps
+                    # LOGGING FIX: Log action statistics every 100 steps
                     # Enables monitoring of control command distribution for debugging
                     action_stats = self.agent.get_action_stats()
                     for key, value in action_stats.items():
@@ -771,111 +771,112 @@ class TD3TrainingPipeline:
 
             # BUG FIX: Debug visualization should use NEXT observation (current frame after action)
             # Previous bug: Used obs_dict (old frame before action) causing 1-frame delay
-            if t % 100 == 0:
-                self._visualize_debug(next_obs_dict, action, reward, info, t)
+            # BUG fix debug logging only for 100 steps each time
+            self._visualize_debug(next_obs_dict, action, reward, info, t)
 
                 # DEBUG: Print detailed step info to terminal every 100 steps
                 # OPTIMIZATION: Reduced from every 10 steps to every 100 steps
                 # to minimize logging overhead while maintaining sufficient visibility
-                if t % 100 == 0:
-                    vehicle_state = info.get('vehicle_state', {})
-                    reward_breakdown = info.get('reward_breakdown', {})
+                #if t % 100 == 0:
+             # TODO: changed from print every 100 steps, check if its problematic
+            vehicle_state = info.get('vehicle_state', {})
+            reward_breakdown = info.get('reward_breakdown', {})
 
-                    # Extract observation data for debugging
-                    vector_obs = next_obs_dict.get('vector', np.array([]))
-                    image_obs = next_obs_dict.get('image', np.array([]))
+            # Extract observation data for debugging
+            vector_obs = next_obs_dict.get('vector', np.array([]))
+            image_obs = next_obs_dict.get('image', np.array([]))
 
-                    # Parse vector observation (velocity, lat_dev, heading_error, waypoints[20])
-                    velocity = vector_obs[0] if len(vector_obs) > 0 else 0.0
-                    lat_dev = vector_obs[1] if len(vector_obs) > 1 else 0.0
-                    heading_err = vector_obs[2] if len(vector_obs) > 2 else 0.0
+            # Parse vector observation (velocity, lat_dev, heading_error, waypoints[20])
+            velocity = vector_obs[0] if len(vector_obs) > 0 else 0.0
+            lat_dev = vector_obs[1] if len(vector_obs) > 1 else 0.0
+            heading_err = vector_obs[2] if len(vector_obs) > 2 else 0.0
 
-                    # Waypoints are elements [3:23] (10 waypoints × 2 coords = 20 values)
-                    waypoints_flat = vector_obs[3:23] if len(vector_obs) >= 23 else []
+            # Waypoints are elements [3:23] (10 waypoints × 2 coords = 20 values)
+            waypoints_flat = vector_obs[3:23] if len(vector_obs) >= 23 else []
 
-                    # Image statistics (4 stacked frames, 84×84)
-                    if len(image_obs.shape) == 3:  # (4, 84, 84)
-                        img_mean = np.mean(image_obs)
-                        img_std = np.std(image_obs)
-                        img_min = np.min(image_obs)
-                        img_max = np.max(image_obs)
-                    else:
-                        img_mean = img_std = img_min = img_max = 0.0
+            # Image statistics (4 stacked frames, 84×84)
+            if len(image_obs.shape) == 3:  # (4, 84, 84)
+                img_mean = np.mean(image_obs)
+                img_std = np.std(image_obs)
+                img_min = np.min(image_obs)
+                img_max = np.max(image_obs)
+            else:
+                img_mean = img_std = img_min = img_max = 0.0
 
-                    # Reward breakdown (format: reward_breakdown is already the "breakdown" dict)
-                    # Each component is a tuple: (weight, raw_value, weighted_value)
-                    eff_tuple = reward_breakdown.get('efficiency', (0, 0, 0))
-                    lane_tuple = reward_breakdown.get('lane_keeping', (0, 0, 0))
-                    comfort_tuple = reward_breakdown.get('comfort', (0, 0, 0))
-                    safety_tuple = reward_breakdown.get('safety', (0, 0, 0))
-                    progress_tuple = reward_breakdown.get('progress', (0, 0, 0))
+            # Reward breakdown (format: reward_breakdown is already the "breakdown" dict)
+            # Each component is a tuple: (weight, raw_value, weighted_value)
+            eff_tuple = reward_breakdown.get('efficiency', (0, 0, 0))
+            lane_tuple = reward_breakdown.get('lane_keeping', (0, 0, 0))
+            comfort_tuple = reward_breakdown.get('comfort', (0, 0, 0))
+            safety_tuple = reward_breakdown.get('safety', (0, 0, 0))
+            progress_tuple = reward_breakdown.get('progress', (0, 0, 0))
 
-                    # Extract weighted values (index 2)
-                    eff_reward = eff_tuple[2] if isinstance(eff_tuple, tuple) else 0.0
-                    lane_reward = lane_tuple[2] if isinstance(lane_tuple, tuple) else 0.0
-                    comfort_reward = comfort_tuple[2] if isinstance(comfort_tuple, tuple) else 0.0
-                    safety_reward = safety_tuple[2] if isinstance(safety_tuple, tuple) else 0.0
-                    progress_reward = progress_tuple[2] if isinstance(progress_tuple, tuple) else 0.0
+            # Extract weighted values (index 2)
+            eff_reward = eff_tuple[2] if isinstance(eff_tuple, tuple) else 0.0
+            lane_reward = lane_tuple[2] if isinstance(lane_tuple, tuple) else 0.0
+            comfort_reward = comfort_tuple[2] if isinstance(comfort_tuple, tuple) else 0.0
+            safety_reward = safety_tuple[2] if isinstance(safety_tuple, tuple) else 0.0
+            progress_reward = progress_tuple[2] if isinstance(progress_tuple, tuple) else 0.0
 
-                    # LITERATURE-VALIDATED FIX (WARNING-002): Accumulate reward components
-                    # Track components to verify progress doesn't dominate (was 88.9%)
-                    self.episode_reward_components['efficiency'] += eff_reward
-                    self.episode_reward_components['lane_keeping'] += lane_reward
-                    self.episode_reward_components['comfort'] += comfort_reward
-                    self.episode_reward_components['safety'] += safety_reward
-                    self.episode_reward_components['progress'] += progress_reward
+            # LITERATURE-VALIDATED FIX (WARNING-002): Accumulate reward components
+            # Track components to verify progress doesn't dominate (was 88.9%)
+            self.episode_reward_components['efficiency'] += eff_reward
+            self.episode_reward_components['lane_keeping'] += lane_reward
+            self.episode_reward_components['comfort'] += comfort_reward
+            self.episode_reward_components['safety'] += safety_reward
+            self.episode_reward_components['progress'] += progress_reward
 
-                    # Print main debug line
-                    print(
-                        f"\n[DEBUG Step {t:4d}] "
-                        f"Act=[steer:{action[0]:+.3f}, thr/brk:{action[1]:+.3f}] | "
-                        f"Rew={reward:+7.2f} | "
-                        f"Speed={vehicle_state.get('velocity', 0)*3.6:5.1f} km/h | "
-                        f"LatDev={vehicle_state.get('lateral_deviation', 0):+.2f}m | "
-                        f"Collisions={self.episode_collision_count}"
-                    )
+            # Print main debug line
+            print(
+                f"\n[DEBUG Step {t:4d}] "
+                f"Act=[steer:{action[0]:+.3f}, thr/brk:{action[1]:+.3f}] | "
+                f"Rew={reward:+7.2f} | "
+                f"Speed={vehicle_state.get('velocity', 0)*3.6:5.1f} km/h | "
+                f"LatDev={vehicle_state.get('lateral_deviation', 0):+.2f}m | "
+                f"Collisions={self.episode_collision_count}"
+            )
 
-                    # Print reward breakdown
-                    print(
-                        f"   [Reward] Efficiency={eff_reward:+.2f} | "
-                        f"Lane={lane_reward:+.2f} | "
-                        f"Comfort={comfort_reward:+.2f} | "
-                        f"Safety={safety_reward:+.2f} | "
-                        f"Progress={progress_reward:+.2f}"
-                    )
+            # Print reward breakdown
+            print(
+                f"   [Reward] Efficiency={eff_reward:+.2f} | "
+                f"Lane={lane_reward:+.2f} | "
+                f"Comfort={comfort_reward:+.2f} | "
+                f"Safety={safety_reward:+.2f} | "
+                f"Progress={progress_reward:+.2f}"
+            )
 
-                    # Print first 3 waypoints (most relevant)
-                    if len(waypoints_flat) >= 6:
-                        wp1_x, wp1_y = waypoints_flat[0], waypoints_flat[1]
-                        wp2_x, wp2_y = waypoints_flat[2], waypoints_flat[3]
-                        wp3_x, wp3_y = waypoints_flat[4], waypoints_flat[5]
+            # Print first 3 waypoints (most relevant)
+            if len(waypoints_flat) >= 6:
+                wp1_x, wp1_y = waypoints_flat[0], waypoints_flat[1]
+                wp2_x, wp2_y = waypoints_flat[2], waypoints_flat[3]
+                wp3_x, wp3_y = waypoints_flat[4], waypoints_flat[5]
 
-                        # Calculate distances
-                        dist1 = np.sqrt(wp1_x**2 + wp1_y**2)
-                        dist2 = np.sqrt(wp2_x**2 + wp2_y**2)
-                        dist3 = np.sqrt(wp3_x**2 + wp3_y**2)
+                # Calculate distances
+                dist1 = np.sqrt(wp1_x**2 + wp1_y**2)
+                dist2 = np.sqrt(wp2_x**2 + wp2_y**2)
+                dist3 = np.sqrt(wp3_x**2 + wp3_y**2)
 
-                        print(
-                            f"   [Waypoints] (vehicle frame): "
-                            f"WP1=[{wp1_x:+6.1f}, {wp1_y:+6.1f}]m (d={dist1:5.1f}m) | "
-                            f"WP2=[{wp2_x:+6.1f}, {wp2_y:+6.1f}]m (d={dist2:5.1f}m) | "
-                            f"WP3=[{wp3_x:+6.1f}, {wp3_y:+6.1f}]m (d={dist3:5.1f}m)"
-                        )
+                print(
+                    f"   [Waypoints] (vehicle frame): "
+                    f"WP1=[{wp1_x:+6.1f}, {wp1_y:+6.1f}]m (d={dist1:5.1f}m) | "
+                    f"WP2=[{wp2_x:+6.1f}, {wp2_y:+6.1f}]m (d={dist2:5.1f}m) | "
+                    f"WP3=[{wp3_x:+6.1f}, {wp3_y:+6.1f}]m (d={dist3:5.1f}m)"
+                )
 
-                    # Print image statistics
-                    print(
-                        f"   [Image] shape={image_obs.shape} | "
-                        f"mean={img_mean:.3f} | std={img_std:.3f} | "
-                        f"range=[{img_min:.3f}, {img_max:.3f}]"
-                    )
+            # Print image statistics
+            print(
+                f"   [Image] shape={image_obs.shape} | "
+                f"mean={img_mean:.3f} | std={img_std:.3f} | "
+                f"range=[{img_min:.3f}, {img_max:.3f}]"
+            )
 
-                    # Print state vector info
-                    print(
-                        f"   [State] velocity={velocity:.2f} m/s | "
-                        f"lat_dev={lat_dev:+.3f}m | "
-                        f"heading_err={heading_err:+.3f} rad ({np.degrees(heading_err):+.1f}°) | "
-                        f"vector_dim={len(vector_obs)}"
-                    )
+            # Print state vector info
+            print(
+                f"   [State] velocity={velocity:.2f} m/s | "
+                f"lat_dev={lat_dev:+.3f}m | "
+                f"heading_err={heading_err:+.3f} rad ({np.degrees(heading_err):+.1f}°) | "
+                f"vector_dim={len(vector_obs)}"
+            )
 
             # Track episode metrics
             self.episode_reward += reward
