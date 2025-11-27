@@ -1118,7 +1118,7 @@ class TD3TrainingPipeline:
                         self.writer.add_scalar('agent/critic_cnn_param_std', agent_stats['critic_cnn_param_std'], t)
 
                     # Print summary of key statistics
-                    if t % 100 == 0:  # Print every 5000 steps
+                    if t % 10000 == 0:  # Print every 5000 steps
                         print(f"\n{'='*70}")
                         print(f"[AGENT STATISTICS] Step {t:,}")
                         print(f"{'='*70}")
@@ -1138,10 +1138,11 @@ class TD3TrainingPipeline:
             # ALWAYS log progress every 100 steps (not just debug mode)
             if t % 100 == 0:
                 phase = "EXPLORATION" if t <= start_timesteps else "LEARNING"
-                vehicle_state = info.get('vehicle_state', {})
-                speed_kmh = vehicle_state.get('velocity', 0) * 3.6
 
-                print(
+            vehicle_state = info.get('vehicle_state', {})
+            speed_kmh = vehicle_state.get('velocity', 0) * 3.6
+            '''
+            print(
                     f"[{phase}] Step {t:6d}/{self.max_timesteps:,} | "
                     f"Episode {self.episode_num:4d} | "
                     f"Ep Step {self.episode_timesteps:4d} | "
@@ -1149,6 +1150,7 @@ class TD3TrainingPipeline:
                     f"Speed={speed_kmh:5.1f} km/h | "
                     f"Buffer={len(self.agent.replay_buffer):7d}/{self.agent.replay_buffer.max_size}"
                 )
+            '''
 
                 # Log step-based metrics every 100 steps (so TensorBoard has data even during exploration)
             self.writer.add_scalar('progress/buffer_size', len(self.agent.replay_buffer), t)

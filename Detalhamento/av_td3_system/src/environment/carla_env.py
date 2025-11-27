@@ -977,7 +977,7 @@ class CARLANavigationEnv(Env):
             )
 
         # DEBUG: Log control application and vehicle response (first 10 steps)
-        if self.current_step < 100:
+        if self.current_step < 10000:
             # Get vehicle velocity
             velocity = self.vehicle.get_velocity()
             speed_mps = (velocity.x**2 + velocity.y**2 + velocity.z**2)**0.5
@@ -1128,7 +1128,7 @@ class CARLANavigationEnv(Env):
         ).astype(np.float32)
 
         # DEBUG: Log observation details every 100 steps (throttled logging)
-        if self.current_step % 100 == 0:
+        if self.current_step % 10000 == 0:
             self.logger.info(
                 f"OBSERVATION (Step {self.current_step}):\n"
                 f"   Vehicle State (Raw):\n"
