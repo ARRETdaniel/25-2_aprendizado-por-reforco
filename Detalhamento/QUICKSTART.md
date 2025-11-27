@@ -50,7 +50,7 @@ docker run -d --name carla-server --runtime=nvidia --net=host \
     carlasim/carla:0.9.16 bash CarlaUE4.sh -RenderOffScreen -nosound
 
 ## python API
- cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system && docker run --rm --network host --runtime nvidia -e NVIDIA_VISIBLE_DEVICES=all -e NVIDIA_DRIVER_CAPABILITIES=all -e PYTHONUNBUFFERED=1 -e PYTHONPATH=/workspace -e DISPLAY=$DISPLAY -e QT_X11_NO_MITSHM=1 -v /tmp/.X11-unix:/tmp/.X11-unix:rw -v $(pwd):/workspace -w /workspace --privileged av-td3-system:ubuntu22.04-test bash -c "source /opt/ros/humble/setup.bash && python3 scripts/evaluate_baseline.py --scenario 0 --num-episodes 6 --baseline-config config/baseline_config.yaml --debug" 2>&1 | tee docs/day-25/migration/test_baseline_direct_api.log
+ cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system && docker run --rm --network host --runtime nvidia -e NVIDIA_VISIBLE_DEVICES=all -e NVIDIA_DRIVER_CAPABILITIES=all -e PYTHONUNBUFFERED=1 -e PYTHONPATH=/workspace -e DISPLAY=$DISPLAY -e QT_X11_NO_MITSHM=1 -v /tmp/.X11-unix:/tmp/.X11-unix:rw -v $(pwd):/workspace -w /workspace --privileged av-td3-system:ubuntu22.04-test bash -c "source /opt/ros/humble/setup.bash && python3 scripts/evaluate_baseline.py --scenario 0 --num-episodes 6 --baseline-config config/baseline_config.yaml --debug" 2>&1 | tee docs/day-26/paper/roboticaMovel-paper.log
 
 ## ROS 2 humble:
 ### 1.
