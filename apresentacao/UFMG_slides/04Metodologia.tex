@@ -1,14 +1,45 @@
 \section{System Architecture \& Implementation}
 
 \begin{frame}
-    \frametitle{Modular ROS 2 + CARLA Architecture}
+    \frametitle{ROS 2 + CARLA Integration Architecture}
 
-    % possible image here
-    \textbf{Key Innovation:} Native ROS 2 Humble + geometry\_msgs/Twist \cite{perezgil2021deep,carla2023documentation}
+    \textbf{Challenge:} CARLA 0.9.16 has native ROS 2 for \emph{sensors only}, not vehicle control
+
+    \vspace{0.3cm}
+
+    \begin{center}
+        \begin{tikzpicture}[
+            node distance=1.2cm,
+            block/.style={rectangle, draw, thick, text width=2.8cm, minimum height=1cm, text centered, rounded corners, font=\small},
+            arrow/.style={->, >=Stealth, thick}
+        ]
+            % Training container
+            \node[block, fill=blue!20] (training) {Training Container\\Ubuntu 22.04\\Python 3.10};
+
+            % ROS 2 Humble
+            \node[block, fill=green!20, right=of training] (ros2) {ROS 2 Humble\\Native rclpy};
+
+            % Twist to Control
+            \node[block, fill=orange!20, below=0.8cm of ros2] (twist) {Twist-to-Control\\Converter};
+
+            % CARLA
+            \node[block, fill=red!20, left=of twist] (carla) {CARLA 0.9.16\\Simulator};
+
+            % Arrows
+            \draw[arrow] (training) -- node[above, font=\tiny] {TD3 actions} (ros2);
+            \draw[arrow] (ros2) -- node[right, font=\tiny, text width=1.5cm] {geometry\_msgs/\\Twist} (twist);
+            \draw[arrow] (twist) -- node[below, font=\tiny] {VehicleControl} (carla);
+            \draw[arrow, dashed] (carla) -- node[left, font=\tiny, text width=1.2cm] {Sensors\\(native)} (training);
+        \end{tikzpicture}
+    \end{center}
+
+    \vspace{0.2cm}
+
+    \textbf{Solution:} Standard ROS 2 messages + custom converter
     \begin{itemize}
-        \item Standard message types (no custom CARLA packages!)
-        \item Reduces Docker image by 2.3 GB
-        \item Seamless sim-to-real transition
+        \item \textbf{geometry\_msgs/Twist:} Standard ROS 2 (no custom packages!)
+        \item \textbf{630× faster} than docker-exec approach
+        \item \textbf{2.3 GB smaller} image (no carla\_msgs build)
     \end{itemize}
 \end{frame}
 
@@ -42,50 +73,129 @@
 \begin{frame}
     \frametitle{TD3 Network Architecture}
 
+    \begin{center}
+        \resizebox{0.95\textwidth}{!}{%
+        \begin{tikzpicture}[
+            node distance=0.6cm and 0.9cm,
+            block/.style={rectangle, draw, thick, minimum height=0.7cm, minimum width=1.8cm, font=\small, align=center},
+            cnn/.style={block, fill=blue!30},
+            mlp/.style={block, fill=green!30},
+            concat/.style={circle, draw, very thick, minimum size=0.55cm, font=\normalsize, fill=white},
+            arrow/.style={->, >=Stealth, thick},
+            feedback/.style={->, >=Stealth, thick, dashed, color=red!60}
+        ]
+            % Input (left side)
+            \node[block, fill=orange!30] (image) at (0,0) {Images\\4×84×84};
+            \node[block, fill=yellow!30] (kinematic) at (0,-3.0) {Kinematic\\+ Waypoints\\53-dim};
+
+            % Actor Path (TOP)
+            \node[cnn, right=1.0cm of image] (actor_cnn) {Actor CNN\\512-dim};
+            \node[concat, right=0.8cm of actor_cnn] (concat_actor) {⊕};
+            \node[mlp, right=0.8cm of concat_actor] (actor_mlp) {Actor MLP\\565→256→256};
+            \node[block, fill=purple!30, right=0.7cm of actor_mlp] (actions) {Actions\\2-dim\\tanh};
+
+            % Critic Path (BOTTOM)
+            \node[cnn, right=1.0cm of kinematic] (critic_cnn) {Critic CNN\\512-dim};
+            \node[concat, right=0.8cm of critic_cnn] (concat_critic) {⊕};
+            \node[mlp, right=0.8cm of concat_critic] (critic_mlp1) {Critic Q₁\\567→256→256→1};
+            \node[mlp, below=0.35cm of critic_mlp1] (critic_mlp2) {Critic Q₂\\567→256→256→1};
+
+            % Image to CNNs (both receive same input)
+            \draw[arrow, color=blue!70] (image) -- (actor_cnn);
+            \draw[arrow, color=blue!70] (image.south) -- ++(0,-0.5) -| (critic_cnn.north);
+
+            % CNN to Concatenation
+            \draw[arrow, color=blue!70] (actor_cnn) -- (concat_actor);
+            \draw[arrow, color=blue!70] (critic_cnn) -- (concat_critic);
+
+            % Kinematic to Concatenation (both receive same input)
+            \draw[arrow, color=orange!80] (kinematic.north) -- ++(0,0.5) -| (concat_actor.south);
+            \draw[arrow, color=orange!80] (kinematic) -- (concat_critic);
+
+            % After concatenation flow
+            \draw[arrow, color=green!70] (concat_actor) -- (actor_mlp);
+            \draw[arrow, color=green!70] (actor_mlp) -- (actions);
+            \draw[arrow, color=green!70] (concat_critic) -- (critic_mlp1);
+            \draw[arrow, color=green!70] (concat_critic) -- (critic_mlp2);
+
+            % Feedback: Actions to Critics
+            \draw[feedback] (actions.south) -- ++(0,-0.4) -| ([xshift=0.2cm]critic_mlp1.east) node[pos=0.2, right, font=\tiny] {a};
+            \draw[feedback] (actions.south) -- ++(0,-0.65) -| ([xshift=0.2cm]critic_mlp2.east);
+
+        \end{tikzpicture}}
+    \end{center}
+
+\end{frame}
+
+\begin{frame}
+    \frametitle{TD3 Network Architecture}
+
+    \vspace{0.1cm}
+
+    {\small \textbf{Data Flow:} Images → Separate CNNs (512) ⊕ Kinematic (53) → State (565) → Actor/Critics}
+
+    {\small \textbf{Key Innovation:} Separate CNNs prevent gradient interference \cite{fujimoto2018addressing}}
+
+    {\small \textbf{Training:} LR=1e-3, batch=256, γ=0.99, τ=0.005, policy delay=2}
+\end{frame}
+
+\begin{frame}
+    \frametitle{TD3 Innovation: Clipped Double Q-Learning}
+
+    \textbf{Problem:} Single-critic methods (DDPG) suffer from \emph{overestimation bias}
+    \begin{itemize}
+        \item Function approximation errors cause Q-values to be overestimated
+        \item Actor exploits these overestimates $\rightarrow$ learns suboptimal policies
+    \end{itemize}
+
+    \vspace{0.3cm}
+
+    \textbf{TD3 Solution:} Twin Critics with minimum operator
+
+    \vspace{0.2cm}
+
     \begin{columns}
-        \begin{column}{0.5\textwidth}
-            \textbf{Actor Network} $\pi_\phi$:
+        \begin{column}{0.48\textwidth}
+            \textbf{DDPG (Single Critic):}
+            \begin{equation*}
+                y = r + \gamma Q_{\theta'}(s', \mu_{\phi'}(s'))
+            \end{equation*}
             \begin{itemize}
-                \item Shared CNN (512)
-                \item MLP: 512 $\rightarrow$ 256 $\rightarrow$ 128
-                \item Output: 2 actions (tanh)
-                \item LR: 1e-5 (CNN), 1e-3 (MLP)
-            \end{itemize}
-
-            \vspace{0.3cm}
-
-            \textbf{Twin Critics} $Q_{\theta_1}, Q_{\theta_2}$:
-            \begin{itemize}
-                \item Shared CNN (512)
-                \item State-action concatenation
-                \item MLP: 515 $\rightarrow$ 256 $\rightarrow$ 128 $\rightarrow$ 1
-                \item LR: 1e-4 (CNN), 1e-4 (MLP)
+                \item[\textcolor{red}{✗}] Overestimates Q-values
+                \item[\textcolor{red}{✗}] Unstable training
             \end{itemize}
         \end{column}
-
-        \begin{column}{0.5\textwidth}
-            \textbf{Hyperparameters:}
-            \begin{table}
-                \tiny
-                \begin{tabular}{|l|c|}
-                    \hline
-                    \textbf{Parameter} & \textbf{Value} \\
-                    \hline
-                    Batch size & 256 \\
-                    Buffer size & 97,000 \\
-                    $\gamma$ (discount) & 0.99 \\
-                    $\tau$ (soft update) & 0.005 \\
-                    Policy delay & 2 \\
-                    Policy noise & 0.2 \\
-                    Noise clip & 0.5 \\
-                    \hline
-                \end{tabular}
-            \end{table}
-
-            \vspace{0.2cm}
-            \textcolor{blue}{All values from original TD3 paper!}
+        \begin{column}{0.48\textwidth}
+            \textbf{TD3 (Twin Critics):}
+            \begin{equation*}
+                y = r + \gamma \min(Q_{\theta_1'}(s', \tilde{a}), Q_{\theta_2'}(s', \tilde{a}))
+            \end{equation*}
+            \begin{itemize}
+                \item[\textcolor{green}{✓}] Conservative estimate
+                \item[\textcolor{green}{✓}] Stable convergence
+            \end{itemize}
         \end{column}
     \end{columns}
+
+\end{frame}
+
+
+\begin{frame}
+    \frametitle{TD3 Innovation: Clipped Double Q-Learning}
+
+    \vspace{0.3cm}
+
+    \textbf{How it works:}
+    \begin{enumerate}
+        \item Two independent Q-networks estimate $Q_1(s,a)$ and $Q_2(s,a)$
+        \item Target computation uses \textbf{minimum}: $\min(Q_1', Q_2')$ (upper bound)
+        \item Both critics train toward the \textbf{same conservative target}
+        \item Actor maximizes $Q_1(s, \mu(s))$ for policy gradient
+    \end{enumerate}
+
+    \vspace{0.1cm}
+
+    {\small \textbf{Result:} Prevents value overestimation, improves policy quality \cite{fujimoto2018addressing}}
 \end{frame}
 
 \begin{frame}
@@ -93,11 +203,11 @@
 
     \textbf{Simulation Setup:}
     \begin{itemize}
-        \item CARLA 0.9.16, Town01
+        \item CARLA 0.9.16, Town01 with a 222m pre-defined route waypoint path with turn and 20 NPC vehicles
         %\item Synchronous mode (50 Hz, $\Delta t = 0.05s$)
         %\item Ego vehicle: Tesla Model 3
-        \item Traffic: 20 NPC vehicles (scenario 0)
-        \item Route: 222m pre-defined waypoint path with turn
+        %\item Traffic: 20 NPC vehicles (scenario 0)
+        %\item Route: 222m pre-defined waypoint path with turn
     \end{itemize}
 
     \vspace{0.1cm}

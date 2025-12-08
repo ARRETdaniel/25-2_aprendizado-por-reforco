@@ -15,7 +15,7 @@
     \textbf{2. Innovative ROS 2 + CARLA Integration}
     \begin{itemize}
         \item Standard geometry\_msgs/Twist (no custom packages)
-        \item 2.3 GB smaller Docker images, 15 min faster builds
+        \item 33\% smaller images with native rclpy integration
         \item Platform-agnostic design for sim-to-real transfer
     \end{itemize}
 
@@ -34,11 +34,11 @@
 
     \textbf{Validated System Components:}
     \begin{itemize}
-        \item $\checkmark$ TD3 algorithm implementation (clipped double-Q, delayed updates, target smoothing)
-        \item $\checkmark$ CNN feature extractor (NatureCNN with 512-dim output)
-        \item $\checkmark$ Multi-component reward function (safety/efficiency/comfort)
-        \item $\checkmark$ CARLA environment wrapper (Gymnasium v0.26+ API)
-        \item $\checkmark$ ROS 2 Humble native integration
+        \item TD3 algorithm implementation (clipped double-Q, delayed updates, target smoothing)
+        \item CNN feature extractor (NatureCNN with 512-dim output)
+        \item Multi-component reward function (safety/efficiency/comfort)
+        \item CARLA environment wrapper (Gymnasium v0.26+ API)
+        \item ROS 2 Humble native integration
     \end{itemize}
 
     \vspace{0.3cm}
@@ -158,10 +158,10 @@
 
     \textbf{Answer:}
     \begin{enumerate}
-        \item \textcolor{blue}{$\checkmark$ System Validated} - Complete TD3 + CARLA + ROS 2 framework functional
-        \item \textcolor{blue}{$\checkmark$ Innovation Demonstrated} - geometry\_msgs/Twist integration reduces complexity
+        \item \textcolor{blue}{System Validated} - Complete TD3 + CARLA + ROS 2 framework functional
+        \item \textcolor{blue}{Innovation Demonstrated} - geometry\_msgs/Twist integration reduces complexity
         \item \textcolor{orange}{$\cdots$ Training Incomplete} - 100K/1M timesteps (10\%) due to HPC constraints
-        \item \textcolor{green}{$\checkmark$ Foundation Established} - Baseline benchmarks + modular architecture for future research
+        \item \textcolor{green}{Foundation Established} - Baseline benchmarks + modular architecture for future research
     \end{enumerate}
 
     \vspace{0.3cm}

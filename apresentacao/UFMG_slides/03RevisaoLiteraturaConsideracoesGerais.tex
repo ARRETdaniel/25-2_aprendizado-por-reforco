@@ -18,6 +18,15 @@
         $\Rightarrow$ More stable value estimates before policy update
     \end{block}
 
+\end{frame}
+
+\begin{frame}
+    \frametitle{Twin Delayed DDPG (TD3) - Key Innovations}
+
+    \textbf{Three mechanisms to address DDPG's overestimation:}
+
+    \vspace{0.3cm}
+
     \begin{block}{3. Target Policy Smoothing}
         Add clipped noise to target action:
         $$\tilde{a} \leftarrow \pi_{\phi'}(s') + \epsilon, \quad \epsilon \sim \text{clip}(\mathcal{N}(0, \sigma), -c, c)$$
@@ -59,15 +68,15 @@
     \begin{table}
         \centering
         \small
-        \begin{tabular}{|l|l|c|}
+        \begin{tabular}{|l|c|l|}
             \hline
-            \textbf{Component} & \textbf{Purpose} & \textbf{Range} \\
+            \textbf{Component} & \textbf{Weight} & \textbf{Key Parameters} \\
             \hline
-            Efficiency & Maintain target speed & -10 to +10 \\
-            Lane Keeping & Minimize lateral/heading error & -20 to +5 \\
-            Comfort & Penalize jerk (smooth control) & -5 to 0 \\
-            Safety & Collision penalty & -500 (terminal) \\
-            Progress & Reward waypoint completion & 0 to +10 \\
+            Efficiency & 2.0 & Target: 30 km/h (8.33 m/s) \\
+            Lane Keeping & 2.0 & Tolerance: 0.5m lateral, 5.7° heading \\
+            Comfort & 1.0 & Jerk threshold: 5.0 m/s³ \\
+            Safety & 1.0 & Collision: -100, Offroad: -50 \\
+            Progress & 3.0 & Waypoint bonus: +1.0 \\
             \hline
         \end{tabular}
     \end{table}
@@ -76,9 +85,9 @@
 
     \textbf{Design Principles:}
     \begin{itemize}
-        \item Safety has highest weight (terminal penalty)
-        \item Encourage progress without reckless speeding
-        \item Promote human-like comfort
+        \item Balanced weights prevent reward domination
+        \item Strong progress incentive (weight: 3.0) encourages goal-directed behavior
+        \item Safety penalties severe but recoverable (TD3's pessimism provides inherent caution)
     \end{itemize}
 \end{frame}
 

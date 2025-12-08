@@ -65,7 +65,7 @@
             \hline
             \textbf{Metric} & \textbf{Exploration} & \textbf{Learning} & \textbf{Late Learn.} \\
             \hline
-            Episodes & 10 & 501 & 100 (final) \\
+            Episodes & 10 & 501 & (final) \\
             Avg Length (steps) & 60.4 & 180.0 ±317.5 & 656.0 ±468.8 \\
             Collision Rate (\%) & 0.0 & 0.4 & 1.0 \\
             Lane Invasion (\%) & 0.0 & 1.0 & 1.0 \\
@@ -81,7 +81,7 @@
         \item \textcolor{blue}{Successful system validation} - environment wrapper, reward function, TD3 implementation all working
         \item Episode lengths increased 10× (60 $\rightarrow$ 656 steps)
         \item High variance due to stochastic NPC traffic
-        \item \textcolor{orange}{Partial convergence} - requires recommended 1M timesteps
+        \item \textcolor{orange}{Partial convergence} - requires recommended 1M timesteps \cite{jaritz2018endtoendracedrivingdeep, elallid2023deepreinforcementlearningautonomous}
     \end{itemize}
 \end{frame}
 
@@ -97,11 +97,11 @@
 
     \textbf{Despite constraints, we achieved:}
     \begin{itemize}
-        \item $\checkmark$ \textbf{Complete system validation} - TD3 + CARLA + ROS 2 integration
-        \item $\checkmark$ \textbf{Baseline benchmarks established} - quantitative comparison metrics
-        \item $\checkmark$ \textbf{ROS 2 innovation} - geometry\_msgs/Twist integration (2.3 GB smaller Docker image)
-        \item $\checkmark$ \textbf{Reproducible framework} - open-source code, config management
-        \item $\checkmark$ \textbf{Initial policy learning} - episode lengths improved from 60 to 656 steps
+        \item \textbf{Complete system validation} - TD3 + CARLA + ROS 2 integration
+        \item \textbf{Baseline benchmarks established} - quantitative comparison metrics
+        \item \textbf{ROS 2 innovation} - geometry\_msgs/Twist integration (2.3 GB smaller Docker image)
+        \item \textbf{Reproducible framework} - open-source code, config management
+        \item \textbf{Initial policy learning} - episode lengths improved from 60 to 656 steps
     \end{itemize}
 
     \vspace{0.3cm}
@@ -112,27 +112,51 @@
 \begin{frame}
     \frametitle{ROS 2 CARLA Bridge Innovation}
 
-    \textbf{Traditional Approach:}
-    \begin{itemize}
-        \item Requires building carla\_msgs package
-        \item Custom message types (CarlaEgoVehicleControl)
-        \item Large Docker images, long build times
-        \item Simulation-specific code
-    \end{itemize}
+    \textbf{Challenge:} Traditional CARLA ROS 2 integration requires building custom carla\_msgs package
 
     \vspace{0.3cm}
 
-    \textbf{Our Approach:}
-    \begin{itemize}
-        \item $\checkmark$ Standard geometry\_msgs/Twist messages
-        \item $\checkmark$ CARLA Twist-to-Control node handles conversion
-        \item $\checkmark$ No custom package compilation
-        \item $\checkmark$ Reduced Docker image: 2.3 GB smaller
-        \item $\checkmark$ Build time: 15 minutes faster
-        \item $\checkmark$ Platform-agnostic (works with real robots!)
-    \end{itemize}
+    \begin{columns}[t]
+        \begin{column}{0.48\textwidth}
+            \textbf{Traditional Approach:}
+            \begin{itemize}
+                \item Custom carla\_msgs package
+                \item CarlaEgoVehicleControl
+                \item Build dependencies (colcon, etc.)
+                \item $\sim$2.8 GB larger image
+                \item Simulation-specific code
+            \end{itemize}
+        \end{column}
+        \begin{column}{0.48\textwidth}
+            \textbf{Our Approach:}
+            \begin{itemize}
+                \item \textcolor{blue}{geometry\_msgs/Twist}
+                \item Standard ROS 2 message
+                \item No compilation needed
+                \item Minimal dependencies
+                \item Platform-agnostic
+            \end{itemize}
+        \end{column}
+    \end{columns}
 
     \vspace{0.3cm}
 
-    \textcolor{blue}{\textbf{Contribution:}} Modular architecture enabling seamless sim-to-real transfer
+    \textbf{Architecture:}
+    \begin{center}
+        \small
+        Training Container → \textcolor{blue}{Twist msgs} → CARLA Twist-to-Control Node → CARLA API
+    \end{center}
+
+    \vspace{0.2cm}
+
+    %\textbf{Benefits:}
+    %\begin{itemize}
+     %   \item \textbf{Lightweight:} Training image 33\% smaller (native rclpy only)
+     %   \item \textbf{Standard:} Uses official CARLA ROS Bridge pattern
+     %   \item \textbf{Sim-to-Real:} Same Twist messages work with real robots
+    %\end{itemize}
+
+    \vspace{0.1cm}
+
+    %{\small \textcolor{blue}{\textbf{Contribution:}} Modular architecture with standard ROS 2 messages}
 \end{frame}
