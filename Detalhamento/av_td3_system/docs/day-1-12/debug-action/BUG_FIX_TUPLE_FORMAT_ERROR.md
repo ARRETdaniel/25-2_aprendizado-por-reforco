@@ -1,9 +1,9 @@
 # Bug Fix: TypeError in Debug Print (Tuple Format Error)
 ## Systematic Analysis and Resolution
 
-**Date:** December 1, 2025  
-**Error Type:** `TypeError: unsupported format string passed to tuple.__format__`  
-**Location:** `train_td3.py` line 793  
+**Date:** December 1, 2025
+**Error Type:** `TypeError: unsupported format string passed to tuple.__format__`
+**Location:** `train_td3.py` line 793
 **Status:** ✅ **FIXED**
 
 ---
@@ -102,11 +102,11 @@ if t % 100 == 0 and self.debug:
         efficiency_weighted = reward_breakdown.get('efficiency', (0,0,0))[2]
         lane_weighted = reward_breakdown.get('lane_keeping', (0,0,0))[2]
         progress_weighted = reward_breakdown.get('progress', (0,0,0))[2]
-        
+
         print(f"  Components: efficiency={efficiency_weighted:+.2f}, "
               f"lane_keeping={lane_weighted:+.2f}, "
               f"progress={progress_weighted:+.2f}")
-        
+
         # Check for reward order dependency bug signature
         # Use weighted values for correlation analysis
         if progress_weighted > 0 and lane_weighted < 0:
@@ -126,7 +126,7 @@ if t % 100 == 0 and self.debug:
    ```python
    # BEFORE (WRONG)
    efficiency = reward_breakdown.get('efficiency', 0)  # Returns tuple
-   
+
    # AFTER (CORRECT)
    efficiency_weighted = reward_breakdown.get('efficiency', (0,0,0))[2]  # Extract index 2
    ```
@@ -413,17 +413,17 @@ print(f"  Episode: step={self.episode_timesteps}, done={done}, truncated={trunca
 
 ### Impact:
 
-**Before fix:** Training crashed at step 100 (first debug print)  
+**Before fix:** Training crashed at step 100 (first debug print)
 **After fix:** Training can proceed, episode step count displayed correctly
 
 ---
 
 ## ✅ Resolution Status
 
-**Fixed:** ✅ December 1, 2025  
-**Tested:** ⏳ Pending next training run  
-**Impact:** Bug prevented debug diagnostics from working beyond step 100  
-**Severity:** Medium (blocking debug feature, not core training)  
+**Fixed:** ✅ December 1, 2025
+**Tested:** ⏳ Pending next training run
+**Impact:** Bug prevented debug diagnostics from working beyond step 100
+**Severity:** Medium (blocking debug feature, not core training)
 **Confidence:** HIGH - Fix is straightforward tuple indexing
 
 **Additional Fixes Applied:**

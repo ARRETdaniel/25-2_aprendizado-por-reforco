@@ -1,0 +1,200 @@
+\section{Conclusions \& Future Work}
+
+\begin{frame}
+    \frametitle{Main Contributions}
+
+    \textbf{1. Reproducible TD3 Framework for Autonomous Driving}
+    \begin{itemize}
+        \item Complete end-to-end visual navigation system
+        \item Open-source code with comprehensive documentation
+        \item Configuration management for hyperparameters
+    \end{itemize}
+
+    \vspace{0.3cm}
+
+    \textbf{2. Innovative ROS 2 + CARLA Integration}
+    \begin{itemize}
+        \item Standard geometry\_msgs/Twist (no custom packages)
+        \item 2.3 GB smaller Docker images, 15 min faster builds
+        \item Platform-agnostic design for sim-to-real transfer
+    \end{itemize}
+
+    \vspace{0.3cm}
+
+    \textbf{3. Quantitative Baseline Benchmarks}
+    \begin{itemize}
+        \item PID + Pure Pursuit: 50\% success, 2.787 collisions/km
+        \item Establishes comparison metrics for DRL agents
+        \item Highlights limitations of reactive control
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Technical Achievements \& Validation}
+
+    \textbf{Validated System Components:}
+    \begin{itemize}
+        \item $\checkmark$ TD3 algorithm implementation (clipped double-Q, delayed updates, target smoothing)
+        \item $\checkmark$ CNN feature extractor (NatureCNN with 512-dim output)
+        \item $\checkmark$ Multi-component reward function (safety/efficiency/comfort)
+        \item $\checkmark$ CARLA environment wrapper (Gymnasium v0.26+ API)
+        \item $\checkmark$ ROS 2 Humble native integration
+    \end{itemize}
+
+    \vspace{0.3cm}
+
+    \textbf{Initial TD3 Training Results (100K timesteps):}
+    \begin{itemize}
+        \item Episode lengths: 60 $\rightarrow$ 656 steps (10× improvement)
+        \item Collision rate: 0.4\% during learning phase
+        \item Demonstrates policy convergence beginning
+        \item High variance due to stochastic traffic dynamics
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Challenges Encountered}
+
+    \textbf{1. Environment Wrapper Development}
+    \begin{itemize}
+        \item CARLA Python API synchronous mode management
+        \item Sensor callback handling and episode termination logic
+        \item Gymnasium v0.26+ API migration (terminated/truncated separation)
+    \end{itemize}
+
+    \vspace{0.2cm}
+
+    \textbf{2. ROS 2 + CARLA Compatibility}
+    \begin{itemize}
+        \item Ubuntu 20.04 (Python 3.8) vs 22.04 (Python 3.10)
+        \item CARLA 0.9.16 + PyTorch + ROS 2 Humble dependencies
+        \item Solved with geometry\_msgs/Twist approach
+    \end{itemize}
+
+    \vspace{0.2cm}
+
+    \textbf{3. DRL Algorithm Debugging}
+    \begin{itemize}
+        \item Distinguishing bugs from expected stochastic behavior
+        \item Reward function engineering (balancing safety/progress/comfort)
+        \item Validation against reference implementations (Stable-Baselines3)
+    \end{itemize}
+
+    \vspace{0.2cm}
+
+    \textbf{4. Computational Constraints}
+    \begin{itemize}
+        \item Limited HPC access prevented 1M training completion
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Future Work Directions}
+
+    \textbf{Immediate Next Steps:}
+    \begin{itemize}
+        \item Complete 1M timestep training with HPC access
+        \item Evaluate TD3 vs baseline across full metrics
+        \item Analyze learned policy behavior and failure modes
+    \end{itemize}
+
+    \vspace{0.3cm}
+
+    \textbf{Multi-Scenario Generalization:}
+    \begin{itemize}
+        \item Test on Town02-07 (transfer learning)
+        \item Weather variations (rain, fog, night)
+        \item Traffic densities (50-100 NPCs)
+    \end{itemize}
+
+    \vspace{0.3cm}
+
+    \textbf{Advanced Algorithms:}
+    \begin{itemize}
+        \item Soft Actor-Critic (SAC) with entropy tuning
+        \item Safe RL methods (CPO, RECPO)
+        \item Comparative study: TD3 vs SAC vs PPO
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Future Work (continued)}
+
+    \textbf{Sim-to-Real Transfer:}
+    \begin{itemize}
+        \item Domain randomization in CARLA
+        \item Domain adaptation techniques
+        \item Fine-tuning with real-world data
+        \item Validation on physical vehicle platforms
+    \end{itemize}
+
+    \vspace{0.3cm}
+
+    \textbf{Multi-Sensor Fusion:}
+    \begin{itemize}
+        \item Integrate LiDAR point clouds
+        \item Semantic segmentation masks
+        \item Enhanced perception robustness
+    \end{itemize}
+
+    \vspace{0.3cm}
+
+    \textbf{Hierarchical Control:}
+    \begin{itemize}
+        \item High-level planning (route selection, lane changes)
+        \item Low-level control (steering, throttle)
+        \item Improved sample efficiency and interpretability \cite{chen2020interpretableendtoendurbanautonomous}
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Key Takeaways}
+
+    \begin{block}{Research Question}
+        Can TD3 address DDPG's overestimation bias for end-to-end visual autonomous navigation?
+    \end{block}
+
+    \vspace{0.3cm}
+
+    \textbf{Answer:}
+    \begin{enumerate}
+        \item \textcolor{blue}{$\checkmark$ System Validated} - Complete TD3 + CARLA + ROS 2 framework functional
+        \item \textcolor{blue}{$\checkmark$ Innovation Demonstrated} - geometry\_msgs/Twist integration reduces complexity
+        \item \textcolor{orange}{$\cdots$ Training Incomplete} - 100K/1M timesteps (10\%) due to HPC constraints
+        \item \textcolor{green}{$\checkmark$ Foundation Established} - Baseline benchmarks + modular architecture for future research
+    \end{enumerate}
+
+    \vspace{0.3cm}
+
+    \textbf{Impact:}
+    \begin{itemize}
+        \item Reproducible framework for DRL-based AV research
+        \item Standard ROS 2 integration pattern for CARLA
+        \item Quantitative metrics for classical vs learning-based approaches
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \begin{center}
+        \Huge{Thank You!}
+
+        \vspace{1cm}
+
+        \Large{Questions?}
+
+        \vspace{1cm}
+
+        \normalsize
+        \textbf{Daniel Terra Gomes}\\
+        Department of Computer Science\\
+        Federal University of Minas Gerais (UFMG)\\
+        \vspace{0.3cm}
+        \texttt{danielterragomes@dcc.ufmg.br}
+
+        \vspace{0.5cm}
+
+        \small
+        \textbf{Code Repository:} \texttt{github.com/ARRETdaniel/av\_td3\_system}\\
+        \textbf{Advisor:} Prof. Luiz Chaimowicz
+    \end{center}
+\end{frame}

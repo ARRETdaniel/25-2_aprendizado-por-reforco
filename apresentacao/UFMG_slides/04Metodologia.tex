@@ -1,0 +1,112 @@
+\section{System Architecture \& Implementation}
+
+\begin{frame}
+    \frametitle{Modular ROS 2 + CARLA Architecture}
+
+    % possible image here
+    \textbf{Key Innovation:} Native ROS 2 Humble + geometry\_msgs/Twist \cite{perezgil2021deep,carla2023documentation}
+    \begin{itemize}
+        \item Standard message types (no custom CARLA packages!)
+        \item Reduces Docker image by 2.3 GB
+        \item Seamless sim-to-real transition
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{CNN Feature Extractor Architecture}
+
+    \textbf{Visual Processing Pipeline:}
+    \begin{enumerate}
+        \item Input: 4 stacked grayscale frames (84×84) $\rightarrow$ temporal dynamics
+        \item NatureCNN architecture (from DQN paper):
+        \begin{itemize}
+            \item Conv1: 32 filters, 8×8 kernel, stride 4
+            \item Conv2: 64 filters, 4×4 kernel, stride 2
+            \item Conv3: 64 filters, 3×3 kernel, stride 1
+            \item Fully connected: 512 units
+        \end{itemize}
+        \item Output: 512-dim feature vector
+        \item Concatenate with kinematic features (53-dim)
+    \end{enumerate}
+
+    \vspace{0.3cm}
+
+    \textbf{Why this design?}
+    \begin{itemize}
+        \item Proven in Atari DQN \cite{mnih2015humanlevel}
+        \item Captures spatial hierarchies and motion patterns
+        \item Used by \cite{elallid2023deep} for intersection navigation
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{TD3 Network Architecture}
+
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \textbf{Actor Network} $\pi_\phi$:
+            \begin{itemize}
+                \item Shared CNN (512)
+                \item MLP: 512 $\rightarrow$ 256 $\rightarrow$ 128
+                \item Output: 2 actions (tanh)
+                \item LR: 1e-5 (CNN), 1e-3 (MLP)
+            \end{itemize}
+
+            \vspace{0.3cm}
+
+            \textbf{Twin Critics} $Q_{\theta_1}, Q_{\theta_2}$:
+            \begin{itemize}
+                \item Shared CNN (512)
+                \item State-action concatenation
+                \item MLP: 515 $\rightarrow$ 256 $\rightarrow$ 128 $\rightarrow$ 1
+                \item LR: 1e-4 (CNN), 1e-4 (MLP)
+            \end{itemize}
+        \end{column}
+
+        \begin{column}{0.5\textwidth}
+            \textbf{Hyperparameters:}
+            \begin{table}
+                \tiny
+                \begin{tabular}{|l|c|}
+                    \hline
+                    \textbf{Parameter} & \textbf{Value} \\
+                    \hline
+                    Batch size & 256 \\
+                    Buffer size & 97,000 \\
+                    $\gamma$ (discount) & 0.99 \\
+                    $\tau$ (soft update) & 0.005 \\
+                    Policy delay & 2 \\
+                    Policy noise & 0.2 \\
+                    Noise clip & 0.5 \\
+                    \hline
+                \end{tabular}
+            \end{table}
+
+            \vspace{0.2cm}
+            \textcolor{blue}{All values from original TD3 paper!}
+        \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}
+    \frametitle{CARLA Environment Configuration}
+
+    \textbf{Simulation Setup:}
+    \begin{itemize}
+        \item CARLA 0.9.16, Town01
+        %\item Synchronous mode (50 Hz, $\Delta t = 0.05s$)
+        %\item Ego vehicle: Tesla Model 3
+        \item Traffic: 20 NPC vehicles (scenario 0)
+        \item Route: 222m pre-defined waypoint path with turn
+    \end{itemize}
+
+    \vspace{0.1cm}
+
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.4\textwidth]{imagens/robotica-2025-2/town01.png}
+        \caption{CARLA Town01 testing environment}
+    \end{figure}
+
+    \small{\textbf{Episode Termination:} Collision, off-road, waypoint completion, or 1000 steps}
+\end{frame}

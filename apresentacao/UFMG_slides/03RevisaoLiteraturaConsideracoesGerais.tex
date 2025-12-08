@@ -1,0 +1,85 @@
+\section{TD3 Algorithm \& Problem Formulation}
+
+\begin{frame}
+    \frametitle{Twin Delayed DDPG (TD3) - Key Innovations}
+
+    \textbf{Three mechanisms to address DDPG's overestimation:}
+
+    \vspace{0.3cm}
+
+    \begin{block}{1. Clipped Double Q-Learning}
+        Use \textbf{minimum} of two Q-networks for target:
+        $$y = r + \gamma (1-d) \min_{i=1,2} Q_{\theta'_i}(s', \tilde{a})$$
+        Prevents optimistic bias from bootstrapping
+    \end{block}
+
+    \begin{block}{2. Delayed Policy Updates}
+        Update actor \& targets less frequently than critics (e.g., every 2 steps)\\
+        $\Rightarrow$ More stable value estimates before policy update
+    \end{block}
+
+    \begin{block}{3. Target Policy Smoothing}
+        Add clipped noise to target action:
+        $$\tilde{a} \leftarrow \pi_{\phi'}(s') + \epsilon, \quad \epsilon \sim \text{clip}(\mathcal{N}(0, \sigma), -c, c)$$
+        Regularizes value function, prevents overfitting
+    \end{block}
+\end{frame}
+
+\begin{frame}
+    \frametitle{MDP Formulation for Autonomous Driving}
+
+    \textbf{Markov Decision Process:} $(\mathcal{S}, \mathcal{A}, P, R, \gamma)$
+
+    \vspace{0.3cm}
+
+    \textbf{State Space} $\mathcal{S}$:
+    \begin{itemize}
+        \item \textbf{Visual:} 4 stacked front-camera frames (84×84 grayscale) $\rightarrow$ CNN features
+        \item \textbf{Kinematic:} velocity $v_t$, lateral deviation $d_t$, heading error $\phi_t$
+        \item \textbf{Goal:} next waypoints coordinates (relative to vehicle frame)
+    \end{itemize}
+
+    \vspace{0.3cm}
+
+    \textbf{Action Space} $\mathcal{A} \in \mathbb{R}^2$:
+    $$a_t = [\text{steering}, \text{throttle/brake}] \in [-1, 1]^2$$
+
+    \vspace{0.3cm}
+
+    \textbf{Discount Factor:} $\gamma = 0.99$ (long-term planning)
+\end{frame}
+
+\begin{frame}
+    \frametitle{Reward Function Engineering}
+
+    \textbf{Multi-component reward:} $R(s_t, a_t) = \sum w_i \cdot r_i(s_t, a_t)$
+
+    \vspace{0.3cm}
+
+    \begin{table}
+        \centering
+        \small
+        \begin{tabular}{|l|l|c|}
+            \hline
+            \textbf{Component} & \textbf{Purpose} & \textbf{Range} \\
+            \hline
+            Efficiency & Maintain target speed & -10 to +10 \\
+            Lane Keeping & Minimize lateral/heading error & -20 to +5 \\
+            Comfort & Penalize jerk (smooth control) & -5 to 0 \\
+            Safety & Collision penalty & -500 (terminal) \\
+            Progress & Reward waypoint completion & 0 to +10 \\
+            \hline
+        \end{tabular}
+    \end{table}
+
+    \vspace{0.3cm}
+
+    \textbf{Design Principles:}
+    \begin{itemize}
+        \item Safety has highest weight (terminal penalty)
+        \item Encourage progress without reckless speeding
+        \item Promote human-like comfort
+    \end{itemize}
+\end{frame}
+
+\end{frame}

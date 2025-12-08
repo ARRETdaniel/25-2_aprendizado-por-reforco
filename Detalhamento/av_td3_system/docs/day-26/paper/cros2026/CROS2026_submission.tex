@@ -1,0 +1,442 @@
+% CROS 2026 Submission - IEEE Conference Format
+% Double-blind review version - Author information removed
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+% Standard packages
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{ragged2e}
+\usepackage{tikz}
+\usetikzlibrary{shapes, arrows.meta, positioning}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{A Driver Assistance System Based on YOLO Object Detection: Development and Experimental Validation in the CARLA Simulator}
+
+% Author information removed for double-blind review
+% Will be added in camera-ready version after acceptance
+
+\maketitle
+
+\begin{abstract}
+This work presents the development and experimental validation of an integrated Advanced Driver-Assistance System (ADAS) based on the integration of computer vision algorithms (YOLOv8) and vehicle control in the CARLA autonomous driving simulator. The primary objective was to implement and validate this system's capability to detect and recognize traffic signs in real-time, providing visual feedback to the driver. The adopted methodology was based on a modular three-layer architecture: environmental perception using cameras and YOLOv8, motion planning with a finite state machine, and vehicle control via PID controllers (longitudinal) and pure pursuit (lateral). The system was evaluated in six independent simulations, covering three distinct weather conditions (clear sky, heavy rain at sunset, and heavy rain at noon), with a systematic collection of quantitative metrics. The results demonstrated real-time processing with an average of 17.13 FPS, an average detection time of 0.0594 s per frame, and 100\% detection accuracy for stop signs and vehicles in the specified test route. The average confidence in stop sign detection remained above 0.73 in all conditions, surpassing the established threshold of 0.70, with a coefficient of variation of 0.58\%, evidencing robustness even under adverse conditions. Statistical analysis (ANOVA) revealed a significant difference in detection time (p = 0.025), with no statistically significant impact on stop sign detection confidence (p = 0.651). The system completed all simulated routes without collisions and generated consistent visual feedback in 100\% of cases. Despite limitations such as the exclusively simulated environment and validation on a single route, the results empirically validate the hypothesis that object detection-based driver assistance systems can provide reliable real-time visual feedback on traffic signs, contributing to greater safety and reliability in autonomous driving.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Autonomous Vehicles, Object Detection, YOLO, ADAS, Vehicle Control, CARLA Simulator
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+Autonomous Vehicles (AV) represent a promising technological advancement poised to transform urban mobility and transportation safety \cite{eu_safer_roads, mundobrasil}. Their development is concurrent with the growth of the electric vehicle market, enabling significant investments in autonomous driving systems by companies like ZOOX, Waymo, and Lume Robotics \cite{sebo2024impact}. These systems, leveraging technologies such as computer vision and proximity sensors, promise enhanced efficiency, safety, and convenience in both public and private transport \cite{Center_of_Automotive_Management2022, review-auto, intro-pm}.
+
+A significant impact of widespread AV adoption would be a reduction in traffic accidents. Studies indicate that human error is responsible for over 90\% of traffic accidents, positioning AV technology as a promising solution to mitigate these incidents \cite{nhtsa_crash_causation}. AVs can take independent action or assist the driver in hazardous situations, with estimates suggesting that large-scale adoption could prevent up to 585,000 fatalities over a decade starting in 2035 \cite{lanctot_passenger_economy, okpono2024advanced}. Real-time object detection and scenario analysis are crucial for this, providing essential support to drivers and forming the backbone of safe autonomous navigation \cite{janai_computer_vision_av}.
+
+However, achieving fully autonomous driving (SAE Level 5) requires overcoming substantial technical challenges, especially in computer vision and object detection systems \cite{SAE}. The high costs and logistical hurdles associated with real-world vehicle testing have led researchers to increasingly rely on virtual simulations for developing and validating autonomous systems \cite{dosovitskiy2017carla, ahire2024simulating}. Simulators like CARLA provide a controlled, cost-effective environment for testing algorithms in diverse scenarios without physical risks, thereby democratizing AV research \cite{dosovitskiy2017carla}.
+
+The failure to accurately and timely detect traffic signs remains a significant challenge, often contributing to accidents. While Advanced Driver-Assistance Systems (ADAS) are an advancement, their effectiveness is contingent on the precision of their object detection algorithms, which can be unreliable under varied environmental conditions \cite{ahire2024simulating, sensors-yet, wachenfeld_release_autonomous_vehicles}.
+
+This context leads to our central research hypothesis: \textbf{A driver assistance system in autonomous cars can offer real-time visual feedback of traffic signs, making driving more reliable.} To validate this, we developed an autonomous system based on the YOLO computer vision algorithm, capable of detecting traffic signs and providing visual alerts to the driver, with validation performed in the CARLA simulation environment.
+
+The main objective of this work is to develop and validate an autonomous system for testing a computer vision solution that detects and recognizes traffic signs in real-time for AVs, using a YOLO-series algorithm and the CARLA simulation environment. The specific objectives are:
+\begin{enumerate}
+    \item To implement a complete three-layer autonomous driving system (perception, planning, and control) capable of navigating a predefined urban route.
+    \item To develop a real-time object detection module using YOLO to identify stop signs with a processing rate greater than 10 FPS and provide visual feedback.
+    \item To implement a behavioral response system that enables the vehicle to react to detected stop signs by decelerating or stopping.
+    \item To establish a real-time visualization interface for monitoring detections, system performance metrics (FPS, latency), and vehicle status.
+    \item To experimentally validate the system in CARLA, collecting quantitative metrics on detection rates, processing time, and the ability to complete the route without collisions.
+\end{enumerate}
+
+\section{Background and Related Work}
+
+The development of AVs is underpinned by key concepts and technologies, including standardized automation levels, a hierarchical task structure, and the use of simulation environments. This section reviews these foundational elements and contextualizes our work within the existing scientific literature.
+
+\subsection{SAE Levels of Driving Automation}
+The Society of Automotive Engineers (SAE) J3016 standard provides a widely adopted taxonomy for classifying vehicle automation into six levels (0-5), based on which parts of the Dynamic Driving Task (DDT) are performed by the system \cite{SAE}.
+\begin{itemize}
+    \item \textbf{Levels 0-2 (Driver Support):} Range from no automation to partial automation where the driver must constantly supervise (e.g., lane-keeping assist). These are broadly categorized as ADAS.
+    \item \textbf{Levels 3-5 (Automated Driving):} Range from conditional automation, where the driver must be ready to intervene, to full automation, where the system handles all driving tasks under all conditions.
+\end{itemize}
+This work focuses on developing a system that functions as an ADAS, aligning with SAE Levels 1-2, by providing real-time visual feedback of traffic signs to enhance driver awareness and safety, while also demonstrating a complete autonomous pipeline (perception, planning, control) that serves as a foundation for higher levels of automation.
+
+\subsection{The Hierarchical Task of Driving}
+The complex task of autonomous driving is typically decomposed into a three-layer hierarchical architecture: Perception, Planning, and Control \cite{sensors-yet}.
+\begin{itemize}
+    \item \textbf{Perception:} Interprets the environment using data from sensors like cameras, LiDAR, and RADAR to detect and classify static elements (e.g., traffic signs, lane markings) and dynamic elements (e.g., vehicles, pedestrians).
+    \item \textbf{Planning:} Determines the vehicle's actions to navigate towards its goal. It is often subdivided into a mission planner (high-level route), a behavioral planner (tactical maneuvers like lane changes), and a local planner (generating precise, collision-free trajectories).
+    \item \textbf{Control:} Executes the planned trajectories by sending commands to the vehicle's actuators (steering, throttle, brake). This involves longitudinal control (speed) and lateral control (steering).
+\end{itemize}
+Our proposed system implements this full hierarchy, using a camera and the YOLO algorithm for perception, a three-level planner for decision-making, and PID/Pure Pursuit controllers for vehicle control.
+
+\subsection{Simulation in AV Development}
+Simulation is a cornerstone of AV research, providing a safe, scalable, and cost-effective platform for development and validation \cite{dosovitskiy2017carla}. Simulators like CARLA (Car Learning to Act) offer high-fidelity urban environments, configurable sensors, and robust APIs for programmatic control, making them ideal for testing complex perception and control algorithms under a wide range of reproducible conditions, including adverse weather \cite{dosovitskiy2017carla}.
+
+\subsection{Related Studies on YOLO in AV Simulation}
+The integration of YOLO with simulators for AV applications is an active area of research. Several studies have developed systems using YOLOv4 in CARLA for object detection and distance estimation, demonstrating the viability of this approach \cite{andrade_object_detection_distance}. Other work has created systems for detecting speed limit signs and providing driver feedback, similar in spirit to our work but without the integrated autonomous control component \cite{sanchez_speed_sign_detection}.
+
+Other studies have focused on improving YOLO's robustness for traffic sign detection, often using large-scale benchmark datasets. Research has analyzed the degradation of YOLO's performance in adverse weather and proposed using simulators like CARLA to generate synthetic data for more robust training \cite{kim2023challenges}. Architectural improvements to YOLO have focused on enhancing the detection of small objects like traffic signs by modifying network layers and using optimized distance metrics on the TT100K benchmark dataset \cite{Wu_2022, s23167145}.
+
+\begin{table}[t]
+\centering
+\caption{Methodological comparison of related works.}
+\label{tab:related_work_comparison}
+\footnotesize
+\begin{tabular}{@{}p{1.5cm}p{2.2cm}p{1.8cm}p{1.3cm}@{}}
+\toprule
+\textbf{Study} & \textbf{Main Goal} & \textbf{Algorithm(s)} & \textbf{Env.} \\ 
+\midrule
+\cite{Wu_2022} & Improve small object detection speed & YOLOv4 & TT100K Dataset \\
+\cite{s23167145} & Improve accuracy & YOLOv7 & TT100K Dataset \\
+\cite{sanchez_speed_sign_detection} & Speed sign detection \& driver feedback & YOLOv3 & CARLA Simulator \\
+\textbf{This Work} & \textbf{End-to-end system validation} & \textbf{YOLOv8, PID, Pure Pursuit} & \textbf{CARLA Simulator} \\ 
+\bottomrule
+\end{tabular}
+\end{table}
+
+As summarized in Table \ref{tab:related_work_comparison}, while these works address specific components of the autonomous driving task (e.g., perception accuracy, driver feedback), a significant gap exists in the literature regarding the end-to-end integration of a modern object detection system (like YOLOv8) with a complete, three-layer vehicle control architecture, validated systematically within a simulator. Our work aims to fill this gap by proposing a holistic solution that combines real-time perception, behavioral planning based on detections, and autonomous vehicle control.
+
+\section{System Architecture and Methodology}
+
+Our system is designed with a hierarchical three-layer architecture—Perception, Planning, and Control—that mirrors the functional decomposition of the autonomous driving task. This modular design allows for independent development and validation of each component while ensuring seamless integration. Figure \ref{fig:system_architecture} illustrates the overall architecture and data flow.
+
+\begin{figure}[t]
+    \centering
+    \begin{tikzpicture}[
+        node distance=0.4cm,
+        block/.style={rectangle, draw, text width=1.1cm, align=center, font=\sffamily\tiny, minimum height=1.5cm, inner ysep=2pt},
+        long_block/.style={rectangle, draw, text width=1.5cm, align=center, font=\sffamily\tiny, minimum height=3cm, inner ysep=2pt},
+        feedback_block/.style={rectangle, rounded corners, draw, text width=1.6cm, align=center, font=\sffamily\tiny, fill=green!20, minimum height=0.6cm, inner ysep=2pt},
+        layer_box/.style={rectangle, fill=blue!20, text width=0.6cm, align=center, font=\sffamily\tiny, anchor=north, yshift=5pt},
+        arrow/.style={->, >=Latex, thin, shorten >=1pt, shorten <=1pt}
+    ]
+    \node[long_block, fill=blue!30] (simulator_output) {Simulator \\ Camera \\ Output};
+    \node[layer_box] at (simulator_output.north) {Layer 1};
+    \node[block, rounded corners, fill=blue!30, right=of simulator_output] (environmental_perception) {Environmental Perception};
+    \node[layer_box] at (environmental_perception.north) {Layer 1};
+    \node[block, rounded corners, fill=orange!30, right=of environmental_perception] (motion_planning) {Motion Planning};
+    \node[layer_box] at (motion_planning.north) {Layer 2};
+    \node[block, rounded corners, fill=violet!30, right=of motion_planning] (controller) {Controller};
+    \node[layer_box] at (controller.north) {Layer 3};
+    \node[long_block, fill=violet!30, right=of controller] (simulator_actuation) {Simulator Actuation};
+    \node[layer_box] at (simulator_actuation.north) {Layer 3};
+    \node[feedback_block, below=of environmental_perception, yshift=0.2cm] (driver_assistance) {Driver Assistance};
+    \node[above=0mm of driver_assistance, font=\sffamily\tiny, anchor=south, yshift=-1mm] {Feedback};
+    \draw[arrow] (simulator_output) -- (environmental_perception);
+    \draw[arrow] (environmental_perception) -- (motion_planning);
+    \draw[arrow] (motion_planning) -- (controller);
+    \draw[arrow] (controller) -- (simulator_actuation);
+    \draw[arrow] (environmental_perception.south) -- (driver_assistance.north);
+    \end{tikzpicture}
+    \caption{Proposed three-layer software architecture for the autonomous driving system.}
+    \label{fig:system_architecture}
+\end{figure}
+
+\subsection{Layer 1: Perception}
+The perception layer is responsible for interpreting the vehicle's environment. It uses a virtual RGB camera in CARLA as its primary sensor. The raw image data is processed by the YOLOv8 object detection algorithm to identify and classify relevant objects, such as other vehicles and traffic signs. In addition to providing data for the planning layer, this layer generates real-time visual feedback for the driver, including bounding boxes around detected objects, classification labels, and confidence scores, directly addressing our primary hypothesis.
+
+\subsection{Layer 2: Planning}
+The planning layer receives structured data from the perception layer and is responsible for generating safe and feasible trajectories. It follows a hierarchical structure:
+\begin{itemize}
+    \item \textbf{Mission Planner:} Defines the high-level route using a predefined sequence of waypoints, each with a target velocity.
+    \item \textbf{Behavioral Planner:} Uses a Finite State Machine (FSM) to make tactical decisions based on environmental context. The FSM transitions between states like \texttt{FOLLOW\_LANE}, \texttt{DECELERATE\_TO\_STOP}, and \texttt{STAY\_STOPPED} in response to detected traffic signs (e.g., stop signs).
+    \item \textbf{Local Planner:} Generates smooth, kinematically feasible, and collision-free paths to execute the behavioral planner's decisions. It uses a Conformal Lattice Planner to create multiple candidate paths and selects the optimal one based on safety, comfort, and efficiency criteria.
+\end{itemize}
+
+\subsection{Layer 3: Control}
+The control layer executes the trajectory generated by the local planner by sending precise commands to the vehicle's actuators in the CARLA simulator. It is composed of two independent controllers based on the kinematic bicycle model:
+\begin{itemize}
+    \item \textbf{Longitudinal Control:} A Proportional-Integral-Derivative (PID) controller manages the vehicle's speed. It calculates the error between the current speed and the target speed from the trajectory's velocity profile and applies throttle or brake commands to minimize this error. The PID control law is given by:
+    \begin{equation}
+        u(t) = K_p e(t) + K_i \int_{0}^{t} e(\tau)d\tau + K_d\frac{de(t)}{dt}
+    \end{equation}
+    where $u(t)$ is the control signal, $e(t)$ is the velocity error, and $K_p, K_i, K_d$ are the proportional, integral, and derivative gains, respectively.
+    \item \textbf{Lateral Control:} A Pure Pursuit controller manages steering. It identifies a target point on the reference path ahead of the vehicle (at a "lookahead distance") and calculates the steering angle required to navigate the vehicle along a circular arc to intercept that point. The steering angle $\delta$ is calculated as:
+    \begin{equation}
+       \delta(t) = \arctan{\left(\frac{2L\sin{\alpha(t)}}{l_d}\right)}
+    \end{equation}
+    where $L$ is the vehicle's wheelbase, $\alpha(t)$ is the angle to the lookahead point, and $l_d$ is the lookahead distance, which is adapted based on the vehicle's speed.
+\end{itemize}
+
+\section{Implementation Details}
+
+The system was implemented using Python, leveraging the CARLA simulator (version 0.8.4) for the environment and vehicle dynamics. The implementation follows the modular architecture described in Section III.
+
+\subsection{Technical Environment}
+A key technical challenge was the incompatibility between the CARLA simulator client, which requires Python 3.6, and modern deep learning libraries like PyTorch (for YOLOv8), which require Python 3.8+. To overcome this, we designed a distributed client-server architecture (Figure \ref{fig:distributed_architecture_impl}).
+
+\begin{figure}[t]
+    \centering
+    \begin{tikzpicture}[
+        node distance=2cm,
+        block/.style={rectangle, rounded corners, draw, text width=3.2cm, align=left, font=\sffamily\small, minimum height=2.5cm, inner ysep=5pt},
+        client_block/.style={block, fill=yellow!30},
+        server_block/.style={block, fill=violet!20},
+        arrow/.style={<->, >=Latex, thick, font=\sffamily\bfseries}
+    ]
+    \node[client_block] (client) at (0,0) {\centering\textbf{CARLA Client (Python 3.6)}\par\vspace{2mm}\raggedright \textbullet~CARLA Control \\ \textbullet~Planning \\ \textbullet~Control};
+    \node[server_block, right=of client] (server) {\centering\textbf{Detection Server (Python 3.12)}\par\vspace{2mm}\raggedright \textbullet~YOLOv8 \\ \textbullet~GPU-CUDA \\ \textbullet~Driver Assist. Logic};
+    \draw[arrow] (client) -- (server) node[midway, above] {SOCKET};
+    \end{tikzpicture}
+    \caption{Distributed client-server architecture to overcome Python version incompatibility.}
+    \label{fig:distributed_architecture_impl}
+\end{figure}
+
+\begin{itemize}
+    \item \textbf{Client (Python 3.6):} Runs within the CARLA environment. It is responsible for vehicle control, planning, and capturing camera frames. It serializes and sends frames to the server via a TCP/IP socket.
+    \item \textbf{Server (Python 3.12):} Runs in a separate Conda environment. It receives frames, performs object detection using YOLOv8 with GPU acceleration (NVIDIA RTX 2060/4060), and sends the detection results (bounding boxes, classes, confidence scores) back to the client.
+\end{itemize}
+
+Communication was optimized using the MessagePack binary serialization protocol to minimize latency. To ensure real-time performance and prevent the main control loop from being blocked by the detection process, an asynchronous, multi-threaded approach was implemented.
+
+\subsection{Module Implementation}
+\begin{itemize}
+    \item \textbf{Perception Module:} The YOLOv8s (small) model was used, providing an excellent balance of speed and accuracy. The model was pre-trained on the COCO dataset, which includes relevant classes like 'car' and 'stop sign'. The detection server was configured to run on a GPU, achieving significant performance gains. Visual feedback, including bounding boxes and persistent warnings, was rendered onto the camera feed using OpenCV on the client side.
+    \item \textbf{Planning Module:} The behavioral planner was implemented as a simple FSM. It transitions between states based on vehicle speed and proximity to virtual fences representing stop signs, whose locations were pre-loaded from a configuration file. The local planner generates seven candidate paths using parametric spirals and selects the best collision-free path. Collision checking is performed against static obstacles (parked cars) defined in a configuration file.
+    \item \textbf{Control Module:} Both the PID longitudinal controller and the Pure Pursuit lateral controller were implemented. The PID gains ($K_p=0.5, K_i=0.3, K_d=0.13$) and the Pure Pursuit lookahead distance (2.0 meters, adapted with speed) were tuned empirically within the CARLA simulation to achieve stable and responsive vehicle behavior.
+\end{itemize}
+
+\subsection{Experimental Setup}
+Validation was performed in the CARLA simulator (version 0.8.4) on its publicly available Town01 map. Six independent simulation runs were conducted under three different weather conditions: \textit{Clear Noon}, \textit{Hard Rain Sunset}, and \textit{Hard Rain Noon}. A comprehensive metrics collection system was developed to log data on detection time, FPS, detection confidence, and vehicle dynamics. The route was designed to test the system's core functionalities, including straight sections, a 90-degree turn, and a mandatory stop sign interaction.
+
+\section{Results and Discussion}
+
+The experimental validation yielded robust quantitative and qualitative data, allowing for a thorough assessment of the system's performance. The system successfully completed the entire predefined trajectory in all six simulation runs across all weather conditions, without any collisions.
+
+\subsection{Perception System Performance}
+The distributed architecture proved highly effective. The system achieved an average processing rate of \textbf{17.13 FPS}, significantly exceeding the target of 10 FPS. The average detection time per frame was \textbf{59.4 ms}. While the processing time was statistically significantly affected by weather conditions (ANOVA, p=0.025), with performance dropping to 14.41 FPS in heavy noon rain, the system remained well within real-time operational limits.
+
+Crucially, the confidence of the detections remained remarkably stable. As shown in Table \ref{tab:results_by_weather}, the average confidence for stop sign detection was \textbf{0.738}, with a coefficient of variation of only \textbf{0.58\%} across all weather conditions. An ANOVA test confirmed that there was no statistically significant difference in stop sign detection confidence between the weather conditions (p=0.651), demonstrating the system's reliability. On the predefined experimental route, the system achieved a \textbf{100\% detection rate} for the target objects (all stop signs and vehicles) present in the trajectory.
+
+\begin{table}[t]
+\centering
+\caption{Key performance metrics across different weather conditions.}
+\label{tab:results_by_weather}
+\footnotesize
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Metric} & \textbf{Clear} & \textbf{Rain} & \textbf{Rain} & \textbf{Avg.} \\
+ & \textbf{Noon} & \textbf{Sunset} & \textbf{Noon} &  \\ 
+\midrule
+Avg. FPS & 17.74 & 19.23 & 14.41 & \textbf{17.13} \\
+Avg. Det. Time (s) & 0.0566 & 0.0521 & 0.0694 & \textbf{0.0594} \\
+Avg. Stop Sign Conf. & 0.734 & 0.743 & 0.737 & \textbf{0.738} \\ 
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Planning and Control Performance}
+The planning and control modules performed flawlessly. The behavioral planner's FSM correctly transitioned states upon approaching the stop sign in every run. Figure \ref{fig:velocity_profile} shows a representative velocity profile, clearly illustrating the deceleration for the stop sign, the brief period of being stationary, and the subsequent re-acceleration.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\columnwidth]{Figures/forward_speed.png}
+    \caption{Vehicle's forward speed profile during a simulation run, showing the stop maneuver.}
+    \label{fig:velocity_profile}
+\end{figure}
+
+The lateral control was also successful. The vehicle maintained its lane on straight sections and executed the 90-degree turn smoothly. The local planner successfully generated collision-free paths around the parked vehicle obstacle in all simulations.
+
+\subsection{Discussion}
+The results provide strong empirical validation for our hypothesis. The system consistently demonstrated its ability to: (1) detect traffic signs in real-time (17.13 FPS average), (2) provide reliable feedback (0.738 confidence, stable across conditions), and (3) enable reliable driving (100\% route completion without collisions).
+
+It is important to note that the 100\% detection rate is a system validation metric specific to our controlled experimental route, confirming the system's ability to complete its intended task. This focus on end-to-end system validation differentiates our work from studies that focus purely on perception-level optimization.
+
+While previous work has focused on optimizing the accuracy of perception modules \cite{Wu_2022, s23167145}, achieving high mAP scores on benchmark datasets like TT100K, our contribution is complementary: we demonstrate that a modern, off-the-shelf detector like YOLOv8 is sufficiently robust for real-time integration into a full Perception-Planning-Control loop, maintaining stable detection confidence even under adverse simulated weather.
+
+One limitation observed was the occurrence of some false positive detections with high confidence. This highlights a known challenge in deep learning models and suggests that for safety-critical applications, further model fine-tuning or supplementary validation logic would be necessary.
+
+\section{Conclusion and Future Work}
+
+This work successfully developed and validated an integrated driver assistance system based on YOLOv8 object detection within the CARLA simulator. We empirically confirmed our hypothesis that such a system can provide reliable, real-time visual feedback of traffic signs, contributing to safer and more dependable driving.
+
+The project yielded several key contributions: a modular three-layer autonomous driving architecture, a distributed processing solution to overcome software compatibility challenges, and a comprehensive experimental protocol for quantitative validation. The results demonstrated that the system met or exceeded all predefined performance criteria, operating in real-time (avg. 17.13 FPS), achieving 100\% accuracy in detecting stop signs and vehicles on its path, and showing remarkable robustness in detection confidence across varied weather conditions.
+
+Despite these successes, the study has limitations, primarily its reliance on a simulated environment and validation on a single predefined route. Future work should focus on bridging the gap between simulation and the real world by migrating to shared memory communication to reduce latency, expanding object detection to a wider variety of traffic signs and road users, and integrating data from complementary sensors such as LiDAR and RADAR for robust sensor fusion.
+
+\section*{Acknowledgment}
+
+This research was conducted as part of an undergraduate research project. The complete source code, experimental data, and configuration files are openly available at: \url{https://github.com/ARRETdaniel/CARLA_simulator_YOLO-openCV_realTime_objectDetection_for_autonomousVehicles}.
+
+% AI Disclosure as per CROS 2026 guidelines
+The abstract of this paper was refined for clarity and conciseness using GitHub Copilot (an AI-powered code completion tool). No AI-generated content was used in the methodology, results, or conclusions sections.
+
+\bibliographystyle{IEEEtran}
+\begin{filecontents*}{references.bib}
+@book{castro2009human,
+  title={Human Factors of Visual and Cognitive Performance in Driving},
+  editor={Castro, Candida},
+  year={2009},
+  publisher={CRC Press},
+  address={Boca Raton, FL}
+}
+@article{kato2015open,
+  title={An open approach to autonomous vehicles},
+  author={Kato, Shinpei and Takeuchi, Eijiro and Ishiguro, Yoshio and Ninomiya, Yoshiki and Takeda, Kazuya and Hamada, Tsuyoshi},
+  journal={IEEE Micro},
+  volume={35},
+  number={6},
+  pages={60--68},
+  year={2015},
+  publisher={IEEE}
+}
+@inproceedings{dosovitskiy2017carla,
+  author={Dosovitskiy, Alexey and Ros, German and Codevilla, Felipe and Lopez, Antonio and Koltun, Vladlen},
+  title={{CARLA: An open urban driving simulator}},
+  booktitle={Proceedings of the Conference on Robot Learning},
+  pages={1--16},
+  year={2017},
+  organization={PMLR}
+}
+@article{Wu_2022,
+    author = {Xiru Wu and Haozhe Cao},
+    title = {Traffic Sign Detection Algorithm Based On Improved YOLOv4},
+    journal = {Journal of Physics: Conference Series},
+    volume = {2258},
+    number = {1},
+    pages = {012009},
+    year = {2022},
+    publisher = {IOP Publishing}
+}
+@misc{wachenfeld_release_autonomous_vehicles,
+  author={Wachenfeld, W. and Winner, H.},
+  title={{The Release of Autonomous Vehicles}},
+  booktitle={Autonomous Driving: Technical, Legal and Social Aspects},
+  pages={425--449},
+  year={2016},
+  publisher={Springer}
+}
+@article{ahire2024simulating,
+  author={Ahire, Prashant and Naidu, SMM and Varpe, Sandeep and Nadarge, Sakshi and Patil, Anushree},
+  title={Simulating Vehicle Driving Using CARLA},
+  journal={Journal of Electrical Systems},
+  volume={20},
+  number={10s},
+  pages={44--52},
+  year={2024}
+}
+@article{janai_computer_vision_av,
+    author = {Janai, Joel and Güney, Fatma and Behl, Aseem and Geiger, Andreas},
+    title = {Computer Vision for Autonomous Vehicles: Problems, Datasets and State of the Art},
+    journal = {Foundations and Trends in Computer Graphics and Vision},
+    volume = {12},
+    number = {1–3},
+    pages = {1–308},
+    year = {2020},
+    publisher = {Now Publishers Inc.}
+}
+@misc{lanctot_passenger_economy,
+  author={Roger Lanctot},
+  title={{Accelerating the Future: The Economic Impact of the Emerging Passenger Economy}},
+  year={2017},
+  publisher={Strategy Analytics}
+}
+@misc{nhtsa_crash_causation,
+  author={{National Highway Traffic Safety Administration}},
+  title={Critical Reasons for Crashes Investigated in the National Motor Vehicle Crash Causation Survey},
+  year={2018}
+}
+@article{okpono2024advanced,
+  author={Okpono, Joseph and Asedegbega, Jerome and Ogieva, Mathew and Sanyaolu, Temitope Oluwafunmike},
+  title={Advanced driver assistance systems road accident data insights: Uncovering trends and risk factors},
+  journal={The International Journal of Engineering Research},
+  volume={11},
+  number={9},
+  pages={a141--a152},
+  year={2024}
+}
+@misc{eu_safer_roads,
+  author={{European Commission, Directorate-General for Mobility and Transport}},
+  title={{Safer roads for all: EU Road Safety Policy Framework 2021-2030}},
+  year={2021}
+}
+@article{SAE,
+    title = {Taxonomy and Definitions for Terms Related to Driving Automation Systems for On-Road Motor Vehicles},
+    author={{SAE International}},
+    journal = {SAE J3016\_202104},
+    year = {2021},
+    publisher = {SAE International}
+}
+@misc{Center_of_Automotive_Management2022,
+  author={Bratzel, Stefan and {Center of Automotive Management}},
+  title={{Die Zukunft der Mobilität}},
+  year={2022}
+}
+@article{review-auto,
+    title = {A Review on Autonomous Vehicles: Progress, Methods and Challenges},
+    author  = {Darsh Parekh and Nishi Poddar and Manisha Chahal},
+    year = {2022},
+    journal = {Electronics},
+    publisher = {MDPI},
+    volume = {11},
+    number = {14},
+    pages = {2162}
+}
+@misc{intro-pm,
+    title = {Global fleet of autonomous vehicles may emit more carbon than Argentina},
+    author = {Dreibelbis, Emily},
+    howpublished = {PCMag},
+    year = {2023}
+}
+@article{mundobrasil,
+  author={Othman, Kareem},
+  title={Multidimension Analysis of Autonomous Vehicles: The Future of Mobility},
+  journal={Civil Engineering Journal},
+  year={2021},
+  volume={7},
+  number={7},
+  pages={71--93}
+}
+@inproceedings{sebo2024impact,
+  title={{Impact of electric vehicle market growth on automotive industry transformation}},
+  author={Sebo, Damir},
+  booktitle={Economic and Social Development},
+  year={2024}
+}
+@article{sensors-yet,
+  title={Level-5 autonomous driving—are we there yet? A review of research literature},
+  author={Khan, Manzoor Ahmed and Sayed, Hesham El and Malik, Sumbal and Zia, Talha and Khan, Jalal and Alkaabi, Najla and Ignatious, Henry},
+  journal={ACM Computing Surveys},
+  year={2022},
+  publisher={ACM}
+}
+@mastersthesis{sanchez_speed_sign_detection,
+  author={Sánchez Juanola, Martí},
+  title={{Speed Traffic Sign Detection on the CARLA Simulator Using YOLO}},
+  school={Universitat Pompeu Fabra},
+  year={2019}
+}
+@misc{andrade_object_detection_distance,
+  author={Andrade, Guilherme Guy de},
+  title={{Uma Proposta para Detecção de Objetos e Estimação de Distância em um Simulador de Veículos Autônomos}},
+  year={2022},
+  howpublished={Trabalho de Conclusão de Curso – Universidade de Brasília}
+}
+@article{s23167145,
+    author = {Li, Songjiang and Wang, Shilong and Wang, Peng},
+    title = {A Small Object Detection Algorithm for Traffic Signs Based on Improved YOLOv7},
+    journal = {Sensors},
+    volume = {23},
+    number = {16},
+    year = {2023}
+}
+@article{kim2023challenges,
+  author = {Kim, Taesoo and Jeon, Hyeonjae and Lim, Yongseob},
+  title = {Challenges of YOLO Series for Object Detection in Extremely Heavy Rain},
+  journal = {arXiv preprint arXiv:2312.07976},
+  year = {2023}
+}
+\end{filecontents*}
+\bibliography{references}
+
+\end{document}

@@ -1,0 +1,138 @@
+\section{Experimental Results}
+
+\begin{frame}
+    \frametitle{Baseline Controller Performance}
+
+    \textbf{Classical PID + Pure Pursuit} (6 episodes, 20 NPCs):
+
+    \begin{table}
+        \centering
+        \small
+        \begin{tabular}{|l|c|c|}
+            \hline
+            \textbf{Metric} & \textbf{Mean} & \textbf{Std Dev} \\
+            \hline
+            \multicolumn{3}{|c|}{\textbf{Safety}} \\
+            \hline
+            Success Rate (\%) & 50.0 & -- \\
+            Collisions/km & 2.787 & 2.850 \\
+            Min TTC (s) & 0.25 & -- \\
+            \hline
+            \multicolumn{3}{|c|}{\textbf{Efficiency}} \\
+            \hline
+            Avg Speed (km/h) & 24.62 & 4.92 \\
+            Completion Time (s) & 16.5 & 4.9 \\
+            \hline
+            \multicolumn{3}{|c|}{\textbf{Comfort}} \\
+            \hline
+            Avg Jerk (m/s³) & 17.779 & 1.111 \\
+            Avg Lateral Accel (m/s²) & 0.105 & 0.105 \\
+            \hline
+        \end{tabular}
+    \end{table}
+
+    \vspace{0.2cm}
+
+    \textcolor{red}{\textbf{Key Findings:}} High collision rate, abrupt acceleration (high jerk)
+\end{frame}
+
+\begin{frame}
+    \frametitle{Baseline Trajectory Visualization}
+
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.8\textwidth]{imagens/trajectory_map.png}
+        \caption{PID + Pure Pursuit trajectory: reactive behavior, collision in dense traffic}
+    \end{figure}
+
+    \textbf{Observations:}
+    \begin{itemize}
+        \item Follows waypoints accurately in sparse traffic
+        \item Reactive (not predictive) $\Rightarrow$ collisions in congested areas
+        \item Lacks adaptation to dynamic NPC behavior
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{TD3 Training Progress (100K Timesteps)}
+
+    \textbf{Training Phases:}
+
+    \begin{table}
+        \centering
+        \small
+        \begin{tabular}{|l|c|c|c|}
+            \hline
+            \textbf{Metric} & \textbf{Exploration} & \textbf{Learning} & \textbf{Late Learn.} \\
+            \hline
+            Episodes & 10 & 501 & 100 (final) \\
+            Avg Length (steps) & 60.4 & 180.0 ±317.5 & 656.0 ±468.8 \\
+            Collision Rate (\%) & 0.0 & 0.4 & 1.0 \\
+            Lane Invasion (\%) & 0.0 & 1.0 & 1.0 \\
+            Mean Reward & 74.10 ±39.62 & -3.58 ±197.05 & -322 ±230 \\
+            \hline
+        \end{tabular}
+    \end{table}
+
+    \vspace{0.3cm}
+
+    \textbf{Key Insights:}
+    \begin{itemize}
+        \item \textcolor{blue}{Successful system validation} - environment wrapper, reward function, TD3 implementation all working
+        \item Episode lengths increased 10× (60 $\rightarrow$ 656 steps)
+        \item High variance due to stochastic NPC traffic
+        \item \textcolor{orange}{Partial convergence} - requires recommended 1M timesteps
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Computational Constraints \& Achievements}
+
+    \begin{alertblock}{Challenge}
+        Limited access to HPC infrastructure prevented full training (1M timesteps)\\
+        Completed only 100K timesteps (10\% of recommended duration)
+    \end{alertblock}
+
+    \vspace{0.3cm}
+
+    \textbf{Despite constraints, we achieved:}
+    \begin{itemize}
+        \item $\checkmark$ \textbf{Complete system validation} - TD3 + CARLA + ROS 2 integration
+        \item $\checkmark$ \textbf{Baseline benchmarks established} - quantitative comparison metrics
+        \item $\checkmark$ \textbf{ROS 2 innovation} - geometry\_msgs/Twist integration (2.3 GB smaller Docker image)
+        \item $\checkmark$ \textbf{Reproducible framework} - open-source code, config management
+        \item $\checkmark$ \textbf{Initial policy learning} - episode lengths improved from 60 to 656 steps
+    \end{itemize}
+
+    \vspace{0.3cm}
+
+    \textbf{Next Steps:} Complete 1M training on available infrastructure
+\end{frame}
+
+\begin{frame}
+    \frametitle{ROS 2 CARLA Bridge Innovation}
+
+    \textbf{Traditional Approach:}
+    \begin{itemize}
+        \item Requires building carla\_msgs package
+        \item Custom message types (CarlaEgoVehicleControl)
+        \item Large Docker images, long build times
+        \item Simulation-specific code
+    \end{itemize}
+
+    \vspace{0.3cm}
+
+    \textbf{Our Approach:}
+    \begin{itemize}
+        \item $\checkmark$ Standard geometry\_msgs/Twist messages
+        \item $\checkmark$ CARLA Twist-to-Control node handles conversion
+        \item $\checkmark$ No custom package compilation
+        \item $\checkmark$ Reduced Docker image: 2.3 GB smaller
+        \item $\checkmark$ Build time: 15 minutes faster
+        \item $\checkmark$ Platform-agnostic (works with real robots!)
+    \end{itemize}
+
+    \vspace{0.3cm}
+
+    \textcolor{blue}{\textbf{Contribution:}} Modular architecture enabling seamless sim-to-real transfer
+\end{frame}

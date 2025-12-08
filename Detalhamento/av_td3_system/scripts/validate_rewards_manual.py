@@ -21,6 +21,8 @@ Author: Daniel Terra Gomes
 2025
 """
 
+# TODO: add total episode reward count on the debug window
+
 import argparse
 import os
 import sys

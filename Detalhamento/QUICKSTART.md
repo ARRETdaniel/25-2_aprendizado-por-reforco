@@ -34,7 +34,7 @@ cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_
   -v $(pwd):/workspace \
   -w /workspace \
   --privileged \
-  av-td3-system:ubuntu22.04-test   python3 scripts/train_td3.py     --scenario 0     --max-timesteps 30000     --eval-freq 10001     --checkpoint-freq 10001     --seed 42  --debug   --device cpu     2>&1 | tee /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system/docs/day-26/lerningRate-rewardConfig.log
+  av-td3-system:ubuntu22.04-test   python3 scripts/train_td3.py     --scenario 0     --max-timesteps 20000     --eval-freq 30001     --checkpoint-freq 20001     --seed 42  --debug   --device cpu     2>&1 | tee /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system/docs/day-2-12/hardTurn/debug-HardTurns.log
 
 
 # then
@@ -110,6 +110,6 @@ docker run --rm --network host --runtime nvidia \
   -w /workspace \
   --privileged \
   td3-av-system:v2.0-python310 \
-  bash -c "pip install pygame --quiet && python3 scripts/validate_rewards_manual.py --config config/baseline_config.yaml --output-dir validation_logs/debug_test --max-steps 100000 --log-level DEBUG" 2>&1 | tee /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system/docs/day-25/progress-manual.log
+  bash -c "pip install pygame --quiet && python3 scripts/validate_rewards_manual.py --config config/baseline_config.yaml --output-dir validation_logs/debug_test --max-steps 100000 --log-level DEBUG" 2>&1 | tee /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system/docs/day-1-12/progress-manual.log
 
 cd /media/danielterra/Windows-SSD/Users/danie/Documents/Documents/MESTRADO/25-2_aprendizado-por-reforco/Detalhamento/av_td3_system &&  docker run --rm --network host --runtime nvidia -e NVIDIA_VISIBLE_DEVICES=all -e NVIDIA_DRIVER_CAPABILITIES=all -e PYTHONUNBUFFERED=1 -e PYTHONPATH=/workspace -e DISPLAY=$DISPLAY -e QT_X11_NO_MITSHM=1 -v /tmp/.X11-unix:/tmp/.X11-unix:rw -v $(pwd):/workspace -w /workspace --privileged td3-av-system:v2.0-python310 bash -c "pip install pygame --quiet && python3 scripts/validate_rewards_manual.py --config config/baseline_config.yaml --output-dir validation_logs/quick_test --max-steps 100000 --log-level DEBUG"

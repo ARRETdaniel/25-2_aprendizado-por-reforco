@@ -1,0 +1,87 @@
+{
+  "config": {
+    "scenario": 0,
+    "seed": 42,
+    "num_episodes": 3,
+    "controller_params": {
+      "pid": {
+        "kp": 0.5,
+        "ki": 0.3,
+        "kd": 0.13,
+        "integrator_min": 0.0,
+        "integrator_max": 10.0
+      },
+      "pure_pursuit": {
+        "kp_lookahead": 0.8,
+        "min_lookahead": 6.0,
+        "wheelbase": 3.0
+      },
+      "general": {
+        "target_speed_kmh": 30.0
+      }
+    }
+  },
+  "metrics": {
+    "success_rate": 0.3333333333333333,
+    "avg_collisions": 0.6666666666666666,
+    "std_collisions": 0.4714045207910317,
+    "avg_collisions_per_km": 3.8680808221415206,
+    "std_collisions_per_km": 2.8446509494854966,
+    "avg_lane_invasions": 0.0,
+    "std_lane_invasions": 0.0,
+    "avg_ttc_seconds": 1.4214925361830888,
+    "std_ttc_seconds": 1.4701097597133725,
+    "min_ttc_seconds": 0.25300163956005606,
+    "mean_reward": 6391.6527955470565,
+    "std_reward": 2101.660448417803,
+    "avg_speed_kmh": 26.15190751642346,
+    "std_speed_kmh": 4.572021087674225,
+    "avg_episode_length": 610.0,
+    "std_episode_length": 252.81218325072865,
+    "avg_completion_time_s": 17.610952774683636,
+    "std_completion_time_s": 5.75219047586936,
+    "avg_route_distance_km": 0.2051161414656472,
+    "std_route_distance_km": 0.04616526543959371,
+    "avg_jerk_m_s3": 18.320876439708115,
+    "std_jerk_m_s3": 1.2769511941162157,
+    "max_jerk_m_s3": 19.985240343232828,
+    "avg_lateral_accel_m_s2": 0.07002487373933948,
+    "std_lateral_accel_m_s2": 0.0990301261456375,
+    "max_lateral_accel_m_s2": 0.21007462121801845,
+    "num_episodes": 3,
+    "scenario": 0,
+    "seed": 42
+  },
+  "episodes": {
+    "rewards": [
+      6111.81879453049,
+      3969.005716940074,
+      9094.133875170608
+    ],
+    "successes": [
+      0,
+      0,
+      1
+    ],
+    "collisions": [
+      1,
+      1,
+      0
+    ],
+    "lane_invasions": [
+      0,
+      0,
+      0
+    ],
+    "lengths": [
+      515,
+      359,
+      956
+    ],
+    "speeds_kmh": [
+      28.937625149600162,
+      29.812255423328914,
+      19.705841976341304
+    ]
+  }
+}

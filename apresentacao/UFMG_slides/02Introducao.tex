@@ -1,0 +1,91 @@
+\section{Introduction}
+
+\begin{frame}
+    \frametitle{The Autonomous Vehicle Challenge}
+
+    \textbf{Why Autonomous Vehicles?}
+    \begin{itemize}
+        \item Safety: 94\% of accidents caused by human error
+        \item Efficiency: Reduced traffic congestion
+        \item Accessibility: Mobility for all
+    \end{itemize}
+
+    \vspace{0.5cm}
+
+    \textbf{Traditional Approaches:}
+    \begin{itemize}
+        \item Rule-based systems (potential fields, geometric planners)
+        \item Hand-engineered features
+        \item Limited adaptability in complex scenarios
+    \end{itemize}
+
+    \vspace{0.3cm}
+    \textcolor{blue}{\textbf{$\Rightarrow$ Need for learning-based approaches!}}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Deep Reinforcement Learning for AV}
+
+    \begin{columns}
+        \begin{column}{0.5\textwidth}
+            \textbf{DRL Advantages:} \cite{sutton2018reinforcement,perezgil2022deep}
+            \begin{itemize}
+                \item Learn optimal policies through interaction;
+                \item No need for labeled datasets;
+                \item Adaptable to dynamic environments;
+                \item End-to-end learning from sensors to control.
+            \end{itemize}
+        \end{column}
+
+        \begin{column}{0.5\textwidth}
+            \begin{figure}
+                %\centering
+                \raggedleft
+                \includegraphics[scale=0.4]{imagens/robotica-2025-2/drl.png}
+                \caption{RL agent-environment interaction loop}
+            \end{figure}
+        \end{column}
+    \end{columns}
+
+\end{frame}
+
+\begin{frame}
+    \frametitle{The DDPG Problem: Value Overestimation}
+
+    \textbf{Deep Deterministic Policy Gradient (DDPG):}
+    \begin{itemize}
+        \item Natural fit for continuous control (steering, throttle)
+        \item Actor-critic architecture
+        \item \textcolor{red}{BUT: Suffers from Q-value overestimation bias!}
+    \end{itemize}
+
+    \vspace{0.5cm}
+
+    \begin{alertblock}{The Problem}
+        Function approximation errors $\Rightarrow$ Inflated Q-estimates \\
+        $\Rightarrow$ Suboptimal/unstable policies $\Rightarrow$ Training collapse
+    \end{alertblock}
+
+    \vspace{0.3cm}
+
+    \textcolor{blue}{\textbf{Solution: Twin Delayed DDPG (TD3)} \cite{fujimoto2018addressing}}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Research Objective}
+
+    \begin{block}{Main Goal}
+        Develop and evaluate an \textbf{end-to-end visual autonomous navigation system} using TD3 in a realistic simulation environment
+    \end{block}
+
+    \vspace{0.5cm}
+
+    \textbf{Key Components:}
+    \begin{enumerate}
+        \item Camera-only perception (cost-effective approach)
+        \item TD3 algorithm to mitigate overestimation bias
+        \item CARLA 0.9.16 simulator + ROS 2 Humble integration
+        \item Modular, reproducible framework
+        \item Quantitative comparison with classical baseline
+    \end{enumerate}
+\end{frame}

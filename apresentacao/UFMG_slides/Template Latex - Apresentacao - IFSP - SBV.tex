@@ -1,0 +1,73 @@
+% Desenvolvido para o IFSP por: Prof. Dr. David Buzatto (Versão 1.0.2, Data: 31/01/2023)
+% Acessado em <https://github.com/davidbuzatto/TemplatesTrabalhosIFSPSBV/tree/master/Template%20Latex%20-%20Apresentacao%20-%20IFSP%20-%20SBV> em 02/02/2023
+% Licença Creative Commons CC BY 4.0
+% Adaptado para a UFMG por: Dra. Cecilia F. Fiorini (Data: 02/02/2023)
+
+\documentclass[aspectratio=169]{beamer}
+
+% ========================================
+% LANGUAGE OPTION: Choose 'EN' for English or 'PT' for Portuguese
+% This changes the labels on the title slide:
+%   EN: Course, Student, Professor, Date format: Month Day, Year
+%   PT: Curso, Aluno(a), Professor(a), Date format: Day de Month de Year
+% ========================================
+\newcommand{\presentationlang}{EN}  % Change to PT for Portuguese
+% ========================================
+
+% a opção hideSubsectionTitle esconde o título das subseções
+\usepackage{estruturaApresentacao}
+\usepackage[alf,abnt-emphasize=bf]{abntex2cite}
+
+% Configure citation colors (all black instead of red for used citations)
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=black,
+    urlcolor=blue
+}
+
+% Apply language setting
+\setpresentationlang{\presentationlang}
+
+\begin{document}
+
+\titulo{End-to-End Visual Autonomous Navigation with Twin Delayed DDPG in the CARLA and ROS 2 Ecosystem}
+% caso não haja, comente a linha abaixo
+
+%\subtitulo{subtítulo (se houver)}
+
+\autor{Daniel Terra Gomes}
+\professor{Luiz Chaimowicz}
+%\orientador{Prof./Profa. Me./Dr./Dra. Nome Completo}
+% caso não haja, comente a linha abaixo
+%\coorientador{Prof./Profa. Me./Dr./Dra. Nome Completo}
+%\professor{aa}
+
+
+\curso{Aprendizado por Reforço}
+
+% exemplos
+%\curso{Bacharelado em Ciência da Computação}
+%\curso{Tecnologia em Sistemas para Internet}
+%\curso{Especialização em Desenvolvimento de Aplicações para Dispositivos Móveis}
+
+\local{Belo Horizonte}
+\dia{27}
+\mes{Novembr}
+\ano{2025}
+
+
+\input{01Capa}
+\input{02Introducao}
+\input{03RevisaoLiteraturaConsideracoesGerais}
+\input{04Metodologia}
+\input{05Resultados}
+\input{06Conclusao}
+
+% exemplos de construções em LaTeX
+% comente a linha abaixo para gerar a versão final
+%\input{07Exemplos}
+
+\input{00Referencias}
+
+\end{document}

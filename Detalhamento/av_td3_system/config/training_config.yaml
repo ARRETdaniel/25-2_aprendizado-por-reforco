@@ -41,7 +41,7 @@ reward:
     efficiency: 2.0      # Base weight (forward velocity reward, Fix #1)
     lane_keeping: 2.0    # Lane centering
     comfort: 1.0         # Smooth driving
-    safety: 0.3          # CRITICAL FIX: 1.0 weight (penalties are already negative!)
+    safety: 1.0          # BALANCED FIX: Reduced from 3.0 to 1.0 (standard weight) to allow TD3 learning from mistakes (3.3:1 ratio)
     progress: 3.0        # Strong incentive for forward progress (with Fix #3: 10x distance_scale)
 
   # Efficiency reward parameters (target speed tracking)
@@ -109,7 +109,7 @@ reward:
   # navigation while still respecting safety constraints via PBRS proximity guidance.
   progress:
     waypoint_bonus: 1.0         # Bonus for reaching waypoints
-    distance_scale: 5.0         # FIXED: 50.0 (was 1.0, originally 0.1) - 50x signal
+    distance_scale: 0.5         # CATASTROPHE FIX: Reduced from 5.0 to 0.5 (10x weaker) to prevent progress dominating safety
     goal_reached_bonus: 100.0    # Bonus for reaching final goal
 
   # 🔧 NEW: PBRS (Potential-Based Reward Shaping) parameter (Medium Priority Fix #6)

@@ -204,11 +204,34 @@ class RewardCalculator:
         """
         reward_dict = {}
 
-        # 1. EFFICIENCY REWARD: Forward velocity component
+        # CRITICAL FIX (Dec 1, 2025): REORDERED CALCULATION SEQUENCE
+        # ============================================================
+        # ISSUE: lane_keeping depends on self.last_route_distance_delta which is set by progress.
+        # Previous order calculated lane_keeping BEFORE progress, causing it to use STALE data
+        # from the PREVIOUS step, creating a 1-step lag in direction-aware scaling.
+        #
+        # ROOT CAUSE OF HARD-RIGHT-TURN BUG:
+        # - Agent turns right at step N → route_distance_delta becomes negative
+        # - Step N+1: lane_keeping uses delta from step N (stale) → scaled down
+        # - But agent already committed to turn based on Q-values from BEFORE scaling
+        # - Creates delayed feedback loop that reinforces turning behavior
+        #
+        # SOLUTION: Calculate progress FIRST so lane_keeping uses CURRENT delta
+        #
+        # Reference: validation_logs/REWARD_FUNCTION_ANALYSIS.md - ROOT CAUSE HYPOTHESIS
+
+        # 1. EFFICIENCY REWARD: Forward velocity component (no dependencies)
         efficiency = self._calculate_efficiency_reward(velocity, heading_error)
         reward_dict["efficiency"] = efficiency
 
-        # 2. LANE KEEPING REWARD: Minimize lateral deviation and heading error
+        # 2. PROGRESS REWARD: Calculate FIRST to set last_route_distance_delta
+        # This must come BEFORE lane_keeping which depends on it
+        progress = self._calculate_progress_reward(
+            distance_to_goal, waypoint_reached, goal_reached
+        )
+        reward_dict["progress"] = progress
+
+        # 3. LANE KEEPING REWARD: Now uses CURRENT route_distance_delta (not stale!)
         # CRITICAL FIX (Nov 19, 2025): Pass lane_invasion_detected to prevent positive
         # rewards during lane marking crossings
         lane_keeping = self._calculate_lane_keeping_reward(
@@ -216,7 +239,7 @@ class RewardCalculator:
         )
         reward_dict["lane_keeping"] = lane_keeping
 
-        # 3. COMFORT PENALTY: Minimize jerk
+        # 4. COMFORT PENALTY: Minimize jerk (no dependencies)
         comfort = self._calculate_comfort_reward(
             acceleration, acceleration_lateral, velocity, dt
         )
@@ -225,7 +248,7 @@ class RewardCalculator:
         # NOTE: Previous accelerations are already updated inside _calculate_comfort_reward()
         # at lines 643-644, so no need to update here again
 
-        # 4. SAFETY PENALTY: Dense PBRS guidance + graduated penalties
+        # 5. SAFETY PENALTY: Dense PBRS guidance + graduated penalties (no dependencies)
         safety = self._calculate_safety_reward(
             collision_detected,
             offroad_detected,
@@ -239,12 +262,6 @@ class RewardCalculator:
             wrong_way_penalty,  # FIX #3 (Nov 24, 2025): Pass calculated penalty value
         )
         reward_dict["safety"] = safety
-
-        # 5. PROGRESS REWARD: Reward forward progress toward goal
-        progress = self._calculate_progress_reward(
-            distance_to_goal, waypoint_reached, goal_reached
-        )
-        reward_dict["progress"] = progress
 
         # Calculate total weighted reward
         total_reward = (
@@ -431,7 +448,25 @@ class RewardCalculator:
         # v=8.33 m/s (100%) → efficiency=1.0 (maximum reward)
         efficiency = forward_velocity / self.target_speed
 
-        # Clip to [-1, 1] range for safety (though math should keep it in range)
+        # CRITICAL FIX #3 (Dec 2, 2025): Add Velocity Bonus (Anti-Idle)
+        # ==============================================================
+        # PROBLEM: Efficiency can be negative when heading_error > 90°
+        #   - No reward for ANY movement at spawn (velocity=0 → efficiency=0)
+        #   - Agent learned: "Staying stopped avoids negative efficiency"
+        #
+        # SOLUTION: Add small constant bonus for ANY movement
+        #   - Bonus: +0.15 when velocity > 0.5 m/s
+        #   - Independent of forward_velocity calculation
+        #   - Makes movement always better than stopping
+        #
+        # Reference: #file:ROOT_CAUSE_DEGENERATE_STATIONARY_POLICY.md - Solution #5
+        
+        if velocity > 0.5:  # Moving (not stationary)
+            velocity_bonus = 0.15  # Constant bonus for movement
+            efficiency += velocity_bonus
+            self.logger.debug(f"[EFFICIENCY-VELOCITY-BONUS] velocity={velocity:.2f} m/s → bonus={velocity_bonus:+.2f}")
+
+        # Clip to [-1, 1] range (velocity bonus can push above 1.0)
         return float(np.clip(efficiency, -1.0, 1.0))
 
     def _calculate_lane_keeping_reward(
@@ -556,33 +591,60 @@ class RewardCalculator:
         #   - Right turn (delta=+0.02): Lane +0.50 → +0.50 (NO reduction, advancing!)
         #
         # Reference: CORRECTED_ANALYSIS_SUMMARY.md - Issue #4
-        if hasattr(self, 'prev_distance_to_goal') and self.prev_distance_to_goal is not None:
-            # Calculate route distance delta from progress reward tracking
-            # This is already calculated in _calculate_progress_reward(), but we need
-            # to access it here. We can use a stored value from the last calculation.
-            if hasattr(self, 'last_route_distance_delta'):
-                route_delta = self.last_route_distance_delta
+        #
+        # CRITICAL FIX (Dec 1, 2025): DISABLED Direction-Aware Scaling
+        # ==============================================================
+        # ROOT CAUSE: This scaling creates positive feedback loop causing hard-right-turn bug!
+        #
+        # PROBLEM DISCOVERED:
+        # - Agent turns hard right (steer=+1.0)
+        # - Car moves forward along curved road (+3.65m in step 1300)
+        # - Progress reward: +4.65 (route_distance_delta > 0)
+        # - Direction-aware scaling: direction_scale=1.0 (FULL BOOST because progress > 0!)
+        # - Lane keeping: +0.44 (BOOSTED from ~+0.28)
+        # - Total reward: +5.53 (POSITIVE for wrong behavior!)
+        # - TD3 learns: "turn right = good" → Converges to maximum right steering
+        #
+        # WHY IT'S WRONG:
+        # - Scaling BOOSTS lane_keeping when making forward progress
+        # - BUT turning hard right CAN make progress on curved roads!
+        # - Creates positive feedback: right_turn → forward → boost_lane → positive_reward → learn_right_turn
+        #
+        # SOLUTION:
+        # - DISABLE scaling temporarily (direction_scale=1.0 always)
+        # - Lane keeping will properly PENALIZE lateral deviations
+        # - No boost for wrong turns (even if moving forward)
+        #
+        # FUTURE FIX:
+        # - Re-implement with lateral deviation awareness:
+        #   if progress > 0 AND |lateral_dev| < 0.3m: boost (good behavior)
+        #   if progress > 0 AND |lateral_dev| > 0.3m: no boost (wrong turn)
+        #   if progress < 0: reduce (backward/stationary)
+        #
+        # Reference: ROOT_CAUSE_FOUND_DIRECTION_AWARE_SCALING.md
+        # Reference: SYSTEMATIC_LOG_ANALYSIS_HARD_RIGHT_TURN.md
 
-                # Progress factor: -1 (backward) to +1 (forward)
-                # tanh provides smooth S-curve scaling
-                progress_factor = np.tanh(route_delta * 10.0)  # Steeper for sensitivity
+        # DISABLED (Dec 1, 2025): Direction-aware scaling
+        # Uncomment for debugging to see what scaling WOULD have been:
+        # if hasattr(self, 'prev_distance_to_goal') and self.prev_distance_to_goal is not None:
+        #     if hasattr(self, 'last_route_distance_delta'):
+        #         route_delta = self.last_route_distance_delta
+        #         progress_factor = np.tanh(route_delta * 10.0)
+        #         direction_scale = max(0.5, (progress_factor + 1.0) / 2.0)
+        #         self.logger.debug(
+        #             f"[LANE-DIRECTION-DISABLED] route_delta={route_delta:.4f}m, "
+        #             f"progress_factor={progress_factor:.3f}, "
+        #             f"direction_scale={direction_scale:.3f} (NOT APPLIED!)"
+        #         )
 
-                # Direction scale: 0.0 (backward) to 1.0 (forward)
-                # Maintain minimum 50% reward when stopped (still learning centering)
-                direction_scale = max(0.5, (progress_factor + 1.0) / 2.0)
 
-                lane_keeping_base *= direction_scale
+        # Force direction_scale=1.0 (no scaling, always full lane keeping penalty)
+        direction_scale = 1.0
 
-                self.logger.debug(
-                    f"[LANE-DIRECTION] route_delta={route_delta:.4f}m, "
-                    f"progress_factor={progress_factor:.3f}, "
-                    f"direction_scale={direction_scale:.3f}, "
-                    f"lane_keeping: {lane_keeping_base:.3f}"
-                )
+        # Apply scaling (currently always 1.0, so lane_keeping_base unchanged)
+        lane_keeping_scaled = lane_keeping_base * direction_scale
 
-        final_reward = float(np.clip(lane_keeping_base, -1.0, 1.0))
-
-        # VERIFICATION LOGGING: Confirm distance penalty is active (addresses literature validation)
+        final_reward = float(np.clip(lane_keeping_scaled, -1.0, 1.0))        # VERIFICATION LOGGING: Confirm distance penalty is active (addresses literature validation)
         if self.step_counter % 500 == 0:  # Log every 500 steps
             self.logger.debug(
                 f"Lane Keeping Penalty Active: lateral_dev={lateral_deviation:.3f}m, "
@@ -825,42 +887,42 @@ class RewardCalculator:
                 )
 
         # ========================================================================
-        # PRIORITY 2 & 3: GRADUATED COLLISION PENALTY (Reduced + Impulse-Based)
+        # COLLISION PENALTY (CRITICAL FIX #2 - Dec 2, 2025)
         # ========================================================================
-        # Uses collision impulse magnitude for severity-based penalties
-        # Magnitude reduced from -100 to -10 for balanced learning (Priority 2 fix)
+        # PROBLEM: Previous impulse-based penalty still too catastrophic for exploration
+        #   - Impulse calculation unreliable (depends on collision object mass)
+        #   - Max penalty -10.0 still creates TD3 pessimism (Q(drive) << Q(stop))
+        #   - Agent learned: "Avoid ALL movement to prevent collisions"
+        #
+        # SOLUTION: Graduate penalties by VELOCITY (more intuitive and reliable)
+        #   - Low-speed (<2 m/s ≈ 7 km/h): -5.0 (parking bump, okay during learning)
+        #   - Medium-speed (2-5 m/s ≈ 7-18 km/h): -25.0 (fender bender)
+        #   - High-speed (>5 m/s ≈ 18+ km/h): -100.0 (serious crash, still severe)
+        #
+        # BENEFIT: Encourages exploration while penalizing recklessness
+        #   - Agent can try to drive without fear of instant -10 penalty
+        #   - Low-speed mistakes: -5 (recoverable with ~10 good steps @ +0.5/step)
+        #   - High-speed crashes: -100 (severe, but less than old -1000!)
+        #
+        # Reference: #file:ROOT_CAUSE_DEGENERATE_STATIONARY_POLICY.md - Solution #3
 
         if collision_detected:
-            if collision_impulse is not None and collision_impulse > 0:
-                # Graduated penalty based on impact severity
-                # Formula: penalty = -min(10.0, impulse / 100.0)
-                #
-                # Collision severity mapping (approximate force values):
-                # - Soft tap (10N):        -0.10 (minor contact, recoverable)
-                # - Light bump (100N):     -1.00 (moderate, learn to avoid)
-                # - Moderate crash (500N): -5.00 (significant, bad outcome)
-                # - Severe crash (1000N+): -10.0 (maximum penalty, capped)
-                #
-                # Rationale: Soft collisions during exploration should not
-                # catastrophically penalize agent. TD3's min(Q1,Q2) already
-                # provides pessimism; graduated penalties allow learning.
+            collision_speed = velocity  # m/s at time of collision
 
-                collision_penalty = -min(10.0, collision_impulse / 100.0)
-                safety += collision_penalty
+            # Graduate penalty by collision speed (more intuitive than impulse)
+            if collision_speed < 2.0:  # Low-speed collision (parking, maneuvering)
+                collision_penalty = -5.0  # Gentle penalty, encourage learning
+            elif collision_speed < 5.0:  # Medium-speed collision
+                collision_penalty = -25.0  # Moderate penalty
+            else:  # High-speed crash (>5 m/s ≈ 18 km/h)
+                collision_penalty = -100.0  # Severe but not catastrophic
 
-                self.logger.warning(
-                    f"[SAFETY-COLLISION] Impulse={collision_impulse:.1f}N "
-                    f"→ graduated_penalty={collision_penalty:.2f}"
-                )
-            else:
-                # Fallback: Default collision penalty (no impulse data available)
-                # Reduced from -100 to -10 (Priority 2 fix)
-                collision_penalty = -10.0
-                safety += collision_penalty
+            safety += collision_penalty
 
-                self.logger.warning(
-                    f"[SAFETY-COLLISION] No impulse data, default penalty={collision_penalty:.1f}"
-                )
+            self.logger.warning(
+                f"[SAFETY-COLLISION] speed={collision_speed:.2f} m/s ({collision_speed*3.6:.1f} km/h) "
+                f"→ penalty={collision_penalty:.1f} (graduated by speed)"
+            )
 
         # ========================================================================
         # OFFROAD AND WRONG-WAY PENALTIES (Reduced Magnitude)
@@ -868,8 +930,11 @@ class RewardCalculator:
         # Penalty magnitudes reduced for balance with progress rewards (Priority 2)
 
         if offroad_detected:
-            # Reduced from -100 to -10 for balance
-            offroad_penalty = -10.0
+            # BALANCED FIX: Reduced from -50.0 to -20.0 to enable TD3 learning from mistakes
+            # Combined with safety weight 1.0 (reduced from 3.0), weighted penalty is now -20.0 (was -150.0)
+            # Aligned with CARLA research (Elallid: -10.0, Pérez-Gil: -5.0), our -20.0 provides 2x safety margin
+            # Creates recoverable 3.3:1 ratio: agent can offset 1 mistake with 3-4 good steps (+6.11 each)
+            offroad_penalty = -20.0
             safety += offroad_penalty
             self.logger.warning(f"[SAFETY-OFFROAD] penalty={offroad_penalty:.1f}")
 
@@ -987,24 +1052,49 @@ class RewardCalculator:
         # Progressive design ensures agent learns to make continuous progress while
         # still allowing brief stops near goal for precise positioning.
 
+        # CRITICAL FIX #1 (Dec 2, 2025): Reduce Stopping Penalty to Fix Degenerate Policy
+        # ====================================================================================
+        # ROOT CAUSE: Agent learned stationary policy (brake=-1.0) is optimal because:
+        #   - Stopping penalty: -0.50/step (predictable, zero variance)
+        #   - Driving reward: -500 to +8/step (high variance, catastrophic risk)
+        #   - TD3 pessimism: Prefers certainty over magnitude → chooses stopping!
+        #
+        # EVIDENCE (from ROOT_CAUSE_DEGENERATE_STATIONARY_POLICY.md):
+        #   - Episodes 166-175: -491 reward (1000 steps × -0.50 = -500)
+        #   - Agent outputs: steer=-1.0, throttle/brake=-1.0 (max brake)
+        #   - Speed: 0.00 km/h for entire episode
+        #
+        # MATHEMATICAL PROOF:
+        #   V^π(stop) = -0.50 / (1-γ) = -0.50/0.01 = -50
+        #   V^π(drive) = -298.18 / (1-0.693) = -971.3
+        #   Optimal: argmax(-50, -971.3) = STOP ✓
+        #
+        # FIX: Reduce stopping penalty by 10x (-0.50 → -0.05)
+        #   - New V^π(stop) = -0.05/0.01 = -5 (much less attractive)
+        #   - Increase threshold: 10m → 20m (only far from goal)
+        #   - Makes driving relatively more attractive despite variance
+        #
+        # Reference: #file:ROOT_CAUSE_DEGENERATE_STATIONARY_POLICY.md - Solution #1
+
         if not collision_detected and not offroad_detected:
             if velocity < 0.5:  # Essentially stopped (< 1.8 km/h)
-                # Base penalty: small constant disincentive for stopping
-                stopping_penalty = -0.1
+                # Base penalty: REDUCED from -0.1 to -0.01 (10x weaker)
+                stopping_penalty = -0.01
 
                 # Additional penalty if far from goal (progressive)
-                if distance_to_goal > 10.0:
-                    stopping_penalty += -0.4  # Total: -0.5 when far from goal
-                elif distance_to_goal > 5.0:
-                    stopping_penalty += -0.2  # Total: -0.3 when moderately far
+                # INCREASED distance threshold: 10m → 20m (less aggressive)
+                if distance_to_goal > 20.0:  # Was 10.0
+                    stopping_penalty += -0.04  # Total: -0.05 (was -0.5, reduced 10x!)
+                elif distance_to_goal > 10.0:  # Was 5.0
+                    stopping_penalty += -0.02  # Total: -0.03 (was -0.3)
 
                 safety += stopping_penalty
 
-                if stopping_penalty < -0.15:  # Only log significant stopping penalties
+                if stopping_penalty < -0.02:  # Adjusted threshold
                     self.logger.debug(
                         f"[SAFETY-STOPPING] velocity={velocity:.2f} m/s, "
                         f"distance_to_goal={distance_to_goal:.1f}m "
-                        f"→ penalty={stopping_penalty:.2f}"
+                        f"→ penalty={stopping_penalty:.2f} (REDUCED 10x from previous -0.50)"
                     )
 
         # Diagnostic summary logging
@@ -1265,3 +1355,4 @@ class RewardCalculator:
         self.prev_distance_to_goal = None  # Reset progress tracking
         self.step_counter = 0  # Reset step counter for new episode
         self.none_count = 0  # Reset None counter for new episode (Issue #3.1 fix)
+        self.last_route_distance_delta = 0.0  # Initialize for direction-aware lane keeping (Dec 1, 2025 fix)

@@ -529,11 +529,20 @@ class TD3TrainingPipeline:
                        cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 255, 255), 1)
             y_offset += 25
             reward_color = (0, 255, 0) if reward > 0 else (0, 0, 255)
-            cv2.putText(info_panel, f"  Total: {reward:+.3f}", (10, y_offset),
+            cv2.putText(info_panel, f"  Step: {reward:+.3f}", (10, y_offset),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, reward_color, 1)
             y_offset += 25
-            cv2.putText(info_panel, f"  Episode: {self.episode_reward:.2f}", (10, y_offset),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            # CRITICAL DEBUG (Dec 2, 2025): Enhanced episode reward display with EXPLICIT sign
+            # BUG FIX: Previous version used manual sign+abs which didn't render properly in OpenCV
+            # Now using Python's :+.2f format which ALWAYS shows sign (+ or -)
+            episode_reward_color = (0, 255, 0) if self.episode_reward > 0 else (0, 0, 255) if self.episode_reward < 0 else (255, 255, 255)
+            cv2.putText(info_panel, f"  Episode: {self.episode_reward:+.2f}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, episode_reward_color, 1)
+            y_offset += 20
+            print(f"[DEBUG CV2] Episode Reward: {self.episode_reward:+.2f}")  # Console log for clarity
+            # Add running sum visualization for clarity
+            cv2.putText(info_panel, f"    (Sum of {self.episode_timesteps} steps)", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.35, (150, 150, 150), 1)
 
             # Reward breakdown
             y_offset += 30
@@ -688,19 +697,40 @@ class TD3TrainingPipeline:
 
             # Select action based on training phase
             if t < start_timesteps:
-                # Exploration phase: BIASED FORWARD exploration
-                # BUG FIX (2025-01-28): Previously used env.action_space.sample() which samples
-                # throttle/brake uniformly from [-1,1], resulting in E[net_force]=0 (vehicle stationary).
-                # Mathematical proof: P(throttle)=0.5, P(brake)=0.5 → E[forward_force]=0.25-0.25=0 N
+                # Exploration phase: SYMMETRIC exploration with anti-stationary mechanism
+                # ROOT CAUSE FIX (2025-12-01): Previous biased forward-only throttle ([0,1]) caused
+                # asymmetric replay buffer, leading to hard-left/hard-right convergence (local minima).
                 #
-                # NEW: Biased forward exploration to ensure vehicle moves during data collection:
-                # - steering ∈ [-1, 1]: Full random steering (exploration)
-                # - throttle ∈ [0, 1]: FORWARD ONLY (no brake during exploration)
-                # This ensures vehicle accumulates driving experience instead of staying stationary.
+                # PROBLEM WITH BIASED EXPLORATION:
+                # - throttle ∈ [0,1] only → Replay buffer lacks braking experiences
+                # - Actor never learns when to brake (no training data for brake actions)
+                # - Biased buffer favors "hard steering + acceleration" patterns
+                # - Result: Actor randomly converges to hard-left OR hard-right (depends on initialization)
+                #
+                # SOLUTION: Full symmetric action space exploration (TD3 paper standard)
+                # - steering ∈ [-1, 1]: Symmetric (no bias toward left or right)
+                # - throttle/brake ∈ [-1, 1]: Symmetric (includes braking!)
+                # - Anti-stationary boost: Adaptive throttle boost when velocity < 2 m/s
+                #
+                # Reference: Fujimoto et al. (2018), OpenAI Spinning Up TD3 docs
+                # Reference: ROOT_CAUSE_HARD_LEFT_TURN_BIASED_EXPLORATION.md (Section 7, Solution 1)
                 action = np.array([
-                    np.random.uniform(-1, 1),   # Steering: random left/right
-                    np.random.uniform(-1, 1)   # Throttle/brake
+                    np.random.uniform(-1, 1),   # Steering: symmetric [-1, 1]
+                    np.random.uniform(-1, 1)    # Throttle/brake: symmetric [-1, 1] (includes braking!)
                 ])
+
+                # Anti-stationary mechanism: Prevent vehicle from staying stationary
+                # Original problem: throttle/brake ∈ [-1,1] → E[net_force]=0 → stationary
+                # Solution: Boost throttle adaptively when velocity drops below threshold
+                current_velocity = obs_dict['vector'][0]  # Velocity is first kinematic feature (m/s)
+                if current_velocity < 2.0:  # Below 2 m/s (~7 km/h), vehicle too slow
+                    # Add +0.5 to throttle, clip to valid range [-1, 1]
+                    # Example: throttle=-0.8 → -0.3 (reduced brake)
+                    #          throttle=+0.3 → +0.8 (increased acceleration)
+                    #          throttle=+0.8 → +1.0 (clamped at maximum)
+                    action[1] = np.clip(action[1] + 0.5, -1, 1)
+                # Result: Vehicle maintains minimum forward motion during exploration
+                # BUT replay buffer still contains diverse throttle/brake actions (not biased to [0,1])
             else:
                 # Learning phase: use policy with exploration noise
                 # CURRICULUM LEARNING: Exponential decay of exploration noise
@@ -743,14 +773,74 @@ class TD3TrainingPipeline:
 
                 # BUG FIX #14: Pass Dict observation directly (no flattening!)
                 # This enables gradient flow through CNN during training
+
+                # STRATEGIC DEBUG: Observation quality check (throttled to every 100 steps)
+                # Purpose: Verify Dict obs is well-formed and CNN will receive valid input
+                # Reveals: Image normalization, vector concatenation, exploration noise magnitude
+                if t % 100 == 0 and self.debug:
+                    image_obs = obs_dict['image']  # (4, 84, 84)
+                    vector_obs = obs_dict['vector']  # (53,) = 3 kinematic + 50 waypoint coords
+                    print(f"\n[DIAGNOSTIC][Step {t}] PRE-ACTION OBSERVATION:")
+                    print(f"  Image: shape={image_obs.shape}, range=[{image_obs.min():.3f}, {image_obs.max():.3f}]")
+                    print(f"  Vector: shape={vector_obs.shape}, range=[{vector_obs.min():.3f}, {vector_obs.max():.3f}]")
+                    print(f"  Exploration noise: {current_noise:.4f} (decaying exponentially)")
+                    print(f"  Phase: {'EXPLORATION' if t < start_timesteps else 'LEARNING'}")
+
                 action = self.agent.select_action(
-                    obs_dict,  # Dict observation {'image': (4,84,84), 'vector': (23,)}
+                    obs_dict,  # Dict observation {'image': (4,84,84), 'vector': (53,)}
                     noise=current_noise,
                     deterministic=False  # Exploration mode
                 )
 
+                # STRATEGIC DEBUG: Action quality check (throttled to every 100 steps)
+                # Purpose: Detect hard-right-turn bias (steer > 0.5) and throttle saturation (throttle > 0.9)
+                # Expected BEFORE fix: steer mean ≈ +0.65, throttle ≈ 1.0 (biased policy)
+                # Expected AFTER fix: steer mean ≈ 0.0, throttle ≈ 0.5-0.7 (balanced policy)
+                if t % 100 == 0 and self.debug:
+                    # Get recent action statistics from agent's action buffer
+                    action_stats = self.agent.get_action_stats() if hasattr(self.agent, 'get_action_stats') else None
+                    print(f"\n[DIAGNOSTIC][Step {t}] POST-ACTION OUTPUT:")
+                    print(f"  Current action: steer={action[0]:+.3f}, throttle/brake={action[1]:+.3f}")
+                    if action_stats:
+                        print(f"  Rolling stats (last 100): steer_mean={action_stats.get('steer_mean', 0):+.3f}, "
+                              f"steer_std={action_stats.get('steer_std', 0):.3f}")
+                        print(f"  ⚠️ BIAS DETECTED!" if abs(action_stats.get('steer_mean', 0)) > 0.3 else "  ✓ Balanced steering")
+                    else:
+                        print(f"  ⚠️ Action statistics not available (action_buffer may be empty)")
+
             # Step environment (get Dict observation)
             next_obs_dict, reward, done, truncated, info = self.env.step(action)
+            # STRATEGIC DEBUG: Reward component breakdown (throttled to every 100 steps)
+            # Purpose: Detect REWARD ORDER DEPENDENCY BUG - delayed feedback causing wrong correlations
+            # Expected BEFORE fix: progress↑ lane_keeping↓ (conflicting) → hard-right-turn reinforced
+            # Expected AFTER fix: progress↑ lane_keeping↑ (aligned) → balanced policy
+            if t % 100 == 0 and self.debug:
+                reward_breakdown = info.get('reward_breakdown', {})
+                vehicle_state = info.get('vehicle_state', {})
+                print(f"\n[DIAGNOSTIC][Step {t}] POST-STEP REWARD:")
+                print(f"  Total reward: {reward:+.3f}")
+                if reward_breakdown:
+                    # FIX: reward_breakdown values are 3-tuples (weight, raw, weighted)
+                    # Extract weighted values (index 2) for display
+                    efficiency_weighted = reward_breakdown.get('efficiency', (0,0,0))[2]
+                    lane_weighted = reward_breakdown.get('lane_keeping', (0,0,0))[2]
+                    progress_weighted = reward_breakdown.get('progress', (0,0,0))[2]
+
+                    print(f"  Components: efficiency={efficiency_weighted:+.2f}, "
+                          f"lane_keeping={lane_weighted:+.2f}, "
+                          f"progress={progress_weighted:+.2f}")
+
+                    # Check for reward order dependency bug signature
+                    # Use weighted values for correlation analysis
+                    if progress_weighted > 0 and lane_weighted < 0:
+                        print(f"  🚨 BUG SIGNATURE: progress↑ but lane_keeping↓ (conflicting incentives!)")
+                    elif progress_weighted < 0 and lane_weighted > 0:
+                        print(f"  🚨 BUG SIGNATURE: progress↓ but lane_keeping↑ (conflicting incentives!)")
+                    else:
+                        print(f"  ✓ Aligned incentives: progress and lane_keeping have same sign")
+                print(f"  Vehicle: vel={vehicle_state.get('velocity', 0):.1f} km/h, "
+                      f"lateral_dev={vehicle_state.get('lateral_deviation', 0):+.2f}m")
+                print(f"  Episode: step={self.episode_timesteps}, done={done}, truncated={truncated}")
 
             # BUG FIX #14: No flattening! Store Dict observations directly
             # CNN features will be extracted WITH gradients during training
@@ -813,20 +903,14 @@ class TD3TrainingPipeline:
                 safety_tuple = reward_breakdown.get('safety', (0, 0, 0))
                 progress_tuple = reward_breakdown.get('progress', (0, 0, 0))
 
-                # Extract weighted values (index 2)
+                # Extract weighted values (index 2) for display ONLY
+                # NOTE: Component accumulation now happens at EVERY step (line ~1005)
+                # This was moved to fix CRITICAL BUG where components were only accumulated every 100 steps
                 eff_reward = eff_tuple[2] if isinstance(eff_tuple, tuple) else 0.0
                 lane_reward = lane_tuple[2] if isinstance(lane_tuple, tuple) else 0.0
                 comfort_reward = comfort_tuple[2] if isinstance(comfort_tuple, tuple) else 0.0
                 safety_reward = safety_tuple[2] if isinstance(safety_tuple, tuple) else 0.0
                 progress_reward = progress_tuple[2] if isinstance(progress_tuple, tuple) else 0.0
-
-                # LITERATURE-VALIDATED FIX (WARNING-002): Accumulate reward components
-                # Track components to verify progress doesn't dominate (was 88.9%)
-                self.episode_reward_components['efficiency'] += eff_reward
-                self.episode_reward_components['lane_keeping'] += lane_reward
-                self.episode_reward_components['comfort'] += comfort_reward
-                self.episode_reward_components['safety'] += safety_reward
-                self.episode_reward_components['progress'] += progress_reward
 
                 # Print main debug line
                 print(
@@ -881,7 +965,89 @@ class TD3TrainingPipeline:
                 )
 
             # Track episode metrics
-            self.episode_reward += reward
+            # CRITICAL DEBUG (Dec 1, 2025): Enhanced logging to track episode reward accumulation
+            # User reports: Negative step rewards appear to become positive in episode total
+            # This logging will capture the exact accumulation to identify any sign flip
+            episode_reward_before = self.episode_reward  # Capture BEFORE accumulation
+            self.episode_reward += reward  # Standard RL accumulation: R_episode = Σ r_t
+            episode_reward_after = self.episode_reward  # Capture AFTER accumulation
+
+            # CRITICAL BUG FIX (Dec 2, 2025): Accumulate reward components at EVERY step
+            # Previous bug: Component accumulation was INSIDE "if t % 100 == 0" block (line 914-918)
+            # Result: episode_reward accumulated all steps, but components only every 100 steps!
+            # This caused massive REWARD MISMATCH errors in logs (episode_reward=-304 != component_sum=-18)
+            #
+            # FIX: Extract and accumulate components from info['reward_breakdown'] at EVERY step
+            # Gymnasium API: info dict contains auxiliary diagnostic information (reward breakdown)
+            reward_breakdown = info.get('reward_breakdown', {})
+
+            # Extract weighted component values (format: (weight, raw_value, weighted_value))
+            eff_tuple = reward_breakdown.get('efficiency', (0, 0, 0))
+            lane_tuple = reward_breakdown.get('lane_keeping', (0, 0, 0))
+            comfort_tuple = reward_breakdown.get('comfort', (0, 0, 0))
+            safety_tuple = reward_breakdown.get('safety', (0, 0, 0))
+            progress_tuple = reward_breakdown.get('progress', (0, 0, 0))
+
+            eff_reward = eff_tuple[2] if isinstance(eff_tuple, tuple) else 0.0
+            lane_reward = lane_tuple[2] if isinstance(lane_tuple, tuple) else 0.0
+            comfort_reward = comfort_tuple[2] if isinstance(comfort_tuple, tuple) else 0.0
+            safety_reward = safety_tuple[2] if isinstance(safety_tuple, tuple) else 0.0
+            progress_reward = progress_tuple[2] if isinstance(progress_tuple, tuple) else 0.0
+
+            # Accumulate components every step (ensures component_sum == episode_reward)
+            self.episode_reward_components['efficiency'] += eff_reward
+            self.episode_reward_components['lane_keeping'] += lane_reward
+            self.episode_reward_components['comfort'] += comfort_reward
+            self.episode_reward_components['safety'] += safety_reward
+            self.episode_reward_components['progress'] += progress_reward
+
+            # Log every step with detailed accumulation tracking
+            # This helps identify if/when the sign flip occurs
+            if abs(reward) > 0.01:  # Only log non-trivial rewards to reduce noise
+                self.logger.debug(
+                    f"[REWARD ACCUMULATION] Episode {self.episode_num}, Step {self.episode_timesteps}: "
+                    f"step_reward={reward:+.3f} | "
+                    f"episode_reward_before={episode_reward_before:+.3f} | "
+                    f"episode_reward_after={episode_reward_after:+.3f} | "
+                    f"expected={episode_reward_before + reward:+.3f} | "
+                    f"match={abs(episode_reward_after - (episode_reward_before + reward)) < 0.001}"
+                )
+
+            # CRITICAL: Log when episode reward crosses zero or changes sign unexpectedly
+            if (episode_reward_before < 0 and episode_reward_after > 0 and reward < 0) or \
+               (episode_reward_before > 0 and episode_reward_after < 0 and reward > 0):
+                self.logger.warning(
+                    f"[REWARD SIGN ANOMALY] Episode {self.episode_num}, Step {self.episode_timesteps}: "
+                    f"Episode reward changed sign unexpectedly! "
+                    f"before={episode_reward_before:+.3f}, step={reward:+.3f}, after={episode_reward_after:+.3f}"
+                )
+
+            # Log specifically when we get negative step rewards during bad behavior
+            # CRITICAL FIX (Dec 2, 2025): Use CORRECT info dict keys
+            # Bug: Was checking 'offroad_detected' and 'collision_detected' which don't exist!
+            # Fix: Use 'collision_count', 'lane_invasion_count', 'termination_reason' (actual keys)
+            if reward < -1.0:  # Significant negative reward (lane invasion, collision, etc.)
+                # Extract actual event flags from info dict
+                collision_this_step = info.get('collision_count', 0) > 0
+                lane_invasion_this_step = info.get('lane_invasion_count', 0) > 0
+                termination_reason = info.get('termination_reason', 'running')
+                offroad_termination = (termination_reason == 'off_road')
+
+                # Get vehicle state for context
+                vehicle_state = info.get('vehicle_state', {})
+                lateral_dev = vehicle_state.get('lateral_deviation', 0.0)
+
+                self.logger.info(
+                    f"[NEGATIVE REWARD] Episode {self.episode_num}, Step {self.episode_timesteps}: "
+                    f"Large negative step reward={reward:+.3f} | "
+                    f"Episode total: {episode_reward_before:+.3f} → {episode_reward_after:+.3f} | "
+                    f"Lateral_dev={lateral_dev:.2f}m | "
+                    f"Collision={collision_this_step} | "
+                    f"Lane_invasion={lane_invasion_this_step} | "
+                    f"Offroad_termination={offroad_termination} | "
+                    f"Status={termination_reason}"
+                )
+
             self.episode_collision_count += info.get('collision_count', 0)
             self.episode_lane_invasion_count += info.get('lane_invasion_count', 0)  # P0 FIX #3
             self.episode_steps_since_collision = info.get('steps_since_collision', 0)
@@ -926,6 +1092,55 @@ class TD3TrainingPipeline:
                     print(f"\n{'='*70}")
                     print(f"[PHASE TRANSITION] Starting LEARNING phase at step {t:,}")
                     print(f"[PHASE TRANSITION] Replay buffer size: {len(self.agent.replay_buffer):,}")
+                    print(f"[PHASE TRANSITION] Current episode step: {self.episode_timesteps}")
+                    print(f"[PHASE TRANSITION] Episode reward: {self.episode_reward:+.2f}")
+
+                    # CRITICAL FIX (Dec 2, 2025): Force episode reset at phase transition
+                    # =================================================================
+                    # PROBLEM: Learning phase begins mid-episode from exploration phase!
+                    # - Exploration uses random actions (steps 1-5000)
+                    # - Learning uses policy actions (steps 5001+)
+                    # - Same episode continues across boundary → policy gets control mid-route
+                    # - Episode reward contaminated with exploration data
+                    # - TD3 learns from mixed random+policy actions in same episode
+                    #
+                    # SOLUTION: Force episode reset when learning phase starts
+                    # - Ensures policy starts from clean spawn position
+                    # - Episode rewards only contain policy actions
+                    # - Prevents learning from contaminated episodes
+                    #
+                    # Evidence: debug-action10k.log Step 5000 showed Episode 24, Step 231
+                    # with episode_reward=+579.18 accumulated during random exploration
+                    if done or truncated or self.episode_timesteps > 1:
+                        print(f"[PHASE TRANSITION] ⚠️  Episode in progress detected!")
+                        print(f"[PHASE TRANSITION] Forcing episode reset to start clean...")
+
+                        # Log the abandoned episode for analysis
+                        self.logger.warning(
+                            f"[PHASE TRANSITION] Abandoning Episode {self.episode_num} at step {self.episode_timesteps}: "
+                            f"episode_reward={self.episode_reward:+.3f} (exploration phase contaminated)"
+                        )
+
+                        # Reset environment to get clean initial state
+                        obs_dict, _ = self.env.reset()
+
+                        # Reset episode tracking
+                        self.episode_reward = 0
+                        self.episode_timesteps = 0
+                        self.episode_collision_count = 0
+                        self.episode_lane_invasion_count = 0
+                        self.episode_steps_since_collision = 0
+                        self.episode_num += 1
+
+                        # Reset component tracking
+                        for key in self.episode_reward_components:
+                            self.episode_reward_components[key] = 0.0
+
+                        print(f"[PHASE TRANSITION] ✓ Episode reset complete. Starting Episode {self.episode_num}")
+                        print(f"[PHASE TRANSITION] Learning will begin with CLEAN episode from spawn")
+                    else:
+                        print(f"[PHASE TRANSITION] ✓ Episode just started, no reset needed")
+
                     print(f"[PHASE TRANSITION] Policy updates will now begin...")
                     print(f"{'='*70}\n")
                     first_training_logged = True
@@ -1161,6 +1376,27 @@ class TD3TrainingPipeline:
             # Flush TensorBoard writer every 100 steps to ensure data is written to disk
             self.writer.flush()            # Episode termination
             if done or truncated:
+                # CRITICAL DEBUG (Dec 1, 2025): Log final episode reward before storing
+                # This helps verify the accumulated value matches expectations
+                termination_type = "DONE (collision/goal)" if done else "TRUNCATED (max steps)"
+                self.logger.info(
+                    f"[EPISODE END] Episode {self.episode_num} {termination_type}: "
+                    f"Final episode_reward={self.episode_reward:+.3f} | "
+                    f"Episode lasted {self.episode_timesteps} steps | "
+                    f"Collisions={self.episode_collision_count} | "
+                    f"Lane invasions={self.episode_lane_invasion_count}"
+                )
+
+                # Calculate sum of components to verify it matches episode_reward
+                component_sum = sum(self.episode_reward_components.values())
+                if abs(component_sum - self.episode_reward) > 0.01:
+                    self.logger.error(
+                        f"[REWARD MISMATCH] Episode {self.episode_num}: "
+                        f"episode_reward={self.episode_reward:+.3f} != "
+                        f"component_sum={component_sum:+.3f} | "
+                        f"diff={abs(component_sum - self.episode_reward):.3f}"
+                    )
+
                 # Log episode metrics
                 self.training_rewards.append(self.episode_reward)
                 self.writer.add_scalar('train/episode_reward', self.episode_reward, self.episode_num)
@@ -1622,10 +1858,10 @@ def main():
         print("[DEBUG LOGGING ENABLED]")
         print("="*70)
         print("[DEBUG] All pipeline logs will be shown:")
-        print("[DEBUG]   📸🎞️📷 Image preprocessing & frame stacking")
-        print("[DEBUG]   🧠 CNN layer-by-layer forward pass")
-        print("[DEBUG]   🎯🎓 TD3 feature extraction & training")
-        print("[DEBUG]   💰 Reward component breakdown")
+        print("[DEBUG]   Image preprocessing & frame stacking")
+        print("[DEBUG]   CNN layer-by-layer forward pass")
+        print("[DEBUG]   TD3 feature extraction & training")
+        print("[DEBUG]   Reward component breakdown")
         print("="*70 + "\n")
     else:
         # Normal mode: only INFO and above

@@ -1,0 +1,280 @@
+\NeedsTeXFormat{LaTeX2e}[1994/06/01]
+\ProvidesPackage{estruturaApresentacao}[2023/01/31 Modelo para Apresentações]
+
+\RequirePackage{lmodern}
+\RequirePackage[T1]{fontenc}
+\RequirePackage[utf8]{inputenc}
+\RequirePackage[portuges,brazil]{babel}
+\RequirePackage{ifthen}
+\RequirePackage{xcolor,colortbl}
+\RequirePackage{graphicx}
+\RequirePackage{microtype}
+\RequirePackage{hyperref}
+\RequirePackage{subfig}
+\RequirePackage{url}
+\RequirePackage{placeins}
+\RequirePackage{multirow}
+\RequirePackage[figuresright]{rotating}
+\RequirePackage{chemfig}
+\RequirePackage{amsmath}
+\RequirePackage{amssymb}
+\RequirePackage{tabularx}
+\RequirePackage{booktabs}
+\RequirePackage{bigints}
+\RequirePackage{listingsutf8}
+\RequirePackage{etoolbox}
+\RequirePackage[final]{pdfpages}
+\RequirePackage{bigstrut}
+\RequirePackage{beamerthemesplit}
+\RequirePackage{pgfpages}
+\RequirePackage[brazilian,hyperpageref]{backref}
+\RequirePackage{tikz}
+\RequirePackage{tkz-euclide}
+\RequirePackage{caladea,carlito}
+\RequirePackage{newfloat}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\usepackage{caption}
+\captionsetup[figure]{font=scriptsize}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{longtable}
+\usepackage{listings} % <-- ADD THIS LINE.
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds}
+\usepackage{amsmath}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\usetikzlibrary{automata, arrows.meta, positioning, shapes}
+
+\DeclareOption{hideSubsectionTitle}{
+    \ifdefined\esconder
+    \else
+        \newcommand{\esconder}{}
+    \fi
+}
+
+\ProcessOptions\relax
+
+\ifdefined\esconder
+    \usetheme{Frankfurt}
+\else
+    \usetheme{Darmstadt}
+\fi
+
+\renewcommand{\familydefault}{\sfdefault}
+
+
+\definecolor{corComentario}{RGB}{150,150,150}
+\definecolor{corString}{RGB}{206,123,0}
+\definecolor{corPalavraChave}{RGB}{0,0,230}
+
+\lstset{
+    inputencoding=utf8/latin1,
+	numbers=left,
+	stepnumber=1,
+	firstnumber=1,
+	numberstyle=\footnotesize,
+	extendedchars=true,
+	breaklines=true,
+	lineskip=0pt,
+	frame=tb,
+	basicstyle=\ttfamily\footnotesize,
+	showstringspaces=false,
+	stringstyle=\color{corString},
+	commentstyle=\color{corComentario},
+	keywordstyle=\color{corPalavraChave}
+}
+
+\newcolumntype{Y}{>{\centering\arraybackslash}X}
+
+\newcommand{\titulo}[1]{\def\@tituloLabel{#1}}
+\newcommand{\subtitulo}[1]{\def\@subtituloLabel{#1}}
+\newcommand{\nome}[1]{\def\@nomeLabel{#1}}
+\newcommand{\autor}[1]{\def\@autorLabel{#1}}
+\newcommand{\orientador}[1]{\def\@orientadorLabel{#1}}
+\newcommand{\professor}[1]{\def\@professorLabel{#1}}
+\newcommand{\coorientador}[1]{\def\@coorientadorLabel{#1}}
+\newcommand{\curso}[1]{\def\@cursoLabel{#1}}
+\newcommand{\local}[1]{\def\@localLabel{#1}}
+\newcommand{\dia}[1]{\def\@diaLabel{#1}}
+\newcommand{\mes}[1]{\def\@mesLabel{#1}}
+\newcommand{\ano}[1]{\def\@anoLabel{#1}}
+
+% Initialize date format counter (used for language switching)
+\newcount\textDateFormat
+\textDateFormat=0% Default to Portuguese format
+
+% Language-dependent text labels
+\newcommand{\setpresentationlang}[1]{%
+  \ifthenelse{\equal{#1}{EN}}{%
+    \def\textCourse{Course: }%
+    \def\textStudent{Student: }%
+    \def\textProfessor{Professor: }%
+    \def\textAdvisor{Advisor: }%
+    \def\textCoadvisor{Co-advisor: }%
+    \textDateFormat=1% 1 for EN (Month Day, Year)
+    % Override babel Portuguese captions with English
+    \addto\captionsportuges{%
+      \renewcommand{\figurename}{Figure}%
+      \renewcommand{\tablename}{Table}%
+      \renewcommand{\contentsname}{Contents}%
+    }%
+    \addto\captionsbrazil{%
+      \renewcommand{\figurename}{Figure}%
+      \renewcommand{\tablename}{Table}%
+      \renewcommand{\contentsname}{Contents}%
+    }%
+  }{%
+    \def\textCourse{Curso: }%
+    \def\textStudent{Aluno(a): }%
+    \def\textProfessor{Professor(a): }%
+    \def\textAdvisor{Orientador(a): }%
+    \def\textCoadvisor{Coorientador(a): }%
+    \textDateFormat=0% 0 for PT (Day de Month de Year)
+    % Restore Portuguese captions
+    \addto\captionsportuges{%
+      \renewcommand{\figurename}{Figura}%
+      \renewcommand{\tablename}{Tabela}%
+      \renewcommand{\contentsname}{Conteúdo}%
+    }%
+    \addto\captionsbrazil{%
+      \renewcommand{\figurename}{Figura}%
+      \renewcommand{\tablename}{Tabela}%
+      \renewcommand{\contentsname}{Conteúdo}%
+    }%
+  }%
+}
+
+% Default to Portuguese
+\setpresentationlang{PT}
+
+% configurações do beamer para o template
+\logo{%
+    \begin{tikzpicture}[overlay,remember picture]%
+    \node[left=0cm] at (current page.-27){%
+        \includegraphics[scale=0.04]{imagens/logos.png}%
+    };
+    \end{tikzpicture}%
+}
+
+\beamertemplatenavigationsymbolsempty
+\setbeamerfont{page number in head/foot}{size=\normalsize}
+\setbeamertemplate{footline}[frame number]
+
+\definecolor{UFMGEscuro}{RGB}{102, 7, 8}
+\definecolor{UFMGPrimario}{RGB}{200, 0, 25}
+\definecolor{UFMGSecundario}{RGB}{186, 24, 27}
+\definecolor{UFMGTerciario}{RGB}{177, 167, 166}
+\definecolor{UFMGQuaternario}{RGB}{245, 243, 244}
+
+\definecolor{UFMGImportante}{RGB}{22, 26, 29}
+\definecolor{UFMGExemplos}{RGB}{164, 22, 26}
+
+\setbeamercolor*{palette primary}{bg=UFMGPrimario,fg=white}
+\setbeamercolor*{palette secondary}{bg=UFMGSecundario,fg=white}
+\setbeamercolor*{palette tertiary}{bg=UFMGTerciario,fg=white}
+\setbeamercolor*{palette quaternary}{bg=UFMGQuaternario,fg=UFMGPrimario}
+\setbeamercolor{palette sidebar primary}{bg=UFMGPrimario,fg=white}
+\setbeamercolor{palette sidebar secondary}{bg=UFMGSecundario,fg=white}
+\setbeamercolor{palette sidebar tertiary}{bg=UFMGTerciario,fg=white}
+\setbeamercolor{palette sidebar quaternary}{bg=UFMGQuaternario,fg=white}
+\setbeamercolor{structure}{fg=UFMGPrimario}
+\setbeamercolor{section in toc}{fg=black}
+\setbeamercolor{subsection in toc}{fg=UFMGPrimario}
+\setbeamercolor{section in head/foot}{bg=UFMGEscuro,fg=white}
+\setbeamercolor{subsection in head/foot}{bg=UFMGSecundario,fg=white}
+
+\newcommand{\footlinepayoff}[1]{\renewcommand{\@footlinepayoff}{#1}}
+
+
+
+\setbeamertemplate{footline}{%
+  \begin{beamercolorbox}[wd=\textwidth,ht=5mm,dp=3mm,rightskip=1cm,leftskip=1cm]{footline}
+  \insertframenumber/\inserttotalframenumber
+  \ifstrempty{\@footlinepayoff}{}{%
+    \usebeamerfont{footline}\hfill
+  }
+  \end{beamercolorbox}
+}
+
+
+
+
+\setbeamercolor{title}{fg=UFMGPrimario,bg=white}
+\setbeamercolor{author}{fg=black}
+\setbeamercolor{date}{fg=black}
+
+\setbeamerfont{author}{size=\scriptsize}
+\setbeamerfont{date}{size=\tiny}
+\setbeamerfont{title}{series=\bfseries}
+\setbeamerfont{subtitle}{series=\mdseries,size=\footnotesize}
+\setbeamerfont{frametitle}{series=\bfseries}
+\setbeamerfont{framesubtitle}{series=\mdseries}
+\setbeamerfont{footline}{size=\scriptsize}
+%\setbeamerfont{block title}{series=\centering\bfseries}
+
+\setbeamertemplate{blocks}[rounded]
+
+\setbeamertemplate{itemize item}{\textbullet}
+\setbeamertemplate{itemize subitem}{\textemdash}
+\setbeamertemplate{itemize subsubitem}{\ensuremath{\circ}}
+
+\setbeamertemplate{title page}{%
+  \vskip0pt plus 1filll%
+  \hspace{-12mm}
+  \vspace{20mm}
+  \begin{beamercolorbox}[wd=0.6\textwidth,sep=10pt,leftskip=8mm]{title}%
+    {\ifdef{\@tituloLabel}{{\usebeamerfont{title}\@tituloLabel}{\ifdef{\@subtituloLabel}{{\usebeamerfont{title}:}}{}}}{}}
+
+    {\ifdef{\@subtituloLabel}{{\usebeamerfont{subtitle}\@subtituloLabel}}{}}
+
+    {\ifdef{\@cursoLabel}{{\usebeamerfont{author}\usebeamercolor[fg]{author}\textbf{\textCourse}\@cursoLabel}}{}}
+
+    {\ifdef{\@nomeLabel}{{\usebeamerfont{author}\usebeamercolor[fg]{author}\@nomeLabel}}{}}
+
+    {\ifdef{\@autorLabel}{{\usebeamerfont{author}\usebeamercolor[fg]{author}\textbf{\textStudent}\@autorLabel}}{}}
+
+    {\ifdef{\@orientadorLabel}{{\usebeamerfont{author}\usebeamercolor[fg]{author}\textbf{\textAdvisor}\@orientadorLabel}}{}}
+
+    {\ifdef{\@professorLabel}{{\usebeamerfont{author}\usebeamercolor[fg]{author}\textbf{\textProfessor}\@professorLabel}}{}}
+
+    {\ifdef{\@coorientadorLabel}{\usebeamerfont{author}\usebeamercolor[fg]{author}\textbf{\textCoadvisor}\@coorientadorLabel}{}}
+
+    {\ifdef{\@localLabel}{{\usebeamerfont{date}\usebeamercolor[fg]{date}\@localLabel,{ }\ifnum\textDateFormat=1 \@mesLabel{ }\@diaLabel,{ }\@anoLabel\else\@diaLabel{ }de \@mesLabel{ }de \@anoLabel\fi}}{}}
+  \end{beamercolorbox}
+}
+
+\setbeamercolor{alerted text}{fg=UFMGImportante}
+\setbeamercolor{example text}{fg=UFMGExemplos}
+\setbeamercolor{block title}{bg=UFMGSecundario}
+
+\newenvironment{bloco}[3]{%
+  \setbeamercolor{block body}{#2}
+  \setbeamercolor{block title}{#3}
+  \begin{block}{#1}}{\end{block}}
+
+\DeclareFloatingEnvironment[
+  fileext = qos ,
+  listname = {Lista de Quadros} ,
+  name = Quadro
+]{quadro}
+
+\newcommand{\citeauthorandyear}[1]{\citeauthoronline{#1} (\citeyear{#1})}
+
+\endinput

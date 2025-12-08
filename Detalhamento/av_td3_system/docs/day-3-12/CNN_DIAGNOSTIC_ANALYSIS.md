@@ -1,10 +1,10 @@
 # CNN Feature Extraction Diagnostic Analysis
 ## Systematic Analysis of TD3 Training Log (debug-degenerationFixes.log)
 
-**Date:** December 3, 2025  
-**Log File:** `av_td3_system/docs/day-2-12/hardTurn/debug-degenerationFixes.log`  
-**Analysis Scope:** CNN input/output statistics, normalization, feature extraction behavior  
-**Documentation Sources:** d2l.ai, TensorFlow, Stable-Baselines3, GitHub Issue #869, COE379L  
+**Date:** December 3, 2025
+**Log File:** `av_td3_system/docs/day-2-12/hardTurn/debug-degenerationFixes.log`
+**Analysis Scope:** CNN input/output statistics, normalization, feature extraction behavior
+**Documentation Sources:** d2l.ai, TensorFlow, Stable-Baselines3, GitHub Issue #869, COE379L
 
 ---
 
@@ -34,7 +34,7 @@ After systematic analysis of 10,000+ training steps against official documentati
 
 **Official SB3 Documentation:**
 > "All observations are first pre-processed (e.g. images are normalized, discrete obs are converted to one-hot vectors, …) before being fed to the features extractor."
-> 
+>
 > Source: [SB3 Custom Policy Guide](https://stable-baselines3.readthedocs.io/en/master/guide/custom_policy.html)
 
 **GitHub Issue #869 - Critical Finding:**
@@ -54,7 +54,7 @@ observation_space = Box(low=0, high=1, shape=(80, 80, 1))  # Depth images
 # 2. Then zero-centered to [-1, 1] via (x - 0.5) / 0.5
 ```
 
-**Expected Input Range:** 
+**Expected Input Range:**
 - **Zero-centered normalization:** [-1, 1] (modern best practice for LeakyReLU)
 - **Alternative:** [0, 1] (also valid, but [-1,1] better for LeakyReLU)
 
@@ -743,25 +743,25 @@ vi src/agents/td3_agent.py  # Balance gradients
 
 ### 11.1 Official Documentation
 
-1. **Stable-Baselines3 Custom Policy Guide**  
+1. **Stable-Baselines3 Custom Policy Guide**
    https://stable-baselines3.readthedocs.io/en/master/guide/custom_policy.html
    - Input normalization requirements
    - Separate CNNs for off-policy algorithms
    - Default network architectures
 
-2. **d2l.ai - Convolutional Neural Networks**  
+2. **d2l.ai - Convolutional Neural Networks**
    https://d2l.ai/chapter_convolutional-neural-networks/
    - CNN theory and fundamentals
    - Expected feature magnitudes
    - Gradient flow requirements
 
-3. **TensorFlow CNN Tutorial**  
+3. **TensorFlow CNN Tutorial**
    https://www.tensorflow.org/tutorials/images/cnn
    - Learnable parameters and gradient descent
    - Convolutional layer design
    - Activation functions (ReLU, LeakyReLU)
 
-4. **COE379L - CNN Lecture**  
+4. **COE379L - CNN Lecture**
    https://coe379l-sp25.readthedocs.io/en/latest/unit03/cnn.html
    - VGG16 and LeNet-5 architectures
    - Max pooling vs average pooling
@@ -769,7 +769,7 @@ vi src/agents/td3_agent.py  # Balance gradients
 
 ### 11.2 GitHub Issues
 
-5. **Stable-Baselines Issue #869: "Image input into TD3"**  
+5. **Stable-Baselines Issue #869: "Image input into TD3"**
    https://github.com/hill-a/stable-baselines/issues/869
    - **Root Cause:** Depth images 0-1 but gave 0-255 (unnormalized)
    - **Solution:** Normalize inputs correctly
@@ -777,34 +777,34 @@ vi src/agents/td3_agent.py  # Balance gradients
 
 ### 11.3 Research Papers
 
-6. **Perot et al. (2017) - End-to-End Race Driving with Deep Reinforcement Learning**  
+6. **Perot et al. (2017) - End-to-End Race Driving with Deep Reinforcement Learning**
    - A3C for rally racing in WRC6 game
    - Nature CNN architecture (84x84 input)
    - Proven for vision-based control
 
-7. **Robust Adversarial Attacks Detection (2023) - DDPG for UAV Guidance**  
+7. **Robust Adversarial Attacks Detection (2023) - DDPG for UAV Guidance**
    - DDPG + PER for obstacle avoidance
    - 40x40 depth images
    - 97% success rate (static obstacles only)
 
-8. **Momentum Policy Gradient (MPG) - Formation Control**  
+8. **Momentum Policy Gradient (MPG) - Formation Control**
    - ResNet-18 for localization
    - Modular design: Perception → Control
    - Recommendation to decouple CNN from policy
 
-9. **Fujimoto et al. (2018) - Addressing Function Approximation Error in Actor-Critic Methods**  
+9. **Fujimoto et al. (2018) - Addressing Function Approximation Error in Actor-Critic Methods**
    - Original TD3 paper
    - Actor initialization: Uniform(-3e-3, 3e-3)
    - Network architecture: [400, 300] for MuJoCo tasks
 
 ### 11.4 Related Internal Documents
 
-10. **av_td3_system/docs/day-3-12/EXPANDED_CRITICAL_ANALYSIS_PID_BOOTSTRAP.md**  
+10. **av_td3_system/docs/day-3-12/EXPANDED_CRITICAL_ANALYSIS_PID_BOOTSTRAP.md**
     - Root cause analysis: Initialization, reward hacking, modality collapse
     - Mathematical proofs for suboptimality
     - 4 immediate fixes with implementation code
 
-11. **av_td3_system/docs/day-2-12/hardTurn/CRITICAL_ANALYSIS_PID_BOOTSTRAP_EXPLORATION.md**  
+11. **av_td3_system/docs/day-2-12/hardTurn/CRITICAL_ANALYSIS_PID_BOOTSTRAP_EXPLORATION.md**
     - Initial diagnosis of hard turn problem
     - Evidence against PID bootstrap approach
     - Comparison with official TD3 documentation
